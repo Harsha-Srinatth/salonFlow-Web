@@ -1,0 +1,303 @@
+"use client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+    connectAdminRealtime,
+    createAdminServiceAsync,
+    disconnectAdminRealtime,
+    fetchAdminServices,
+    resetServiceDraft,
+    setServiceDraftField,
+    setServiceField,
+    uploadAdminServiceImageAsync,
+    updateAdminServiceAsync,
+} from "@/store/admin-portal-slice";
+import { Scissors } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import { AdminLayout } from "../portal/admin-layout";
+
+export default function AdminServicesPage() {
+    const dispatch = useDispatch();
+    const { services, serviceDraft, appointmentsMutating, appointmentsError, realtimeConnected } = useSelector((state) => state.adminPortal);
+    const [searchText, setSearchText] = useState("");
+    const [activeCategory, setActiveCategory] = useState("ALL");
+
+    const categoryCounts = useMemo(() => {
+        const counts = {};
+        for (const service of services) {
+            const category = `${service.category ?? "GENERAL"}`.trim().toUpperCase() || "GENERAL";
+            counts[category] = (counts[category] ?? 0) + 1;
+        }
+        return counts;
+    }, [services]);
+
+    const filteredServices = useMemo(() => {
+        const query = searchText.trim().toLowerCase();
+        return services.filter((service) => {
+            const category = `${service.category ?? "GENERAL"}`.trim().toUpperCase() || "GENERAL";
+            const categoryMatch = activeCategory === "ALL" || category === activeCategory;
+            if (!categoryMatch)
+                return false;
+            if (!query)
+                return true;
+            const haystack = `${service.name ?? ""} ${service.category ?? ""} ${service.gender ?? ""}`.toLowerCase();
+            return haystack.includes(query);
+        });
+    }, [activeCategory, searchText, services]);
+
+    useEffect(() => {
+        void dispatch(connectAdminRealtime());
+        void dispatch(fetchAdminServices());
+        return () => {
+            void dispatch(disconnectAdminRealtime());
+        };
+    }, [dispatch]);
+
+    useEffect(() => {
+        if (appointmentsError)
+            toast.error(appointmentsError);
+    }, [appointmentsError]);
+
+    async function fileToDataUri(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(`${reader.result ?? ""}`);
+            reader.onerror = () => reject(new Error("Could not read image file"));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function uploadDraftImage(file) {
+        if (!file)
+            return;
+        const imageDataUri = await fileToDataUri(file);
+        const result = await dispatch(uploadAdminServiceImageAsync({ imageDataUri }));
+        if (uploadAdminServiceImageAsync.rejected.match(result)) {
+            toast.error(result.payload ?? "Could not upload image");
+            return;
+        }
+        dispatch(setServiceDraftField({ field: "image", value: result.payload?.imageUrl ?? "" }));
+        toast.success("Service image uploaded");
+    }
+
+    async function uploadServiceImage(service, file) {
+        if (!file)
+            return;
+        const imageDataUri = await fileToDataUri(file);
+        const result = await dispatch(uploadAdminServiceImageAsync({ imageDataUri }));
+        if (uploadAdminServiceImageAsync.rejected.match(result)) {
+            toast.error(result.payload ?? "Could not upload image");
+            return;
+        }
+        dispatch(setServiceField({ id: service.id, field: "image", value: result.payload?.imageUrl ?? "" }));
+        toast.success("Service image uploaded");
+    }
+
+    async function createService() {
+        const payload = {
+            ...serviceDraft,
+            basePrice: Number(serviceDraft.basePrice ?? 0),
+            duration: Number(serviceDraft.duration ?? 45),
+        };
+        const result = await dispatch(createAdminServiceAsync(payload));
+        if (createAdminServiceAsync.rejected.match(result)) {
+            toast.error(result.payload ?? "Could not create service");
+            return;
+        }
+        toast.success("Service created");
+        dispatch(resetServiceDraft());
+    }
+
+    async function saveService(service) {
+        const payload = {
+            name: service.name,
+            category: service.category,
+            gender: service.gender,
+            basePrice: Number(service.basePrice ?? 0),
+            duration: Number(service.duration ?? 45),
+            description: service.description ?? "",
+            image: service.image ?? "",
+            variants: Array.isArray(service.variants) ? service.variants : [],
+            isActive: Boolean(service.isActive),
+        };
+        const result = await dispatch(updateAdminServiceAsync({ id: service.id, payload }));
+        if (updateAdminServiceAsync.rejected.match(result)) {
+            toast.error(result.payload ?? "Could not update service");
+            return;
+        }
+        toast.success("Service updated");
+    }
+
+    function addVariant(service) {
+        const next = [...(Array.isArray(service.variants) ? service.variants : []), { name: "", price: "", duration: "" }];
+        dispatch(setServiceField({ id: service.id, field: "variants", value: next }));
+    }
+
+    function setVariantField(service, index, field, value) {
+        const variants = Array.isArray(service.variants) ? [...service.variants] : [];
+        variants[index] = {
+            ...(variants[index] ?? {}),
+            [field]: value,
+        };
+        dispatch(setServiceField({ id: service.id, field: "variants", value: variants }));
+    }
+
+    function removeVariant(service, index) {
+        const variants = (Array.isArray(service.variants) ? service.variants : []).filter((_, idx) => idx !== index);
+        dispatch(setServiceField({ id: service.id, field: "variants", value: variants }));
+    }
+
+    return (<AdminLayout pageTitle="Services" actions={<Button asChild variant="outline" size="sm">
+          <Link to="/admin-dashboard">Dashboard</Link>
+        </Button>}>
+      <Card>
+        <CardHeader className="space-y-3">
+          <CardTitle className="flex items-center gap-2">
+            <Scissors className="size-5"/>
+            Service Management
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Realtime: {realtimeConnected ? "Connected" : "Disconnected"} | Admin adds services here first. Discount campaigns can be announced later.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full border px-3 py-1 font-medium">Total services: {services.length}</span>
+            <Button type="button" size="sm" variant={activeCategory === "ALL" ? "default" : "outline"} onClick={() => setActiveCategory("ALL")}>
+              ALL ({services.length})
+            </Button>
+            {Object.entries(categoryCounts).map(([category, count]) => (<Button key={category} type="button" size="sm" variant={activeCategory === category ? "default" : "outline"} onClick={() => setActiveCategory(category)}>
+                {category} ({count})
+              </Button>))}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 rounded-md border p-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="serviceName">Service name</Label>
+              <Input id="serviceName" value={serviceDraft.name} onChange={(e) => dispatch(setServiceDraftField({ field: "name", value: e.target.value }))}/>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="serviceCategory">Category</Label>
+              <Input id="serviceCategory" value={serviceDraft.category} onChange={(e) => dispatch(setServiceDraftField({ field: "category", value: e.target.value }))}/>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="serviceGender">Gender</Label>
+              <Select value={serviceDraft.gender} onValueChange={(value) => dispatch(setServiceDraftField({ field: "gender", value }))}>
+                <SelectTrigger id="serviceGender" className="w-full">
+                  <SelectValue placeholder="Select gender"/>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="MEN">Men</SelectItem>
+                  <SelectItem value="WOMEN">Women</SelectItem>
+                  <SelectItem value="UNISEX">Unisex</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="servicePrice">Base price</Label>
+              <Input id="servicePrice" type="number" min="1" value={serviceDraft.basePrice} onChange={(e) => dispatch(setServiceDraftField({ field: "basePrice", value: e.target.value }))}/>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="serviceDuration">Duration (minutes)</Label>
+              <Input id="serviceDuration" type="number" min="10" value={serviceDraft.duration} onChange={(e) => dispatch(setServiceDraftField({ field: "duration", value: e.target.value }))}/>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="serviceDescription">Description</Label>
+              <Input id="serviceDescription" value={serviceDraft.description} onChange={(e) => dispatch(setServiceDraftField({ field: "description", value: e.target.value }))}/>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="serviceImageFile">Service image</Label>
+              <Input id="serviceImageFile" type="file" accept="image/*" onChange={(e) => void uploadDraftImage(e.target.files?.[0] ?? null)}/>
+              {serviceDraft.image ? <p className="text-xs text-muted-foreground">Uploaded image ready.</p> : null}
+            </div>
+            <div className="md:col-span-2">
+              <Button type="button" disabled={appointmentsMutating} onClick={() => void createService()}>
+                Add service
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center justify-end">
+            <Input className="w-full md:w-72" placeholder="Search service/category/gender" value={searchText} onChange={(e) => setSearchText(e.target.value)}/>
+          </div>
+
+          {!filteredServices.length ? <div className="rounded-md border p-3 text-sm text-muted-foreground">No services found for selected category/search.</div> : null}
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            {filteredServices.map((service) => (<div key={service.id} className="space-y-3 rounded-md border p-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-24 w-24 shrink-0 overflow-hidden rounded-md border bg-muted/20">
+                    {service.image ? <img src={service.image} alt={service.name} className="h-full w-full object-cover"/> : <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>}
+                  </div>
+                  <div className="grid flex-1 gap-2 md:grid-cols-2">
+                    <div className="space-y-1">
+                  <Label>Name</Label>
+                  <Input value={service.name} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "name", value: e.target.value }))}/>
+                </div>
+                <div className="space-y-1">
+                  <Label>Category</Label>
+                  <Input value={service.category ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "category", value: e.target.value }))}/>
+                </div>
+                <div className="space-y-1">
+                  <Label>Gender</Label>
+                  <Select value={service.gender ?? "UNISEX"} onValueChange={(value) => dispatch(setServiceField({ id: service.id, field: "gender", value }))}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MEN">Men</SelectItem>
+                      <SelectItem value="WOMEN">Women</SelectItem>
+                      <SelectItem value="UNISEX">Unisex</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Base price</Label>
+                  <Input type="number" min="1" value={service.basePrice} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "basePrice", value: e.target.value }))}/>
+                </div>
+                <div className="space-y-1">
+                  <Label>Duration (minutes)</Label>
+                  <Input type="number" min="10" value={service.duration ?? 45} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "duration", value: e.target.value }))}/>
+                </div>
+                    <div className="space-y-1 md:col-span-2">
+                  <Label>Description</Label>
+                  <Input value={service.description ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "description", value: e.target.value }))}/>
+                </div>
+                    <div className="space-y-1 md:col-span-2">
+                  <Label>Service image</Label>
+                  <Input type="file" accept="image/*" onChange={(e) => void uploadServiceImage(service, e.target.files?.[0] ?? null)}/>
+                  {service.image ? <p className="text-xs text-muted-foreground">Image uploaded for this service.</p> : null}
+                </div>
+                  </div>
+                </div>
+              <div className="space-y-2 rounded border border-dashed p-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Variants</p>
+                  <Button type="button" size="sm" variant="outline" onClick={() => addVariant(service)}>Add variant</Button>
+                </div>
+                {(Array.isArray(service.variants) ? service.variants : []).map((variant, index) => (<div key={`${service.id}-${index}`} className="grid gap-2 md:grid-cols-4">
+                    <Input placeholder="Variant name" value={variant?.name ?? ""} onChange={(e) => setVariantField(service, index, "name", e.target.value)}/>
+                    <Input type="number" min="1" placeholder="Price" value={variant?.price ?? ""} onChange={(e) => setVariantField(service, index, "price", e.target.value)}/>
+                    <Input type="number" min="10" placeholder="Duration" value={variant?.duration ?? ""} onChange={(e) => setVariantField(service, index, "duration", e.target.value)}/>
+                    <Button type="button" variant="ghost" onClick={() => removeVariant(service, index)}>
+                      Remove
+                    </Button>
+                  </div>))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" disabled={appointmentsMutating} onClick={() => void saveService(service)}>
+                  Save service
+                </Button>
+                <Button type="button" variant="outline" disabled={appointmentsMutating} onClick={() => void saveService({ ...service, isActive: !service.isActive })}>
+                  {service.isActive ? "Deactivate" : "Activate"}
+                </Button>
+              </div>
+              </div>))}
+          </div>
+        </CardContent>
+      </Card>
+    </AdminLayout>);
+}
