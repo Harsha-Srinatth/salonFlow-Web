@@ -13,7 +13,13 @@ let phoneConfirmationResult = null;
 let staffPhoneConfirmationResult = null;
 export async function signUpWithEmail(email, password) {
     const credential = await createUserWithEmailAndPassword(firebaseAuth, email, password);
-    await sendEmailVerification(credential.user);
+    // Use actionCodeSettings so the link always points to the current domain
+    // (localhost in dev, salonflow-eta.vercel.app in production)
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const emailVerificationSettings = origin
+        ? { url: `${origin}/auth/login`, handleCodeInApp: false }
+        : undefined;
+    await sendEmailVerification(credential.user, emailVerificationSettings);
     return credential.user;
 }
 export async function signInWithEmail(email, password) {
