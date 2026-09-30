@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ErrorBanner } from "@/admin/components/error-banner";
+import { SkeletonCards } from "@/admin/components/skeleton";
+import { StatCard } from "@/admin/components/stat-card";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
+import { Crown, Info, Save, Sparkles, Star, Users } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 async function authFetch(path, init) {
@@ -39,11 +42,14 @@ function planToForm(plan) {
   };
 }
 
-function PlanEditor({ segment, title, form, onChange, onSave, saving }) {
+function PlanEditor({ segment, title, icon: Icon, form, onChange, onSave, saving }) {
   return (
-    <Card>
+    <Card className="admin-shadow-sm">
       <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Icon className="size-4 text-primary" />
+          {title}
+        </CardTitle>
         <p className="text-xs text-muted-foreground">Segment code: {segment}</p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -70,18 +76,21 @@ function PlanEditor({ segment, title, form, onChange, onSave, saving }) {
         <div className="space-y-1">
           <Label>Plan benefits (one per line)</Label>
           <textarea
-            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             rows={5}
             value={form.benefitsText}
             onChange={(e) => onChange({ ...form, benefitsText: e.target.value })}
           />
         </div>
-        <Button type="button" variant={form.isActive ? "default" : "outline"} onClick={() => onChange({ ...form, isActive: !form.isActive })}>
-          {form.isActive ? "Active" : "Inactive"}
-        </Button>
-        <Button type="button" onClick={onSave} disabled={saving}>
-          {saving ? "Saving..." : "Save plan"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant={form.isActive ? "default" : "outline"} onClick={() => onChange({ ...form, isActive: !form.isActive })}>
+            {form.isActive ? "Active" : "Inactive"}
+          </Button>
+          <Button type="button" onClick={onSave} disabled={saving}>
+            <Save className="size-4" />
+            {saving ? "Saving..." : "Save plan"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -90,6 +99,7 @@ function PlanEditor({ segment, title, form, onChange, onSave, saving }) {
 export default function AdminMembershipPage() {
   const [loading, setLoading] = useState(true);
   const [savingSegment, setSavingSegment] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [freePlan, setFreePlan] = useState(null);
   const [customerCounts, setCustomerCounts] = useState({ FREE: 0, BASIC: 0, PREMIUM: 0 });
   const [basicForm, setBasicForm] = useState(planToForm(null));
@@ -105,8 +115,11 @@ export default function AdminMembershipPage() {
       const premium = (data.paidPlans ?? []).find((plan) => plan.segment === "PREMIUM");
       setBasicForm(planToForm(basic));
       setPremiumForm(planToForm(premium));
+      setLoadError("");
     } catch (error) {
-      toast.error(error.message ?? "Could not load membership plans");
+      const message = error.message ?? "Could not load membership plans";
+      toast.error(message);
+      setLoadError(message);
     } finally {
       setLoading(false);
     }
@@ -142,18 +155,19 @@ export default function AdminMembershipPage() {
   return (
     <AdminLayout
       pageTitle="Membership Plans"
-      actions={
-        <Button asChild variant="outline" size="sm">
-          <Link to="/admin-dashboard">Dashboard</Link>
-        </Button>
-      }
+      description="Free, Basic, and Premium tier pricing and benefits."
     >
       <div className="space-y-4">
-        <Card>
+        <ErrorBanner message={loadError} onRetry={loadCenter} />
+
+        <Card className="admin-shadow-sm border-dashed">
           <CardHeader>
-            <CardTitle className="text-base">About Stripe webhook table</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Info className="size-4 text-primary" />
+              About Stripe webhook table
+            </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground space-y-2">
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>
               <code className="text-xs">stripe_webhook_events</code> stores processed Stripe event IDs so the same
               payment webhook is not handled twice. It is not where plans are stored.
@@ -166,23 +180,17 @@ export default function AdminMembershipPage() {
         </Card>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Free customers</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-semibold">{customerCounts.FREE ?? 0}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Basic members</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-semibold">{customerCounts.BASIC ?? 0}</CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm">Premium members</CardTitle></CardHeader>
-            <CardContent className="text-2xl font-semibold">{customerCounts.PREMIUM ?? 0}</CardContent>
-          </Card>
+          <StatCard icon={Users} label="Free customers" value={customerCounts.FREE ?? 0} tone="neutral" />
+          <StatCard icon={Star} label="Basic members" value={customerCounts.BASIC ?? 0} tone="primary" delay={60} />
+          <StatCard icon={Crown} label="Premium members" value={customerCounts.PREMIUM ?? 0} tone="accent" delay={120} />
         </div>
 
-        <Card>
+        <Card className="admin-shadow-sm">
           <CardHeader>
-            <CardTitle className="text-base">Free plan (default)</CardTitle>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="size-4 text-primary" />
+              Free plan (default)
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p className="font-medium">{freePlan?.name ?? "Free"}</p>
@@ -197,12 +205,13 @@ export default function AdminMembershipPage() {
         </Card>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading plans...</p>
+          <SkeletonCards count={2} className="lg:grid-cols-2" />
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             <PlanEditor
               segment="BASIC"
               title="Basic plan"
+              icon={Star}
               form={basicForm}
               onChange={setBasicForm}
               onSave={() => void savePlan("BASIC", basicForm)}
@@ -211,6 +220,7 @@ export default function AdminMembershipPage() {
             <PlanEditor
               segment="PREMIUM"
               title="Premium plan"
+              icon={Crown}
               form={premiumForm}
               onChange={setPremiumForm}
               onSave={() => void savePlan("PREMIUM", premiumForm)}

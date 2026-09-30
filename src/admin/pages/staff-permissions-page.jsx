@@ -7,6 +7,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AvatarBadge } from "@/admin/components/avatar-badge";
+import { EmptyState } from "@/admin/components/empty-state";
+import { ErrorBanner } from "@/admin/components/error-banner";
+import { SkeletonCards } from "@/admin/components/skeleton";
+import { StatusPill } from "@/admin/components/status-pill";
+import { useRevealOnReady } from "@/admin/lib/motion";
 import {
   clearEditStaff,
   fetchAdminDashboardData,
@@ -14,21 +20,21 @@ import {
   startEditStaff,
   updateStaffAsync,
 } from "@/store/admin-dashboard-slice";
+import { KeyRound, Search, Sparkles, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
 
 export default function AdminStaffPermissionsPage() {
-  const { appUser, logout } = useAuth();
-  const navigate = useNavigate();
+  const { appUser } = useAuth();
   const dispatch = useDispatch();
   const { staff, servicesCatalog, editId, editForm, loading, mutating, error } = useSelector((state) => state.adminDashboard);
 
   const [searchText, setSearchText] = useState("");
   const [segment, setSegment] = useState("ALL"); // MEN/WOMEN/UNISEX
   const [activeOnly, setActiveOnly] = useState(true);
+  const listRef = useRevealOnReady([loading, staff.length, searchText, segment, activeOnly], { selector: ":scope > *" });
 
   const stylists = useMemo(() => staff.filter((s) => s.role === "STAFF"), [staff]);
   const filteredStylists = useMemo(() => {
@@ -51,6 +57,10 @@ export default function AdminStaffPermissionsPage() {
     if (error) toast.error(error);
   }, [error]);
 
+  function retryLoad() {
+    void dispatch(fetchAdminDashboardData());
+  }
+
   async function save() {
     if (!editId) return;
     const result = await dispatch(updateStaffAsync({ id: editId, payload: editForm }));
@@ -69,45 +79,38 @@ export default function AdminStaffPermissionsPage() {
     dispatch(setEditFormField({ field: "allowedServiceIds", value: next }));
   }
 
-  const adminLogout = async () => {
-    await logout();
-    navigate("/auth/login", { replace: true });
-  };
-
   if (!appUser) return <div className="p-4">Please sign in first.</div>;
   if (appUser.role !== "ADMIN") return <div className="p-4">Admin only.</div>;
 
   return (
     <AdminLayout
       pageTitle="Staff Permissions"
-      actions={
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm">
-            <Link to="/admin-dashboard">Dashboard</Link>
-          </Button>
-          <Button variant="destructive" size="sm" onClick={() => void adminLogout()}>
-            Sign out
-          </Button>
-        </div>
-      }
+      description="Control which services each stylist is allowed to perform."
     >
       <div className="space-y-6">
-        <Card>
+        <ErrorBanner message={error} onRetry={retryLoad} />
+
+        <Card className="admin-shadow-sm">
           <CardHeader className="space-y-2">
-            <CardTitle>Assign services to stylists</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <KeyRound className="size-5 text-primary" />
+              Assign services to stylists
+            </CardTitle>
             <p className="text-xs text-muted-foreground">
               Booking availability depends on stylist <span className="font-medium">allowed services</span>. Unisex does not mean “all services”.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            {loading ? <div className="rounded-md border p-3 text-xs text-muted-foreground">Loading...</div> : null}
             <div className="flex flex-wrap items-center gap-2">
-              <Input
-                className="w-full md:w-80"
-                placeholder="Search stylist name/email/phone"
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-              />
+              <div className="relative w-full md:w-80">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  className="pl-8"
+                  placeholder="Search stylist name/email/phone"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                />
+              </div>
               <Select value={segment} onValueChange={setSegment}>
                 <SelectTrigger className="w-full md:w-44">
                   <SelectValue placeholder="Gender type" />
@@ -125,26 +128,34 @@ export default function AdminStaffPermissionsPage() {
               </label>
             </div>
 
-            {!filteredStylists.length ? (
-              <div className="rounded-md border p-3 text-sm text-muted-foreground">No stylists found.</div>
+            {loading ? (
+              <SkeletonCards count={4} />
+            ) : !filteredStylists.length ? (
+              <EmptyState icon={Users} title="No stylists found" description="Try a different search, segment, or include inactive stylists." />
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
+              <div ref={listRef} className="grid gap-3 lg:grid-cols-2">
                 {filteredStylists.map((s) => (
                   <button
                     type="button"
                     key={s.id}
-                    className={`rounded-md border p-3 text-left transition-colors ${
-                      editId === s.id ? "border-primary bg-primary/5" : ""
+                    className={`admin-card-hover admin-shadow-sm flex items-start gap-3 rounded-xl border p-3.5 text-left transition-colors ${
+                      editId === s.id ? "border-primary bg-primary/5" : "border-border/70 bg-card"
                     }`}
                     onClick={() => dispatch(startEditStaff(s))}
                   >
-                    <p className="font-medium">{s.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {s.email} • {s.genderType ?? "UNISEX"} • {s.isActive ? "Active" : "Inactive"}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Allowed services: {(s.allowedServiceIds ?? []).length}
-                    </p>
+                    <AvatarBadge name={s.name} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-medium">{s.name}</p>
+                        <StatusPill status={s.isActive ? "Active" : "Inactive"} />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {s.email} • {s.genderType ?? "UNISEX"}
+                      </p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Allowed services: <span className="font-medium text-foreground">{(s.allowedServiceIds ?? []).length}</span>
+                      </p>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -153,9 +164,12 @@ export default function AdminStaffPermissionsPage() {
         </Card>
 
         {editId ? (
-          <Card>
+          <Card className="admin-shadow-sm border-primary/30">
             <CardHeader>
-              <CardTitle>Edit stylist permissions</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="size-4 text-primary" />
+                Edit stylist permissions
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
@@ -186,7 +200,7 @@ export default function AdminStaffPermissionsPage() {
                 </div>
               </div>
 
-              <div className="rounded-md border p-3">
+              <div className="rounded-lg border bg-muted/20 p-3">
                 <p className="text-sm font-medium">Allowed services</p>
                 <p className="text-xs text-muted-foreground">Select the services this stylist can perform.</p>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -203,11 +217,11 @@ export default function AdminStaffPermissionsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button disabled={mutating} onClick={() => void save()}>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button className="sm:flex-1" disabled={mutating} onClick={() => void save()}>
                   {mutating ? "Saving..." : "Save permissions"}
                 </Button>
-                <Button variant="ghost" onClick={() => dispatch(clearEditStaff())}>
+                <Button variant="ghost" className="sm:flex-1" onClick={() => dispatch(clearEditStaff())}>
                   Cancel
                 </Button>
               </div>
@@ -218,4 +232,3 @@ export default function AdminStaffPermissionsPage() {
     </AdminLayout>
   );
 }
-

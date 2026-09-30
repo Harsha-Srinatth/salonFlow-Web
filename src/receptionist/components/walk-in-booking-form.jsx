@@ -76,9 +76,15 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
   }, [bookingForm.bookingDate, dispatch, todayIso]);
 
   useEffect(() => {
-    if (!bookingForm.serviceIds?.length) return;
-    void dispatch(fetchReceptionSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate }));
-  }, [bookingForm.serviceIds, dispatch, effectiveBookingDate]);
+    if (!bookingForm.serviceIds?.length || !bookingForm.customerGender) return;
+    void dispatch(
+      fetchReceptionSlots({
+        serviceIds: bookingForm.serviceIds,
+        date: effectiveBookingDate,
+        customerGender: bookingForm.customerGender,
+      })
+    );
+  }, [bookingForm.customerGender, bookingForm.serviceIds, dispatch, effectiveBookingDate]);
 
   useEffect(() => {
     if (!selectedSlot?.stylists?.length) return;
@@ -108,6 +114,12 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
     dispatch(setReceptionBookingFormField({ field: "customerName", value: customerLookup.customer.name ?? "" }));
     dispatch(setReceptionBookingFormField({ field: "customerEmail", value: customerLookup.customer.email ?? "" }));
     dispatch(setReceptionBookingFormField({ field: "customerPhone", value: customerLookup.customer.phone ?? "" }));
+    // UNSPECIFIED means the account has never been asked — leave the field blank
+    // so reception has to answer it rather than confirming a placeholder.
+    const storedGender = customerLookup.customer.gender;
+    if (storedGender && storedGender !== "UNSPECIFIED") {
+      dispatch(setReceptionBookingFormField({ field: "customerGender", value: storedGender }));
+    }
   }, [customerLookup.customer, customerLookup.status, dispatch, lockMatchedCustomer]);
 
   function toggleService(serviceId, checked) {
@@ -123,10 +135,15 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
       toast.error("Phone/email belongs to staff/admin account. Please enter valid customer details.");
       return;
     }
+    if (!bookingForm.customerGender) {
+      toast.error("Select the customer's gender");
+      return;
+    }
     const payload = {
       customerName: bookingForm.customerName,
       customerEmail: bookingForm.customerEmail,
       customerPhone: bookingForm.customerPhone,
+      customerGender: bookingForm.customerGender,
       serviceIds: bookingForm.serviceIds,
       stylistId: bookingForm.stylistId,
       startsAt: bookingForm.startsAt,
@@ -175,6 +192,25 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
           value={bookingForm.customerPhone}
           onChange={(e) => dispatch(setReceptionBookingFormField({ field: "customerPhone", value: e.target.value }))}
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="customerGender">Gender</Label>
+        <Select
+          value={bookingForm.customerGender || undefined}
+          onValueChange={(value) => dispatch(setReceptionBookingFormField({ field: "customerGender", value }))}
+        >
+          <SelectTrigger id="customerGender" className="w-full">
+            <SelectValue placeholder="Select gender" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="MALE">Male</SelectItem>
+            <SelectItem value="FEMALE">Female</SelectItem>
+            <SelectItem value="OTHER">Other</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Saved on the customer's account — decides which stylists and services they are offered.
+        </p>
       </div>
       <div className="space-y-2 lg:col-span-2">
         <Label htmlFor="customerEmail">Email</Label>
@@ -308,7 +344,15 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
           disabled={!slots.length}
         >
           <SelectTrigger id="startsAt" className="w-full" disabled={!slots.length}>
-            <SelectValue placeholder={slots.length ? "Select slot" : "No slots available"} />
+            <SelectValue
+              placeholder={
+                slots.length
+                  ? "Select slot"
+                  : bookingForm.customerGender
+                    ? "No slots available"
+                    : "Select customer gender first"
+              }
+            />
           </SelectTrigger>
           <SelectContent>
             {slots.map((slot) => (
@@ -378,6 +422,7 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
             customerLookupLoading ||
             customerLookup.status === "CONFLICT_NON_CUSTOMER_ACCOUNT" ||
             !services.length ||
+            !bookingForm.customerGender ||
             !bookingForm.serviceIds?.length ||
             !bookingForm.startsAt ||
             !bookingForm.stylistId

@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useAppThemeToggle } from "@/components/theme-provider";
+import { NotificationBell } from "@/components/shared/notification-bell";
 import { cn } from "@/lib/utils";
 import { receptionNavItems } from "@/receptionist/portal/nav-config";
 import { ReceptionQuickActions } from "@/receptionist/components/reception-quick-actions";
@@ -63,6 +64,7 @@ export function ReceptionLayout({
               <p className="truncate text-xs text-muted-foreground">{pageSubtitle}</p>
             ) : null}
           </div>
+          <NotificationBell portal="reception" />
           <Button type="button" variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
             {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
           </Button>
@@ -143,6 +145,7 @@ export function ReceptionLayout({
               {pageSubtitle ? <p className="text-sm text-muted-foreground">{pageSubtitle}</p> : null}
             </div>
             <div className="flex items-center gap-2">
+              <NotificationBell portal="reception" />
               <Button type="button" variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
                 {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
               </Button>

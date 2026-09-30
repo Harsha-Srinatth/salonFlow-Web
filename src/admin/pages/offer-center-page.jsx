@@ -5,9 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ErrorBanner } from "@/admin/components/error-banner"
+import { StatCard } from "@/admin/components/stat-card"
+import { StatusPill } from "@/admin/components/status-pill"
+import { useRevealOnReady } from "@/admin/lib/motion"
 import { getFirebaseIdToken } from "@/lib/auth/auth-client"
 import { toApiUrl } from "@/lib/api-base"
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket"
+import { BadgePercent, CalendarClock, Gift, Layers, Percent, Sparkles, Tags, Users } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 
@@ -42,7 +47,10 @@ export default function OfferCenterPage() {
   const [calendarTypeFilter, setCalendarTypeFilter] = useState("ALL")
   const [calendarOnlyActive, setCalendarOnlyActive] = useState(true)
   const [editOffer, setEditOffer] = useState(null)
+  const [loadError, setLoadError] = useState("")
   const previewSegmentRef = useRef("FREE")
+  const previewGridRef = useRevealOnReady([loading], { selector: ":scope > *" })
+  const calendarListRef = useRevealOnReady([loading], { selector: ":scope > *" })
 
   async function reloadAll(segment = preview.segment || "FREE") {
     setLoading(true)
@@ -55,8 +63,11 @@ export default function OfferCenterPage() {
       setCenter(centerData)
       setCalendarEvents(calendarData.events ?? [])
       setPreview(previewData)
+      setLoadError("")
     } catch (error) {
-      toast.error(error.message ?? "Could not load offers")
+      const message = error.message ?? "Could not load offers"
+      toast.error(message)
+      setLoadError(message)
     } finally {
       setLoading(false)
     }
@@ -337,20 +348,22 @@ export default function OfferCenterPage() {
   }
 
   return (
-    <AdminLayout pageTitle="Offer Center">
+    <AdminLayout pageTitle="Offer Center" description="Discounts, combos, and membership pricing in one place.">
       <div className="space-y-4">
+        <ErrorBanner message={loadError} onRetry={() => void reloadAll()} />
+
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Card><CardHeader><CardTitle>Active Discounts</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.activeDiscounts ?? 0}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Active Combos</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.activeCombos ?? 0}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Expiring Soon</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.expiringSoon ?? 0}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Premium Offers</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.premiumOffers ?? 0}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Basic Offers</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.basicOffers ?? 0}</CardContent></Card>
-          <Card><CardHeader><CardTitle>Free Offers</CardTitle></CardHeader><CardContent className="text-2xl font-semibold">{center.dashboard?.freeOffers ?? 0}</CardContent></Card>
+          <StatCard icon={BadgePercent} label="Active Discounts" value={center.dashboard?.activeDiscounts ?? 0} tone="primary" />
+          <StatCard icon={Layers} label="Active Combos" value={center.dashboard?.activeCombos ?? 0} tone="accent" delay={40} />
+          <StatCard icon={CalendarClock} label="Expiring Soon" value={center.dashboard?.expiringSoon ?? 0} tone="destructive" delay={80} />
+          <StatCard icon={Sparkles} label="Premium Offers" value={center.dashboard?.premiumOffers ?? 0} tone="accent" delay={120} />
+          <StatCard icon={Tags} label="Basic Offers" value={center.dashboard?.basicOffers ?? 0} tone="primary" delay={160} />
+          <StatCard icon={Users} label="Free Offers" value={center.dashboard?.freeOffers ?? 0} tone="neutral" delay={200} />
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Global Service Discount</CardTitle></CardHeader>
+          <Card className="admin-shadow-sm">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Percent className="size-4 text-primary" />Global Service Discount</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Label>Discount %</Label>
               <Input type="number" min="0" max="100" value={globalForm.discountPercent} onChange={(e) => setGlobalForm((v) => ({ ...v, discountPercent: e.target.value }))} />
@@ -363,8 +376,8 @@ export default function OfferCenterPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle>Individual Service Discount</CardTitle></CardHeader>
+          <Card className="admin-shadow-sm">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Tags className="size-4 text-primary" />Individual Service Discount</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Label>Service</Label>
               <Select value={serviceForm.serviceId} onValueChange={(value) => setServiceForm((v) => ({ ...v, serviceId: value }))}>
@@ -389,8 +402,8 @@ export default function OfferCenterPage() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <Card>
-            <CardHeader><CardTitle>Membership-Specific Discount</CardTitle></CardHeader>
+          <Card className="admin-shadow-sm">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Users className="size-4 text-primary" />Membership-Specific Discount</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Label>Service</Label>
               <Select value={membershipForm.serviceId} onValueChange={(value) => setMembershipForm((v) => ({ ...v, serviceId: value }))}>
@@ -416,8 +429,8 @@ export default function OfferCenterPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader><CardTitle>Combo Offer Builder</CardTitle></CardHeader>
+          <Card className="admin-shadow-sm">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Gift className="size-4 text-primary" />Combo Offer Builder</CardTitle></CardHeader>
             <CardContent className="space-y-3">
               <Label>Combo Name</Label>
               <Input value={comboForm.name} onChange={(e) => setComboForm((v) => ({ ...v, name: e.target.value }))} />
@@ -486,8 +499,8 @@ export default function OfferCenterPage() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Offer Preview & Priority</CardTitle>
+        <Card className="admin-shadow-sm">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2"><Sparkles className="size-4 text-primary" />Offer Preview & Priority</CardTitle>
             <Select value={preview.segment} onValueChange={(value) => void loadPreview(value)}>
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -531,9 +544,9 @@ export default function OfferCenterPage() {
                 {previewOnlyDiscounted ? "Showing Discounted Only" : "Showing All Services"}
               </Button>
             </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            <div ref={previewGridRef} className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
               {filteredPreviewServices.map((service) => (
-                <div key={service.serviceId} className="rounded-lg border p-3">
+                <div key={service.serviceId} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
                   <div className="flex items-center justify-between">
                     <p className="font-medium">{service.serviceName}</p>
                     <Badge variant="secondary">{formatOfferSource(service.source)}</Badge>
@@ -566,7 +579,7 @@ export default function OfferCenterPage() {
                     {segmentCombos.length ? (
                       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                         {segmentCombos.map((combo) => (
-                          <div key={`${value}-${combo.id}`} className="rounded-lg border p-3">
+                          <div key={`${value}-${combo.id}`} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
                             <div className="flex items-center justify-between gap-2">
                               <p className="font-medium">{combo.name}</p>
                               <Badge variant="secondary">Combo Offer</Badge>
@@ -596,9 +609,9 @@ export default function OfferCenterPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="admin-shadow-sm">
           <CardHeader className="space-y-3">
-            <CardTitle>Offer Calendar</CardTitle>
+            <CardTitle className="flex items-center gap-2"><CalendarClock className="size-4 text-primary" />Offer Calendar</CardTitle>
             <div className="grid gap-2 md:grid-cols-3">
               <Select value={calendarTypeFilter} onValueChange={setCalendarTypeFilter}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -715,6 +728,7 @@ export default function OfferCenterPage() {
                 </div>
               </div>
             ) : null}
+            <div ref={calendarListRef} className="space-y-4">
             {Object.entries(calendarGroups).map(([type, items]) => {
               if (!items.length) return null
               return (
@@ -725,10 +739,10 @@ export default function OfferCenterPage() {
                   </div>
                   <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                     {items.map((event) => (
-                      <div key={`${event.type}-${event.id}`} className="rounded-lg border p-3">
+                      <div key={`${event.type}-${event.id}`} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-medium">{event.title}</p>
-                          <Badge variant={event.isActive ? "default" : "secondary"}>{event.isActive ? "Active" : "Expired"}</Badge>
+                          <StatusPill status={event.isActive ? "Active" : "Expired"} />
                         </div>
                         <p className="text-xs text-muted-foreground">{event.type}</p>
                         <p className="text-xs">Start: {event.startAt ? new Date(event.startAt).toLocaleString() : "N/A"}</p>
@@ -743,6 +757,7 @@ export default function OfferCenterPage() {
                 </div>
               )
             })}
+            </div>
             {!Object.values(calendarGroups).some((list) => list.length) ? (
               <p className="text-xs text-muted-foreground">No offers found for current calendar filters.</p>
             ) : null}

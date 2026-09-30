@@ -3,7 +3,18 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { calculateAge, updateCustomerProfile } from "@/lib/customer-profile";
+import {
   Award,
+  Cake,
   Calendar,
   Clock,
   LogOut,
@@ -14,11 +25,55 @@ import {
   Zap,
   CheckCircle,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { UserLayout } from "../portal/user-layout";
 
+const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" };
+
+/** Today as YYYY-MM-DD, to cap the date picker — a birthday can't be in the future. */
+function todayIso() {
+  const now = new Date();
+  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}-${`${now.getDate()}`.padStart(2, "0")}`;
+}
+
 export default function UserProfilePage() {
-  const { appUser, loading, logout } = useAuth();
+  const { appUser, loading, logout, refresh } = useAuth();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", gender: "", dateOfBirth: "" });
+
+  // Re-seed the draft whenever the editor opens or the saved profile changes,
+  // so a cancelled edit never leaves stale text in the inputs.
+  useEffect(() => {
+    if (!appUser) return;
+    setForm({
+      name: appUser.name ?? "",
+      gender: GENDER_LABELS[appUser.gender] ? appUser.gender : "",
+      dateOfBirth: appUser.dateOfBirth ?? "",
+    });
+  }, [appUser, editing]);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateCustomerProfile({
+        name: form.name,
+        // Omit rather than send "": the endpoint treats a missing key as "leave
+        // alone", and there is no way to un-answer gender once it's set.
+        ...(form.gender ? { gender: form.gender } : {}),
+        dateOfBirth: form.dateOfBirth,
+      });
+      await refresh();
+      setEditing(false);
+      toast.success("Profile updated");
+    } catch (error) {
+      toast.error(error.message ?? "Could not save your profile");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -89,32 +144,135 @@ export default function UserProfilePage() {
 
         {/* Personal Information */}
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
             <CardTitle className="flex items-center gap-2 text-lg">
               <User className="w-5 h-5" />
               Personal information
             </CardTitle>
+            {editing ? null : (
+              <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
+                <Edit3 className="mr-2 w-4 h-4" />
+                Edit
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="pb-4 border-b border-border/50 last:border-0 last:pb-0">
-              <p className="text-sm text-muted-foreground font-medium mb-1">Full name</p>
-              <p className="text-base font-semibold text-foreground">{appUser.name}</p>
-            </div>
-            <div className="pb-4 border-b border-border/50 last:border-0 last:pb-0">
-              <p className="text-sm text-muted-foreground font-medium mb-1">Email address</p>
-              <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                <Mail className="w-4 h-4 text-muted-foreground" />
-                {appUser.email}
-              </p>
-            </div>
-            {appUser.phone && (
-              <div className="pb-4 border-b border-border/50 last:border-0 last:pb-0">
-                <p className="text-sm text-muted-foreground font-medium mb-1">Phone number</p>
-                <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-muted-foreground" />
-                  {appUser.phone}
-                </p>
+            {editing ? (
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="profileName">Full name</Label>
+                  <Input
+                    id="profileName"
+                    value={form.name}
+                    autoComplete="name"
+                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profileGender">Gender</Label>
+                  <Select
+                    value={form.gender || undefined}
+                    onValueChange={(value) => setForm((prev) => ({ ...prev, gender: value }))}
+                  >
+                    <SelectTrigger id="profileGender" className="w-full">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Decides which services, stylists and reward cards you're shown.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profileDob">Date of birth</Label>
+                  <Input
+                    id="profileDob"
+                    type="date"
+                    max={todayIso()}
+                    min="1900-01-01"
+                    value={form.dateOfBirth}
+                    onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {calculateAge(form.dateOfBirth) !== null
+                      ? `You're ${calculateAge(form.dateOfBirth)} — we'll use this for birthday offers.`
+                      : "Optional. We'll use it for birthday offers."}
+                  </p>
+                </div>
+
+                <div className="rounded-lg bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Email and phone are verified when you sign in and can't be changed here — contact the salon if
+                    they're wrong.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+                    {saving ? "Saving…" : "Save changes"}
+                  </Button>
+                  <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
+            ) : (
+              <>
+                <div className="pb-4 border-b border-border/50">
+                  <p className="text-sm text-muted-foreground font-medium mb-1">Full name</p>
+                  <p className="text-base font-semibold text-foreground">{appUser.name}</p>
+                </div>
+                <div className="pb-4 border-b border-border/50">
+                  <p className="text-sm text-muted-foreground font-medium mb-1">Email address</p>
+                  <p className="text-base font-semibold text-foreground flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-muted-foreground" />
+                    {appUser.email}
+                  </p>
+                </div>
+                {appUser.phone && (
+                  <div className="pb-4 border-b border-border/50">
+                    <p className="text-sm text-muted-foreground font-medium mb-1">Phone number</p>
+                    <p className="text-base font-semibold text-foreground flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-muted-foreground" />
+                      {appUser.phone}
+                    </p>
+                  </div>
+                )}
+                <div className="pb-4 border-b border-border/50">
+                  <p className="text-sm text-muted-foreground font-medium mb-1">Gender</p>
+                  {GENDER_LABELS[appUser.gender] ? (
+                    <p className="text-base font-semibold text-foreground">{GENDER_LABELS[appUser.gender]}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Not set — add it so your services, stylists and reward cards match you.
+                    </p>
+                  )}
+                </div>
+                <div className="last:border-0 last:pb-0">
+                  <p className="text-sm text-muted-foreground font-medium mb-1">Date of birth</p>
+                  {appUser.dateOfBirth ? (
+                    <p className="text-base font-semibold text-foreground flex items-center gap-2">
+                      <Cake className="w-4 h-4 text-muted-foreground" />
+                      {new Date(`${appUser.dateOfBirth}T00:00:00`).toLocaleDateString([], {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                      {appUser.age !== null && appUser.age !== undefined ? (
+                        <span className="text-sm font-normal text-muted-foreground">({appUser.age} years old)</span>
+                      ) : null}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Not set — add it to get birthday offers.</p>
+                  )}
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

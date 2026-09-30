@@ -1,11 +1,17 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AvatarBadge } from "@/admin/components/avatar-badge";
+import { EmptyState } from "@/admin/components/empty-state";
+import { ErrorBanner } from "@/admin/components/error-banner";
+import { StatCard } from "@/admin/components/stat-card";
+import { StatusPill } from "@/admin/components/status-pill";
+import { useRevealOnReady } from "@/admin/lib/motion";
 import { fetchAdminBookings, selectAdminAppointments } from "@/store/admin-portal-slice";
+import { Activity, AlertTriangle, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
 
 function formatMs(ms) {
@@ -19,13 +25,22 @@ export default function AdminStylistLiveMonitorPage() {
   const dispatch = useDispatch();
   const [nowMs, setNowMs] = useState(Date.now());
   const appointments = useSelector(selectAdminAppointments);
-  const { realtimeConnected } = useSelector((state) => state.adminPortal);
+  const { realtimeConnected, appointmentsError } = useSelector((state) => state.adminPortal);
+  const listRef = useRevealOnReady([appointments.length], { selector: ":scope > *" });
 
   useEffect(() => {
     void dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(t);
   }, [dispatch]);
+
+  useEffect(() => {
+    if (appointmentsError) toast.error(appointmentsError);
+  }, [appointmentsError]);
+
+  function retryLoad() {
+    void dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
+  }
 
   const activeCards = useMemo(() => {
     return appointments
@@ -41,44 +56,64 @@ export default function AdminStylistLiveMonitorPage() {
       .sort((a, b) => a.remainingMs - b.remainingMs);
   }, [appointments, nowMs]);
 
+  const criticalCount = activeCards.filter((c) => c.critical).length;
+  const redZoneCount = activeCards.filter((c) => c.inRedZone && !c.critical).length;
+
   return (
     <AdminLayout
       pageTitle="Stylist Live Monitor"
+      description="Live countdown for every service in progress."
       actions={
-        <Button asChild variant="outline" size="sm">
-          <Link to="/admin-dashboard">Dashboard</Link>
-        </Button>
+        <span className="hidden items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
+          <span className={`admin-live-dot relative inline-flex size-1.5 rounded-full ${realtimeConnected ? "bg-emerald-500 text-emerald-500" : "bg-muted-foreground text-muted-foreground"}`} />
+          {realtimeConnected ? "Live" : "Offline"}
+        </span>
       }
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>Live started services</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Realtime: {realtimeConnected ? "Connected" : "Disconnected"} | Red zone starts after planned duration, critical after 10 minutes overtime.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!activeCards.length ? <p className="text-sm text-muted-foreground">No started services right now.</p> : null}
-          {activeCards.map(({ booking, remainingMs, inRedZone, critical }) => (
-            <div key={booking.id} className="rounded-md border p-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="font-medium">{booking.customer}</p>
-                <p className="text-sm text-muted-foreground">{booking.service}</p>
-                <p className="text-xs text-muted-foreground">Stylist: {booking.stylistName ?? "—"}</p>
+      <div className="space-y-4">
+        <ErrorBanner message={appointmentsError} onRetry={retryLoad} />
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard icon={Activity} label="In progress" value={activeCards.length} tone="primary" />
+          <StatCard icon={Timer} label="In red zone" value={redZoneCount} tone="warning" delay={60} />
+          <StatCard icon={AlertTriangle} label="Critical delay" value={criticalCount} tone="destructive" delay={120} />
+        </div>
+
+        <Card className="admin-shadow-sm">
+          <CardHeader>
+            <CardTitle>Live started services</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Red zone starts after planned duration, critical after 10 minutes overtime.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!activeCards.length ? (
+              <EmptyState icon={Activity} title="No started services right now" description="Once a stylist marks a booking as started, it will show up here with a live countdown." />
+            ) : (
+              <div ref={listRef} className="space-y-2.5">
+                {activeCards.map(({ booking, remainingMs, inRedZone, critical }) => (
+                  <div key={booking.id} className="admin-card-hover admin-shadow-sm flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <AvatarBadge name={booking.customer} />
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{booking.customer}</p>
+                        <p className="truncate text-sm text-muted-foreground">{booking.service}</p>
+                        <p className="text-xs text-muted-foreground">Stylist: {booking.stylistName ?? "—"}</p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`font-mono text-lg font-semibold tabular-nums ${critical ? "text-destructive" : inRedZone ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        {formatMs(remainingMs)}
+                      </p>
+                      <StatusPill status={critical ? "Critical" : inRedZone ? "Red zone" : "On track"} className="mt-1" />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="text-right">
-                <p className={`font-semibold ${critical ? "text-destructive" : inRedZone ? "text-red-500" : "text-emerald-600"}`}>
-                  {formatMs(remainingMs)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {critical ? "Critical delay > 10m" : inRedZone ? "Red zone" : "On track"}
-                </p>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </AdminLayout>
   );
 }
-

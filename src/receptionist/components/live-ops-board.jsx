@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 
-function BookingRow({ booking, isDelayed, updating, onComplete, onCancel }) {
+function BookingRow({ booking, isDelayed, updating, onCancel }) {
   return (
     <motion.div
       layout
@@ -64,17 +64,12 @@ function BookingRow({ booking, isDelayed, updating, onComplete, onCancel }) {
           <p className="text-sm font-semibold">{formatCurrency(booking.payableAmount)}</p>
           <div className="flex flex-wrap gap-2">
             {booking.status === "STARTED" ? (
-              <Button
-                size="sm"
-                disabled={updating}
-                onClick={() => void onComplete(booking.id)}
-                className="gap-1.5"
-              >
-                <CheckCircle2 className="size-4" />
-                Complete
-              </Button>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <CheckCircle2 className="size-3.5" />
+                Stylist completes from their portal
+              </span>
             ) : null}
-            {["PENDING", "CONFIRMED", "STARTED"].includes(booking.status) ? (
+            {["PENDING", "CONFIRMED"].includes(booking.status) ? (
               <Button
                 size="sm"
                 variant="outline"
@@ -93,7 +88,7 @@ function BookingRow({ booking, isDelayed, updating, onComplete, onCancel }) {
   );
 }
 
-function QueueSection({ title, emptyLabel, bookings, isCriticalDelay, updatingBookingId, onComplete, onCancel }) {
+function QueueSection({ title, emptyLabel, bookings, isCriticalDelay, updatingBookingId, onCancel }) {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
@@ -113,7 +108,6 @@ function QueueSection({ title, emptyLabel, bookings, isCriticalDelay, updatingBo
                 booking={booking}
                 isDelayed={isCriticalDelay(booking)}
                 updating={updatingBookingId === booking.id}
-                onComplete={onComplete}
                 onCancel={onCancel}
               />
             ))}
@@ -129,15 +123,14 @@ export function LiveOpsBoard({ isCriticalDelay }) {
   const { queue, queueLoading, updatingBookingId } = useSelector((state) => state.receptionBookings);
   const { upcoming, inService } = groupQueueByStatus(queue);
 
-  async function handleAction(bookingId, action) {
-    const label = action === "complete" ? "Mark this booking as completed?" : "Cancel this booking?";
-    if (!window.confirm(label)) return;
-    const result = await dispatch(updateReceptionBookingAsync({ bookingId, action }));
+  async function handleCancel(bookingId) {
+    if (!window.confirm("Cancel this booking? Any eligible refund is recorded automatically.")) return;
+    const result = await dispatch(updateReceptionBookingAsync({ bookingId, action: "cancel" }));
     if (updateReceptionBookingAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Could not update booking");
+      toast.error(result.payload ?? "Could not cancel booking");
       return;
     }
-    toast.success(action === "complete" ? "Booking completed" : "Booking cancelled");
+    toast.success("Booking cancelled");
   }
 
   if (queueLoading && !queue.length) {
@@ -158,8 +151,7 @@ export function LiveOpsBoard({ isCriticalDelay }) {
         bookings={upcoming}
         isCriticalDelay={isCriticalDelay}
         updatingBookingId={updatingBookingId}
-        onComplete={(id) => handleAction(id, "complete")}
-        onCancel={(id) => handleAction(id, "cancel")}
+        onCancel={handleCancel}
       />
       <QueueSection
         title="In service"
@@ -167,8 +159,7 @@ export function LiveOpsBoard({ isCriticalDelay }) {
         bookings={inService}
         isCriticalDelay={isCriticalDelay}
         updatingBookingId={updatingBookingId}
-        onComplete={(id) => handleAction(id, "complete")}
-        onCancel={(id) => handleAction(id, "cancel")}
+        onCancel={handleCancel}
       />
     </div>
   );

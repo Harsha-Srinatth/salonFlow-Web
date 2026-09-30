@@ -17,7 +17,12 @@ export function isStartedPendingAutoComplete(booking) {
 
 export function getBookingDisplayStatus(booking) {
   if (isStartedPendingAutoComplete(booking)) return "Pending";
+  if (normalizeBookingStatus(booking?.status) === "NO-SHOW") return "Client did not visit";
   return `${booking?.status ?? ""}`.trim() || "PENDING";
+}
+
+export function isNoShowBooking(booking) {
+  return normalizeBookingStatus(booking?.status) === "NO-SHOW";
 }
 
 export function getPendingAutoCompleteCountdownMs(booking, nowMs = Date.now()) {

@@ -3,10 +3,20 @@
  * Firebase still enforces its own limits; this layer prevents rapid resends and adds a 5-minute
  * lockout after repeated wrong verification attempts (per browser sessionStorage).
  *
- * Durations align with product policy: resend cooldown 5 minutes, lockout 5 minutes after 5 bad tries.
+ * The resend cooldown is 45 seconds, not the 5 minutes it was. Five minutes is longer
+ * than an Indian carrier takes to give up on an SMS, so the customer whose first code
+ * never arrived — the one person this screen exists to help — was told to wait almost
+ * five minutes before trying anything, on a screen that could not be left without
+ * losing the signup. It read as the feature being broken. 45s is still far above the
+ * rate an abuser gets value from, and Firebase's own per-number ceiling is the real
+ * backstop. `VITE_OTP_RESEND_COOLDOWN_MS` still overrides it.
+ *
+ * The cooldown deliberately applies to *resends only*. It used to gate the first send of
+ * each attempt too, so anyone whose signup failed for an unrelated reason came back to
+ * "Please wait 284s" on a screen where they had not yet received a single message.
  */
 
-const RESEND_COOLDOWN_MS = Number(import.meta.env.VITE_OTP_RESEND_COOLDOWN_MS ?? 5 * 60 * 1000);
+const RESEND_COOLDOWN_MS = Number(import.meta.env.VITE_OTP_RESEND_COOLDOWN_MS ?? 45 * 1000);
 const MAX_VERIFY_FAILURES = Number(import.meta.env.VITE_OTP_MAX_VERIFY_FAILURES ?? 5);
 const VERIFY_LOCKOUT_MS = Number(import.meta.env.VITE_OTP_VERIFY_LOCKOUT_MS ?? 5 * 60 * 1000);
 function keySend(channel, e164Phone) {
@@ -35,6 +45,24 @@ export function assertCanSendOtp(channel, e164Phone) {
         const sec = Math.ceil((RESEND_COOLDOWN_MS - delta) / 1000);
         throw new Error(`Please wait ${sec}s before requesting another code.`);
     }
+}
+/**
+ * Milliseconds left on the resend cooldown, 0 when a resend is allowed now.
+ * Drives the visible countdown on the button, so the wait is something the customer
+ * can watch tick down rather than a number that only appears once they have already
+ * tapped and been refused.
+ *
+ * @param {"customer" | "staff"} channel
+ * @param {string} e164Phone
+ * @returns {number}
+ */
+export function getOtpResendWaitMs(channel, e164Phone) {
+    if (typeof window === "undefined" || !e164Phone)
+        return 0;
+    const last = window.sessionStorage.getItem(keySend(channel, e164Phone));
+    if (!last)
+        return 0;
+    return Math.max(0, RESEND_COOLDOWN_MS - (Date.now() - Number(last)));
 }
 /**
  * Records send time for cooldown tracking.

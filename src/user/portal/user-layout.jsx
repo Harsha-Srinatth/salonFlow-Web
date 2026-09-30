@@ -2,11 +2,15 @@
 
 import { Button } from "@/components/ui/button";
 import { useAppThemeToggle } from "@/components/theme-provider";
+import { NotificationBell } from "@/components/shared/notification-bell";
+import { ProfileCompletionPrompts } from "@/components/shared/profile-completion-prompts";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
   Crown,
+  Gift,
   History,
+  Hourglass,
   LayoutDashboard,
   Menu,
   Moon,
@@ -21,8 +25,10 @@ import { Link, useLocation } from "react-router-dom";
 const userNavItems = [
   { label: "Dashboard", href: "/user-dashboard", icon: LayoutDashboard },
   { label: "My Appointments", href: "/user-dashboard/appointments", icon: Calendar },
+  { label: "Live Queue", href: "/user-dashboard/queue", icon: Hourglass },
   { label: "Offers", href: "/user-dashboard/offers", icon: Tag },
   { label: "Membership", href: "/user-dashboard/membership", icon: Crown },
+  { label: "Refer & Earn", href: "/user-dashboard/loyalty", icon: Gift },
   { label: "Booking History", href: "/user-dashboard/booking-history", icon: History },
   { label: "Profile", href: "/user-dashboard/profile", icon: UserCircle },
 ];
@@ -70,6 +76,7 @@ export function UserLayout({ pageTitle, actions, children }) {
             {sidebarOpen ? <X className="size-5" /> : <Menu className="size-5" />}
           </Button>
           <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{pageTitle}</h1>
+          <NotificationBell portal="customer" />
           <Button type="button" variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
             {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
           </Button>
@@ -142,6 +149,7 @@ export function UserLayout({ pageTitle, actions, children }) {
           <div className="sticky top-0 z-20 hidden shrink-0 items-center justify-between border-b border-border bg-card/95 px-8 py-4 backdrop-blur-sm lg:flex">
             <h1 className="text-xl font-bold">{pageTitle}</h1>
             <div className="flex items-center gap-2">
+              <NotificationBell portal="customer" />
               <Button type="button" variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
                 {theme === "dark" ? <Sun className="size-5" /> : <Moon className="size-5" />}
               </Button>
@@ -154,6 +162,11 @@ export function UserLayout({ pageTitle, actions, children }) {
           </div>
         </main>
       </div>
+
+      {/* Asks for gender, then date of birth — each only while that field is
+          still empty on the account. Lives in the layout so it covers every
+          customer page rather than just the dashboard. */}
+      <ProfileCompletionPrompts />
     </div>
   );
 }

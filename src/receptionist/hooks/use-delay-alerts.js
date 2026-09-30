@@ -38,7 +38,13 @@ export function useDelayAlerts(bookings = []) {
         gain.connect(context.destination);
         oscillator.start(context.currentTime);
         oscillator.stop(context.currentTime + 0.35);
-        void context.close();
+        // Closing immediately would tear down the context before the scheduled
+        // tone actually renders, so the alert sound never plays. Wait for it to
+        // finish, then close so contexts don't pile up over a long shift (Safari
+        // in particular caps the number of concurrent AudioContexts).
+        window.setTimeout(() => {
+          context.close().catch(() => {});
+        }, 400);
       } catch {
         // Browser may block autoplay
       }

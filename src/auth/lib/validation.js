@@ -20,13 +20,24 @@ export function isValidFullName(value) {
   return new Set(lettersOnly).size > 3
 }
 
+/**
+ * Maps the signup dropdown label to the API value. Returns "" when nothing has
+ * been picked — the caller must treat that as "ask again", never as a default.
+ * Silently substituting "Other" here is what made every account genderless and
+ * let the reward vault offer women's services to men.
+ *
+ * @param {string} gender label from `genderOptions`
+ * @returns {"MALE" | "FEMALE" | "OTHER" | ""}
+ */
 export function mapGenderToApi(gender) {
   switch (gender) {
     case "Male":
       return "MALE"
     case "Female":
       return "FEMALE"
-    default:
+    case "Other":
       return "OTHER"
+    default:
+      return ""
   }
 }

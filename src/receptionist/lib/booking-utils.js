@@ -4,6 +4,7 @@ const STATUS_CONFIG = {
   STARTED: { label: "In service", tone: "primary" },
   COMPLETED: { label: "Completed", tone: "muted" },
   CANCELLED: { label: "Cancelled", tone: "destructive" },
+  "NO-SHOW": { label: "Client did not visit", tone: "amber" },
 };
 
 export function getBookingStatusConfig(status) {

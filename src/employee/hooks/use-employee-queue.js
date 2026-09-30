@@ -52,14 +52,14 @@ export function useEmployeeQueue({ user, enabled = true }) {
             const index = current.findIndex((item) => item.id === booking.id);
             if (index >= 0) {
               const next = [...current];
-              if (booking.status === "COMPLETED" || booking.status === "CANCELLED") {
+              if (["COMPLETED", "CANCELLED", "NO-SHOW"].includes(booking.status)) {
                 next.splice(index, 1);
                 return next;
               }
               next[index] = booking;
               return next;
             }
-            if (booking.stylistId === user.id && !["COMPLETED", "CANCELLED"].includes(booking.status ?? "")) {
+            if (booking.stylistId === user.id && !["COMPLETED", "CANCELLED", "NO-SHOW"].includes(booking.status ?? "")) {
               return [...current, booking];
             }
             return current;

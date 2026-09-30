@@ -10,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { StarRating } from "@/components/ui/star-rating";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import {
   cancelCustomerBookingAsync,
@@ -20,18 +22,21 @@ import {
   fetchCustomerCancellationPreviewAsync,
   removeCustomerBookingFromHistoryAsync,
 } from "@/store/customer-bookings-slice";
+import { animate } from "animejs";
 import {
   AlertCircle,
   Ban,
   Calendar,
   Download,
+  Flag,
   Info,
+  MessageSquareHeart,
   Trash2,
   Clock,
   User,
   CheckCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -40,9 +45,26 @@ import {
   formatCountdownMs,
   getBookingDisplayStatus,
   getPendingAutoCompleteCountdownMs,
+  isNoShowBooking,
   isStartedPendingAutoComplete,
   normalizeBookingStatus,
 } from "@/lib/booking-pending-status";
+
+async function feedbackAuthFetch(path, init) {
+  const token = await getFirebaseIdToken().catch(() => null);
+  const res = await fetch(toApiUrl(path), {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(init?.headers ?? {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Request failed");
+  return data;
+}
 
 const CANCELLATION_POLICY_SUMMARY = [
   {
@@ -73,7 +95,11 @@ function canCancelBooking(status) {
 
 function canRemoveFromHistory(status) {
   const s = normalizeStatus(status);
-  return s === "COMPLETED" || s === "CANCELLED";
+  return s === "COMPLETED" || s === "CANCELLED" || s === "NO-SHOW";
+}
+
+function canReviewBooking(status) {
+  return normalizeStatus(status) === "COMPLETED";
 }
 
 function getStatusColor(status) {
@@ -85,6 +111,8 @@ function getStatusColor(status) {
       return "bg-green-100 text-green-900 dark:bg-green-900/20 dark:text-green-300";
     case "CANCELLED":
       return "bg-red-100 text-red-900 dark:bg-red-900/20 dark:text-red-300";
+    case "NO-SHOW":
+      return "bg-amber-100 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300";
     default:
       return "bg-gray-100 text-gray-900 dark:bg-gray-900/20 dark:text-gray-300";
   }
@@ -107,6 +135,15 @@ export default function UserBookingHistoryPage() {
   const [cancelTargetId, setCancelTargetId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
 
+  const [feedbackByBooking, setFeedbackByBooking] = useState({});
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
+  const [reviewIsComplaint, setReviewIsComplaint] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const reviewedBadgeRefs = useRef({});
+
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -116,6 +153,7 @@ export default function UserBookingHistoryPage() {
     if (!appUser || appUser.role !== "USER") return;
     void dispatch(fetchCustomerBookings());
     void dispatch(connectCustomerRealtime());
+    void loadFeedback();
     return () => {
       void dispatch(disconnectCustomerRealtime());
     };
@@ -125,10 +163,71 @@ export default function UserBookingHistoryPage() {
     if (error) toast.error(error);
   }, [error]);
 
+  async function loadFeedback() {
+    try {
+      const data = await feedbackAuthFetch("/api/customer/feedback");
+      const map = {};
+      for (const item of data.feedback ?? []) map[item.bookingId] = item;
+      setFeedbackByBooking(map);
+    } catch {
+      // Non-critical: review badges just won't be pre-populated.
+    }
+  }
+
   function closeCancelDialog() {
     setCancelDialogOpen(false);
     setCancelTargetId(null);
     dispatch(clearCustomerCancellationPreview());
+  }
+
+  function openReviewDialog(booking) {
+    setReviewTarget(booking);
+    setReviewRating(0);
+    setReviewComment("");
+    setReviewIsComplaint(false);
+    setReviewDialogOpen(true);
+  }
+
+  function closeReviewDialog() {
+    setReviewDialogOpen(false);
+    setReviewTarget(null);
+  }
+
+  async function submitReview() {
+    if (!reviewTarget) return;
+    if (reviewRating < 1) {
+      toast.error("Please select a star rating");
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const data = await feedbackAuthFetch(`/api/customer/bookings/${reviewTarget.id}/feedback`, {
+        method: "POST",
+        body: JSON.stringify({
+          rating: reviewRating,
+          comment: reviewComment,
+          type: reviewIsComplaint ? "COMPLAINT" : "FEEDBACK",
+        }),
+      });
+      const reviewedBookingId = reviewTarget.id;
+      setFeedbackByBooking((prev) => ({ ...prev, [reviewedBookingId]: data.feedback }));
+      toast.success("Thanks for sharing — it truly helps us glow up!");
+      closeReviewDialog();
+      window.requestAnimationFrame(() => {
+        const el = reviewedBadgeRefs.current[reviewedBookingId];
+        if (!el) return;
+        animate(el, {
+          scale: [0.5, 1.2, 1],
+          rotate: ["-10deg", "6deg", "0deg"],
+          duration: 560,
+          ease: "outElastic(1, .6)",
+        });
+      });
+    } catch (error) {
+      toast.error(error.message ?? "Could not submit your review");
+    } finally {
+      setSubmittingReview(false);
+    }
   }
 
   async function openCancelDialog(booking) {
@@ -251,6 +350,8 @@ export default function UserBookingHistoryPage() {
                 {bookings.map((booking) => {
                   const cancellable = canCancelBooking(booking.status);
                   const removable = canRemoveFromHistory(booking.status);
+                  const reviewable = canReviewBooking(booking.status);
+                  const existingFeedback = feedbackByBooking[booking.id];
                   const pendingAutoComplete = isStartedPendingAutoComplete(booking);
                   const displayStatus = getBookingDisplayStatus(booking);
                   const pendingTimerText = pendingAutoComplete
@@ -313,6 +414,17 @@ export default function UserBookingHistoryPage() {
                             </div>
                           )}
 
+                          {/* No-show notice */}
+                          {isNoShowBooking(booking) && (
+                            <div className="flex items-start gap-2 rounded-lg bg-amber-100/50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-400">
+                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>
+                                This slot passed without a visit, so it was marked as a missed appointment. The ₹
+                                {Number(booking.payableAmount ?? 0).toFixed(2)} paid for it is non-refundable.
+                              </span>
+                            </div>
+                          )}
+
                           {/* Actions */}
                           <div className="flex flex-wrap gap-2 pt-2">
                             <a
@@ -326,6 +438,27 @@ export default function UserBookingHistoryPage() {
                               <Download className="w-4 h-4" />
                               Invoice
                             </a>
+                            {reviewable &&
+                              (existingFeedback ? (
+                                <span
+                                  ref={(el) => (reviewedBadgeRefs.current[booking.id] = el)}
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent"
+                                >
+                                  <StarRating value={existingFeedback.rating} readOnly size="sm" />
+                                  Reviewed
+                                </span>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-accent hover:text-accent hover:bg-accent/10"
+                                  onClick={() => openReviewDialog(booking)}
+                                >
+                                  <MessageSquareHeart className="mr-1.5 w-4 h-4" />
+                                  Rate &amp; review
+                                </Button>
+                              ))}
                             {cancellable && (
                               <Button
                                 type="button"
@@ -433,6 +566,78 @@ export default function UserBookingHistoryPage() {
               onClick={() => void confirmCancelBooking()}
             >
               {isCancelling ? "Cancelling..." : "Confirm cancellation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rate & Review Dialog */}
+      <Dialog open={reviewDialogOpen} onOpenChange={(open) => !open && closeReviewDialog()}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquareHeart className="w-5 h-5 text-accent" />
+              How was your visit?
+            </DialogTitle>
+            <DialogDescription>
+              {reviewTarget?.service ? `Rate your ${reviewTarget.service} experience` : "Share your experience"} — it
+              helps us keep making you look and feel your best.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            <div className="flex flex-col items-center gap-2">
+              <StarRating value={reviewRating} onChange={setReviewRating} size="lg" />
+              <p className="text-xs text-muted-foreground">
+                {reviewRating === 0 && "Tap a star to rate"}
+                {reviewRating === 1 && "We're sorry to hear that"}
+                {reviewRating === 2 && "We can do better"}
+                {reviewRating === 3 && "Thanks for the honest feedback"}
+                {reviewRating === 4 && "Glad you enjoyed it!"}
+                {reviewRating === 5 && "You're glowing! Thank you!"}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-foreground" htmlFor="review-comment">
+                Tell us more (optional)
+              </label>
+              <textarea
+                id="review-comment"
+                rows={4}
+                maxLength={2000}
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                placeholder="What made your visit great, or what could we improve?"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              />
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
+              <input
+                type="checkbox"
+                checked={reviewIsComplaint}
+                onChange={(e) => setReviewIsComplaint(e.target.checked)}
+                className="mt-0.5 size-4 accent-destructive"
+              />
+              <span>
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <Flag className="w-3.5 h-3.5" />
+                  This is a complaint
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Flag this so our team follows up directly on what went wrong.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={closeReviewDialog}>
+              Cancel
+            </Button>
+            <Button type="button" disabled={submittingReview} onClick={() => void submitReview()}>
+              {submittingReview ? "Submitting..." : "Submit review"}
             </Button>
           </DialogFooter>
         </DialogContent>

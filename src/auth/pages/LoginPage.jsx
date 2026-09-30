@@ -26,6 +26,7 @@ import {
   recordOtpVerifyFailure,
 } from "@/lib/otp-throttle"
 import {
+  cancelPendingSignup as abandonGoogleSignIn,
   requestPasswordReset,
   sendPhoneOtp,
   signInWithAppPassword,
@@ -34,6 +35,8 @@ import {
   verifyPhoneOtp,
 } from "@/lib/auth/auth-client"
 import { staffLogin } from "@/lib/staff-auth-client"
+
+const ACCOUNT_NOT_FOUND_MESSAGES = new Set(["ACCOUNT_NOT_FOUND", "Phone number is required for registration"])
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -80,9 +83,17 @@ export default function LoginPage() {
 
       await refresh()
       navigate(getDashboardPathByRole(user.role), { replace: true })
-      toast.success("Signed in successfully")
+      toast.success("Welcome back", { description: "You're signed in." })
     } catch (error) {
-      toast.error(getFirebaseAuthErrorMessage(error))
+      if (error instanceof Error && error.message === "GOOGLE_ACCOUNT") {
+        toast.error("You registered with Google", {
+          description: "This account has no password. Please continue with Google.",
+          action: { label: "Continue with Google", onClick: handleGoogleLogin },
+          duration: 8000,
+        })
+      } else {
+        toast.error("Couldn't sign you in", { description: getFirebaseAuthErrorMessage(error) })
+      }
     } finally {
       setSubmitting(false)
     }
@@ -139,12 +150,20 @@ export default function LoginPage() {
       assertOtpVerifyNotLocked("customer", e164)
       const result = await verifyPhoneOtp(otp.trim())
       clearOtpVerifyGuards("customer", e164)
-      toast.success("Phone verified and signed in")
       if (result.appUser?.role) {
+        toast.success("Phone verified and signed in")
         navigate(getDashboardPathByRole(result.appUser.role), { replace: true })
+      } else {
+        toast.error("No account found for this phone number. Please sign up first.")
+        navigate("/auth/signup", { replace: true, state: { phone } })
       }
     } catch (error) {
       recordOtpVerifyFailure("customer", e164)
+      if (error instanceof Error && ACCOUNT_NOT_FOUND_MESSAGES.has(error.message)) {
+        toast.error("No account found for this phone number. Please sign up first.")
+        navigate("/auth/signup", { replace: true, state: { phone } })
+        return
+      }
       toast.error(getFirebaseAuthErrorMessage(error))
     } finally {
       setSubmitting(false)
@@ -157,11 +176,32 @@ export default function LoginPage() {
       await signInWithGoogle()
       const syncedUser = await syncSessionWithBackend()
       if (syncedUser?.role) {
+        toast.success("Welcome back", { description: "Signed in with Google." })
         navigate(getDashboardPathByRole(syncedUser.role), { replace: true })
+      } else {
+        await abandonGoogleSignIn()
+        toast.error("No account found", {
+          description: "This Google account isn't registered yet. Please sign up first.",
+        })
+        navigate("/auth/signup", { replace: true })
       }
-      toast.success("Signed in with Google")
     } catch (error) {
-      toast.error(getFirebaseAuthErrorMessage(error))
+      if (error instanceof Error && ACCOUNT_NOT_FOUND_MESSAGES.has(error.message)) {
+        // Signing out matters as much as the redirect: the popup left a real
+        // Firebase session behind, and carrying it onto the signup page starts
+        // that flow already half-authenticated as an account that does not exist
+        // here yet.
+        await abandonGoogleSignIn()
+        toast.error("No account found", {
+          description: "This Google account isn't registered yet. Please sign up first.",
+        })
+        navigate("/auth/signup", { replace: true })
+        return
+      }
+      // A failed backend sync leaves a live Firebase session behind; without this the
+      // next attempt starts half-signed-in.
+      await abandonGoogleSignIn()
+      toast.error("Google sign-in failed", { description: getFirebaseAuthErrorMessage(error) })
     } finally {
       setSubmitting(false)
     }
@@ -390,7 +430,6 @@ export default function LoginPage() {
         </Link>
       </p>
 
-      <div id="recaptcha-container" />
     </AuthPageShell>
   )
 }

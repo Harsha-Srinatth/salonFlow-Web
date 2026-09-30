@@ -18,11 +18,21 @@ import { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 
+// Bookings are already paid in full at creation (both online self-service and
+// reception walk-in flows collect `payableAmount` immediately). Without this,
+// every fresh booking would show up here as "payable" again and risk a second,
+// duplicate payment being recorded against it.
+function amountDue(booking) {
+  const payable = Number(booking?.payableAmount ?? 0);
+  const paid = Number(booking?.paidAmount ?? 0);
+  return Math.max(0, Math.round((payable - paid) * 100) / 100);
+}
+
 export function PaymentPanel() {
   const dispatch = useDispatch();
   const { queue, paymentMutating } = useSelector((state) => state.receptionBookings);
   const payableBookings = useMemo(
-    () => queue.filter((b) => ["PENDING", "CONFIRMED", "STARTED"].includes(b.status)),
+    () => queue.filter((b) => ["PENDING", "CONFIRMED", "STARTED"].includes(b.status) && amountDue(b) > 0),
     [queue]
   );
 
@@ -33,13 +43,14 @@ export function PaymentPanel() {
   const [downloadingInvoice, setDownloadingInvoice] = useState(false);
 
   const selectedBooking = payableBookings.find((b) => b.id === bookingId) ?? null;
+  const selectedBookingDue = selectedBooking ? amountDue(selectedBooking) : 0;
   const invoiceTargetId = invoiceBookingId || bookingId;
 
   function onSelectBooking(value) {
     setBookingId(value);
     setInvoiceBookingId("");
     const booking = payableBookings.find((b) => b.id === value);
-    if (booking) setAmount(String(booking.payableAmount ?? ""));
+    if (booking) setAmount(String(amountDue(booking) || ""));
   }
 
   async function handleDownloadInvoice(targetId, { quiet = false } = {}) {
@@ -66,6 +77,10 @@ export function PaymentPanel() {
     const parsedAmount = Number(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
       toast.error("Enter a valid amount");
+      return;
+    }
+    if (parsedAmount > selectedBookingDue + 0.01) {
+      toast.error(`Amount exceeds the remaining balance due (${formatCurrency(selectedBookingDue)})`);
       return;
     }
     const paidBookingId = bookingId;
@@ -118,18 +133,28 @@ export function PaymentPanel() {
             <SelectContent>
               {payableBookings.map((booking) => (
                 <SelectItem key={booking.id} value={booking.id}>
-                  {booking.customer} · {formatCurrency(booking.payableAmount)}
+                  {booking.customer} · {formatCurrency(amountDue(booking))} due
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {!payableBookings.length ? (
+            <p className="text-xs text-muted-foreground">
+              Nothing outstanding — active bookings are paid in full when created.
+            </p>
+          ) : null}
         </div>
 
         {selectedBooking ? (
           <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
             <p className="font-medium">{selectedBooking.customer}</p>
             <p className="text-muted-foreground">{selectedBooking.service}</p>
-            <p className="mt-1 font-semibold">Due: {formatCurrency(selectedBooking.payableAmount)}</p>
+            <p className="mt-1 font-semibold">Due: {formatCurrency(selectedBookingDue)}</p>
+            {Number(selectedBooking.paidAmount ?? 0) > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {formatCurrency(selectedBooking.paidAmount)} already collected of {formatCurrency(selectedBooking.payableAmount)}
+              </p>
+            ) : null}
           </div>
         ) : null}
 
@@ -149,6 +174,7 @@ export function PaymentPanel() {
                 id="payment-amount"
                 type="number"
                 min="0"
+                max={selectedBooking ? selectedBookingDue : undefined}
                 step="0.01"
                 className="pl-9"
                 value={amount}

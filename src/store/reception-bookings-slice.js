@@ -179,9 +179,12 @@ export const recordReceptionPaymentAsync = createAsyncThunk(
 
 export const fetchReceptionSlots = createAsyncThunk(
   "receptionBookings/fetchSlots",
-  async ({ serviceIds, date }, { rejectWithValue }) => {
+  async ({ serviceIds, date, customerGender }, { rejectWithValue }) => {
     try {
       const query = new URLSearchParams({ serviceIds: (serviceIds ?? []).join(","), date });
+      // Without this the backend would fall back to the *receptionist's* gender
+      // when picking which stylists can take the slot.
+      if (customerGender) query.set("customerGender", customerGender);
       const res = await apiFetch(toApiUrl(`/api/reception/slots?${query.toString()}`), {
         headers: isPayloadEncryptionEnabled() ? { "x-payload-encrypted": "1" } : undefined,
       });
@@ -213,8 +216,9 @@ export const connectReceptionRealtime = createAsyncThunk(
           const state = getState();
           const serviceIds = state?.receptionBookings?.bookingForm?.serviceIds ?? [];
           const bookingDate = state?.receptionBookings?.bookingForm?.bookingDate;
+          const customerGender = state?.receptionBookings?.bookingForm?.customerGender;
           if (serviceIds.length && bookingDate) {
-            void dispatch(fetchReceptionSlots({ serviceIds, date: bookingDate }));
+            void dispatch(fetchReceptionSlots({ serviceIds, date: bookingDate, customerGender }));
           }
         },
         onServiceCatalogUpdated: () => {
@@ -237,6 +241,9 @@ const initialBookingForm = {
   customerName: "",
   customerEmail: "",
   customerPhone: "",
+  // Empty, not "OTHER": the walk-in account inherits this, and a defaulted
+  // gender is what fed customers the wrong services and reward cards.
+  customerGender: "",
   bookingDate: "",
   serviceIds: [],
   stylistId: "",
@@ -306,7 +313,9 @@ const receptionBookingsSlice = createSlice({
         recomputeReceptionPriceSummary(state);
         return;
       }
-      if (field === "bookingDate") {
+      // Gender decides which stylists may take the slot, so an already-picked
+      // slot/stylist can stop being valid the moment it changes.
+      if (field === "bookingDate" || field === "customerGender") {
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];

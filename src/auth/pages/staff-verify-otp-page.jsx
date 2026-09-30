@@ -157,7 +157,6 @@ export default function StaffVerifyOtpPage() {
         </Link>
       </p>
 
-      <div id="staff-recaptcha-container" />
     </AuthPageShell>
   )
 }

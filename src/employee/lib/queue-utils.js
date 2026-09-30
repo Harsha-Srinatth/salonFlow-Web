@@ -41,7 +41,7 @@ export function buildAppointmentCardModels(queue, nowMs) {
 export function computeShiftMetrics(queue = [], nowMs = Date.now()) {
   const cards = buildAppointmentCardModels(queue, nowMs);
   const waiting = cards.filter(
-    (card) => !card.isStarted && !["COMPLETED", "CANCELLED"].includes(card.booking.status ?? "")
+    (card) => !card.isStarted && !["COMPLETED", "CANCELLED", "NO-SHOW"].includes(card.booking.status ?? "")
   );
   const inService = cards.filter((card) => card.isStarted);
   const delayed = cards.filter((card) => card.beyondGrace);
@@ -63,7 +63,7 @@ export function computeShiftMetrics(queue = [], nowMs = Date.now()) {
 
 export function groupEmployeeQueue(cards = []) {
   const waiting = cards.filter(
-    (card) => !card.isStarted && !["COMPLETED", "CANCELLED"].includes(card.booking.status ?? "")
+    (card) => !card.isStarted && !["COMPLETED", "CANCELLED", "NO-SHOW"].includes(card.booking.status ?? "")
   );
   const active = cards.filter((card) => card.isStarted);
   return { waiting, active };
