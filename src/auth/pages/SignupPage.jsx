@@ -181,7 +181,7 @@ export default function SignupPage() {
   const detailsComplete =
     isValidFullName(fullName) &&
     email.includes("@") &&
-    password.length >= 6 &&
+    password.length >= 8 &&
     isValidE164Phone(signupPhone) &&
     Boolean(mapGenderToApi(gender))
 
@@ -296,8 +296,8 @@ export default function SignupPage() {
       toast.error("Please select your gender")
       return
     }
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters")
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters")
       return
     }
     if (!isValidE164Phone(signupPhone)) {

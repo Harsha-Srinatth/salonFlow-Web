@@ -224,7 +224,10 @@ export async function getFirebaseIdToken() {
     const user = firebaseAuth.currentUser;
     if (!user)
         return null;
-    return user.getIdToken(true);
+    // Cached token; the SDK refreshes it by itself shortly before it expires. Forcing a refresh
+    // (`getIdToken(true)`) here made every single API call wait on an extra round trip to
+    // Google first, and counted against Firebase's token-refresh quota.
+    return user.getIdToken();
 }
 /**
  * Exchanges the current Firebase ID token for an app session, registering the

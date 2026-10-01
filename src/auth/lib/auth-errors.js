@@ -52,7 +52,7 @@ export function getFirebaseAuthErrorMessage(error) {
     case "auth/email-already-in-use":
       return "This email is already registered. Please sign in."
     case "auth/weak-password":
-      return "Password is too weak. Use at least 6 characters."
+      return "Password is too weak. Use at least 8 characters."
     case "auth/invalid-email":
       return "Invalid email format."
     case "auth/too-many-requests":

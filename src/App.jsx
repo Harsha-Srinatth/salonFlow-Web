@@ -3,51 +3,60 @@ import { GuestOnlyRoute } from "@/components/auth/guest-only-route"
 import { RequireRole } from "@/components/auth/require-role"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
-import AdminAppointmentsPage from "@/admin/pages/appointments-page"
-import AdminCustomersPage from "@/admin/pages/customers-page"
-import CreateStaffPage from "@/admin/pages/create-staff-page"
-import AdminDashboardPage from "@/admin/pages/dashboard-page"
-import AdminReportsPage from "@/admin/pages/reports-page"
-import AdminSettingsPage from "@/admin/pages/settings-page"
-import AdminServicesPage from "@/admin/pages/services-page"
-import AdminStaffPermissionsPage from "@/admin/pages/staff-permissions-page"
-import AdminStaffPayrollPage from "@/admin/pages/staff-payroll-page"
-import AdminStylistLiveMonitorPage from "@/admin/pages/stylist-live-monitor-page"
-import OfferCenterPage from "@/admin/pages/offer-center-page"
-import AdminMembershipPage from "@/admin/pages/membership-page"
-import AdminFeedbackPage from "@/admin/pages/feedback-page"
-import AdminLoyaltyPage from "@/admin/pages/loyalty-page"
-import EmployeeAppointmentsPage from "@/employee/pages/appointments-page"
-import EmployeeDashboardPage from "@/employee/pages/dashboard-page"
-import EmployeeProfilePage from "@/employee/pages/profile-page"
-import LoginPage from "@/auth/pages/LoginPage"
-import SignupPage from "@/auth/pages/SignupPage"
-import AuthEmailVerifiedPage from "@/auth/pages/auth-email-verified-page"
-import AuthResetPasswordPage from "@/auth/pages/auth-reset-password-page"
-import StaffSetPasswordPage from "@/auth/pages/staff-set-password-page"
-import StaffVerifyOtpPage from "@/auth/pages/staff-verify-otp-page"
-import LandingPage from "@/landing/pages/LandingPage"
-import ReceptionAppointmentsPage from "@/receptionist/pages/appointments-page"
-import ReceptionDashboardPage from "@/receptionist/pages/dashboard-page"
-import ReceptionProfilePage from "@/receptionist/pages/profile-page"
-import ReceptionWalkInPage from "@/receptionist/pages/walk-in-page"
-import UserAppointmentsPage from "@/user/pages/appointments-page"
-import UserBookingHistoryPage from "@/user/pages/booking-history-page"
-import UserOffersPage from "@/user/pages/offers-page"
-import UserDashboardPage from "@/user/pages/dashboard-page"
-import UserMembershipPage from "@/user/pages/membership-page"
-import UserLoyaltyPage from "@/user/pages/loyalty-page"
-import UserProfilePage from "@/user/pages/profile-page"
-import UserQueuePage from "@/user/pages/queue-page"
+import { lazy, Suspense } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Provider } from "react-redux"
 import { store } from "@/store"
+
+// Each page is its own chunk: a visitor on the landing page no longer downloads the admin,
+// reception and stylist portals (and a customer never downloads the other three).
+const AdminAppointmentsPage = lazy(() => import("@/admin/pages/appointments-page"))
+const AdminCustomersPage = lazy(() => import("@/admin/pages/customers-page"))
+const CreateStaffPage = lazy(() => import("@/admin/pages/create-staff-page"))
+const AdminDashboardPage = lazy(() => import("@/admin/pages/dashboard-page"))
+const AdminReportsPage = lazy(() => import("@/admin/pages/reports-page"))
+const AdminSettingsPage = lazy(() => import("@/admin/pages/settings-page"))
+const AdminServicesPage = lazy(() => import("@/admin/pages/services-page"))
+const AdminStaffPermissionsPage = lazy(() => import("@/admin/pages/staff-permissions-page"))
+const AdminStaffPayrollPage = lazy(() => import("@/admin/pages/staff-payroll-page"))
+const AdminStylistLiveMonitorPage = lazy(() => import("@/admin/pages/stylist-live-monitor-page"))
+const OfferCenterPage = lazy(() => import("@/admin/pages/offer-center-page"))
+const AdminMembershipPage = lazy(() => import("@/admin/pages/membership-page"))
+const AdminFeedbackPage = lazy(() => import("@/admin/pages/feedback-page"))
+const AdminLoyaltyPage = lazy(() => import("@/admin/pages/loyalty-page"))
+const EmployeeAppointmentsPage = lazy(() => import("@/employee/pages/appointments-page"))
+const EmployeeDashboardPage = lazy(() => import("@/employee/pages/dashboard-page"))
+const EmployeeProfilePage = lazy(() => import("@/employee/pages/profile-page"))
+const LoginPage = lazy(() => import("@/auth/pages/LoginPage"))
+const SignupPage = lazy(() => import("@/auth/pages/SignupPage"))
+const AuthEmailVerifiedPage = lazy(() => import("@/auth/pages/auth-email-verified-page"))
+const AuthResetPasswordPage = lazy(() => import("@/auth/pages/auth-reset-password-page"))
+const StaffSetPasswordPage = lazy(() => import("@/auth/pages/staff-set-password-page"))
+const StaffVerifyOtpPage = lazy(() => import("@/auth/pages/staff-verify-otp-page"))
+const LandingPage = lazy(() => import("@/landing/pages/LandingPage"))
+const ReceptionAppointmentsPage = lazy(() => import("@/receptionist/pages/appointments-page"))
+const ReceptionDashboardPage = lazy(() => import("@/receptionist/pages/dashboard-page"))
+const ReceptionProfilePage = lazy(() => import("@/receptionist/pages/profile-page"))
+const ReceptionWalkInPage = lazy(() => import("@/receptionist/pages/walk-in-page"))
+const UserAppointmentsPage = lazy(() => import("@/user/pages/appointments-page"))
+const UserBookingHistoryPage = lazy(() => import("@/user/pages/booking-history-page"))
+const UserOffersPage = lazy(() => import("@/user/pages/offers-page"))
+const UserDashboardPage = lazy(() => import("@/user/pages/dashboard-page"))
+const UserMembershipPage = lazy(() => import("@/user/pages/membership-page"))
+const UserLoyaltyPage = lazy(() => import("@/user/pages/loyalty-page"))
+const UserProfilePage = lazy(() => import("@/user/pages/profile-page"))
+const UserQueuePage = lazy(() => import("@/user/pages/queue-page"))
+
+function PageFallback() {
+  return <div className="flex min-h-screen items-center justify-center p-6 text-sm text-muted-foreground">Loading…</div>
+}
 
 function App() {
   return (
     <ThemeProvider>
       <Provider store={store}>
         <AuthProvider>
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<GuestOnlyRoute><LandingPage /></GuestOnlyRoute>} />
             <Route path="/auth/login" element={<GuestOnlyRoute><LoginPage /></GuestOnlyRoute>} />
@@ -103,6 +112,7 @@ function App() {
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
           <Toaster />
         </AuthProvider>
       </Provider>

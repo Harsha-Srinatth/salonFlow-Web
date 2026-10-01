@@ -15,7 +15,12 @@ export function clearBrowserSessionState() {
     // ignore storage errors in strict browser modes
   }
   try {
-    window.localStorage.clear();
+    // Clearing everything also wiped the theme and the per-browser device id that the
+    // referral-abuse check depends on, so logging out reset both. Keep those two.
+    const preserved = new Set(["theme", "sahasra_device_id"]);
+    for (const key of Object.keys(window.localStorage)) {
+      if (!preserved.has(key)) window.localStorage.removeItem(key);
+    }
   } catch {
     // ignore storage errors in strict browser modes
   }

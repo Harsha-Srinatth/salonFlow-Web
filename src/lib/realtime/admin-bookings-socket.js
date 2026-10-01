@@ -1,23 +1,56 @@
 import { io } from "socket.io-client";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { decryptPayloadEnvelope, encryptPayloadEnvelope, isPayloadEncryptionEnabled } from "@/lib/security/payload-envelope";
+
+/**
+ * One socket per portal key ("admin" | "reception" | "customer" | "staff"), shared by every
+ * component mounted in that portal.
+ *
+ * Every consumer registers its own callbacks in a per-key registry and the single socket
+ * fans each event out to all of them. Previously only the *first* caller's booking/payment/
+ * service/offer handlers were ever attached (later callers got the existing socket back and
+ * their handlers were silently dropped), and a caller arriving while the socket was still
+ * connecting created a second, untracked socket.
+ */
 
 const socketRefs = new Map();
 const connectionRefCounts = new Map();
-const notificationListenerRegistries = new Map();
-const queueListenerRegistries = new Map();
+/** key -> Map(callbackName -> Set<callback>) */
+const listenerRegistries = new Map();
 
-function getNotificationRegistry(key) {
-  if (!notificationListenerRegistries.has(key)) notificationListenerRegistries.set(key, new Set());
-  return notificationListenerRegistries.get(key);
+/** Server event name -> the callback option that consumes it. */
+const EVENT_CALLBACKS = [
+  ["booking.updated.v1", "onBookingUpdated"],
+  ["service.catalog.updated.v1", "onServiceCatalogUpdated"],
+  ["payment.updated.v1", "onPaymentUpdated"],
+  ["offers.updated.v1", "onOfferUpdated"],
+  ["notification.created.v1", "onNotificationCreated"],
+  ["queue.snapshot.v1", "onQueueSnapshot"],
+];
+const LIFECYCLE_CALLBACKS = ["onConnect", "onDisconnect"];
+
+function getRegistry(key) {
+  if (!listenerRegistries.has(key)) listenerRegistries.set(key, new Map());
+  return listenerRegistries.get(key);
 }
 
-// Same reason as the notification registry: a portal's socket is shared by
-// everything mounted in it, and whichever component connects first is the only
-// one whose handlers get attached at creation time. Queue listeners therefore
-// live in a registry the single `queue.snapshot.v1` handler fans out to.
-function getQueueRegistry(key) {
-  if (!queueListenerRegistries.has(key)) queueListenerRegistries.set(key, new Set());
-  return queueListenerRegistries.get(key);
+function addCallback(key, name, callback) {
+  if (typeof callback !== "function") return;
+  const registry = getRegistry(key);
+  if (!registry.has(name)) registry.set(name, new Set());
+  registry.get(name).add(callback);
+}
+
+function emitToCallbacks(key, name, ...args) {
+  const callbacks = listenerRegistries.get(key)?.get(name);
+  if (!callbacks) return;
+  for (const callback of [...callbacks]) {
+    try {
+      callback(...args);
+    } catch (error) {
+      console.error(`socket ${name} listener failed`, error);
+    }
+  }
 }
 
 function retainConnection(key) {
@@ -34,35 +67,32 @@ function releaseConnection(key) {
   return true;
 }
 
-async function connectBookingsSocket({
-  token,
-  onConnect,
-  onDisconnect,
-  onBookingUpdated,
-  onServiceCatalogUpdated,
-  onPaymentUpdated,
-  onOfferUpdated,
-  onNotificationCreated,
-  onQueueSnapshot,
-  room = "bookings:global",
-  key = "default",
-}) {
-  retainConnection(key);
-  if (onNotificationCreated) getNotificationRegistry(key).add(onNotificationCreated);
-  if (onQueueSnapshot) getQueueRegistry(key).add(onQueueSnapshot);
-  const existingSocket = socketRefs.get(key);
-  if (existingSocket?.connected) return existingSocket;
+async function decodePayload(payload) {
+  if (payload?.encrypted && isPayloadEncryptionEnabled()) {
+    return decryptPayloadEnvelope(payload.encrypted).catch(() => null);
+  }
+  return payload;
+}
+
+function createSocket(key, initialToken, room) {
   const socket = io(import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080", {
     path: "/socket.io",
     transports: ["websocket", "polling"],
-    auth: {
-      token: token ? `Bearer ${token}` : undefined,
+    // A function, so every (re)connection attempt authenticates with the *current* token.
+    // A fixed value expires after an hour and every later reconnect was then refused.
+    // Staff and reception have no Firebase user: they authenticate with their cookie.
+    auth: async (callback) => {
+      const fresh = await getFirebaseIdToken().catch(() => null);
+      const token = fresh ?? initialToken;
+      callback({ token: token ? `Bearer ${token}` : undefined });
     },
     withCredentials: true,
   });
 
   socket.on("connect", async () => {
-    onConnect?.();
+    emitToCallbacks(key, "onConnect");
+    // Kept for older servers that still honour a client-chosen room; current servers
+    // assign rooms from the authenticated identity and ignore this.
     if (isPayloadEncryptionEnabled()) {
       const encrypted = await encryptPayloadEnvelope({ room });
       socket.emit("booking.subscribe.v1", { encrypted });
@@ -70,124 +100,53 @@ async function connectBookingsSocket({
       socket.emit("booking.subscribe.v1", { room });
     }
   });
-  // Callers that only care about one event (e.g. the notification bell) pass no
-  // disconnect handler; registering `undefined` makes socket.io throw when the
-  // transport drops, so the call is forwarded through an optional invocation.
-  socket.on("disconnect", (...args) => onDisconnect?.(...args));
-  socket.on("booking.updated.v1", async payload => {
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      const decrypted = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-      if (decrypted) onBookingUpdated?.(decrypted);
-      return;
+  socket.on("disconnect", (...args) => emitToCallbacks(key, "onDisconnect", ...args));
+  for (const [eventName, callbackName] of EVENT_CALLBACKS) {
+    socket.on(eventName, async (payload) => {
+      const decoded = await decodePayload(payload);
+      if (decoded) emitToCallbacks(key, callbackName, decoded);
+    });
+  }
+  return socket;
+}
+
+async function connectBookingsSocket({ token, room = "bookings:global", key = "default", ...callbacks }) {
+  retainConnection(key);
+  for (const name of [...LIFECYCLE_CALLBACKS, ...EVENT_CALLBACKS.map(([, callbackName]) => callbackName)]) {
+    addCallback(key, name, callbacks[name]);
+  }
+  const existing = socketRefs.get(key);
+  if (existing) {
+    // Reuse even while it is still connecting or reconnecting; socket.io retries by itself.
+    // Late joiners that missed the connect event are told right away.
+    if (existing.connected) {
+      try {
+        callbacks.onConnect?.();
+      } catch (error) {
+        console.error("socket onConnect listener failed", error);
+      }
     }
-    onBookingUpdated?.(payload);
-  });
-  socket.on("service.catalog.updated.v1", async payload => {
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      const decrypted = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-      if (decrypted) onServiceCatalogUpdated?.(decrypted);
-      return;
-    }
-    onServiceCatalogUpdated?.(payload);
-  });
-  socket.on("payment.updated.v1", async payload => {
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      const decrypted = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-      if (decrypted) onPaymentUpdated?.(decrypted);
-      return;
-    }
-    onPaymentUpdated?.(payload);
-  });
-  socket.on("offers.updated.v1", async payload => {
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      const decrypted = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-      if (decrypted) onOfferUpdated?.(decrypted);
-      return;
-    }
-    onOfferUpdated?.(payload);
-  });
-  socket.on("notification.created.v1", async payload => {
-    let decoded = payload;
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      decoded = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-    }
-    if (!decoded) return;
-    for (const callback of getNotificationRegistry(key)) callback(decoded);
-  });
-  socket.on("queue.snapshot.v1", async payload => {
-    let decoded = payload;
-    if (payload?.encrypted && isPayloadEncryptionEnabled()) {
-      decoded = await decryptPayloadEnvelope(payload.encrypted).catch(() => null);
-    }
-    if (!decoded) return;
-    for (const callback of getQueueRegistry(key)) callback(decoded);
-  });
+    return existing;
+  }
+  const socket = createSocket(key, token, room);
   socketRefs.set(key, socket);
   return socket;
 }
 
-export async function connectAdminBookingsSocket({ token, onConnect, onDisconnect, onBookingUpdated, onServiceCatalogUpdated, onPaymentUpdated, onOfferUpdated, onNotificationCreated, onQueueSnapshot }) {
-  return connectBookingsSocket({
-    token,
-    onConnect,
-    onDisconnect,
-    onBookingUpdated,
-    onServiceCatalogUpdated,
-    onPaymentUpdated,
-    onOfferUpdated,
-    onNotificationCreated,
-    onQueueSnapshot,
-    room: "admin:bookings",
-    key: "admin",
-  });
+export async function connectAdminBookingsSocket(options) {
+  return connectBookingsSocket({ ...options, room: "admin:bookings", key: "admin" });
 }
 
-export async function connectReceptionBookingsSocket({ token, onConnect, onDisconnect, onBookingUpdated, onServiceCatalogUpdated, onPaymentUpdated, onOfferUpdated, onNotificationCreated, onQueueSnapshot }) {
-  return connectBookingsSocket({
-    token,
-    onConnect,
-    onDisconnect,
-    onBookingUpdated,
-    onServiceCatalogUpdated,
-    onPaymentUpdated,
-    onOfferUpdated,
-    onNotificationCreated,
-    onQueueSnapshot,
-    room: "reception:bookings",
-    key: "reception",
-  });
+export async function connectReceptionBookingsSocket(options) {
+  return connectBookingsSocket({ ...options, room: "reception:bookings", key: "reception" });
 }
 
-export async function connectCustomerBookingsSocket({ token, onConnect, onDisconnect, onBookingUpdated, onServiceCatalogUpdated, onPaymentUpdated, onOfferUpdated, onNotificationCreated, onQueueSnapshot }) {
-  return connectBookingsSocket({
-    token,
-    onConnect,
-    onDisconnect,
-    onBookingUpdated,
-    onServiceCatalogUpdated,
-    onPaymentUpdated,
-    onOfferUpdated,
-    onNotificationCreated,
-    onQueueSnapshot,
-    room: "bookings:global",
-    key: "customer",
-  });
+export async function connectCustomerBookingsSocket(options) {
+  return connectBookingsSocket({ ...options, room: "bookings:global", key: "customer" });
 }
 
-export async function connectStaffBookingsSocket({ token, onConnect, onDisconnect, onBookingUpdated, onServiceCatalogUpdated, onPaymentUpdated, onOfferUpdated, onNotificationCreated, onQueueSnapshot }) {
-  return connectBookingsSocket({
-    token,
-    onConnect,
-    onDisconnect,
-    onBookingUpdated,
-    onServiceCatalogUpdated,
-    onPaymentUpdated,
-    onOfferUpdated,
-    onNotificationCreated,
-    onQueueSnapshot,
-    room: "staff:bookings",
-    key: "staff",
-  });
+export async function connectStaffBookingsSocket(options) {
+  return connectBookingsSocket({ ...options, room: "staff:bookings", key: "staff" });
 }
 
 /**
@@ -201,14 +160,13 @@ export async function connectStaffBookingsSocket({ token, onConnect, onDisconnec
  * @param {(board: object) => void} callback
  */
 export function removeQueueSnapshotListener(portalKey, callback) {
-  queueListenerRegistries.get(portalKey)?.delete(callback);
+  listenerRegistries.get(portalKey)?.get("onQueueSnapshot")?.delete(callback);
 }
 
 function disconnectByKey(key) {
   if (!releaseConnection(key)) return;
   const socket = socketRefs.get(key);
-  notificationListenerRegistries.delete(key);
-  queueListenerRegistries.delete(key);
+  listenerRegistries.delete(key);
   if (!socket) return;
   try {
     if (typeof socket.removeAllListeners === "function") socket.removeAllListeners();
