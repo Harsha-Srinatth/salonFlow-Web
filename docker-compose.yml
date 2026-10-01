@@ -7,6 +7,7 @@ services:
       - "${BACKEND_HOST_PORT:-18081}:8080"
     environment:
       - PORT=8080
+      - NODE_ENV=development
       - FRONTEND_ORIGIN=http://localhost:${FRONTEND_HOST_PORT:-15174}
       - DATABASE_URL=${DATABASE_URL:-postgres://postgres:postgres@host.docker.internal:5432/sahasra}
       - FIREBASE_SERVICE_ACCOUNT_PATH=/app/credentials/firebase-admin.json
