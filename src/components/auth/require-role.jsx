@@ -1,14 +1,17 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { getDashboardPathByRole } from "@/lib/auth/role-routing";
+import { Suspense } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
-export function RequireRole({ roles }) {
+// `fallback` keeps the portal chrome (sidebar/header) on screen while auth or a lazy page chunk loads.
+export function RequireRole({ roles, fallback = null }) {
     const { appUser, loading } = useAuth();
     const location = useLocation();
 
     if (loading) {
-        return <div className="flex min-h-screen items-center justify-center p-6 text-sm text-muted-foreground">Loading…</div>;
+        return fallback ?? <LoadingOrb fullScreen />;
     }
     if (!appUser?.role) {
         return <Navigate to="/auth/login" replace state={{ from: location }} />;
@@ -16,5 +19,5 @@ export function RequireRole({ roles }) {
     if (!roles.includes(appUser.role)) {
         return <Navigate to={getDashboardPathByRole(appUser.role) ?? "/"} replace />;
     }
-    return <Outlet />;
+    return fallback ? <Suspense fallback={fallback}><Outlet /></Suspense> : <Outlet />;
 }

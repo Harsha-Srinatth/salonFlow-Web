@@ -8,16 +8,11 @@ import {
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export function ScheduleBoard({ bookings = [], isCriticalDelay, loading }) {
   if (loading && !bookings.length) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="h-20 animate-pulse rounded-xl bg-muted/50" />
-        ))}
-      </div>
-    );
+    return <LoadingOrb compact />;
   }
 
   if (!bookings.length) {

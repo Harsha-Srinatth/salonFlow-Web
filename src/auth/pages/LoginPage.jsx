@@ -6,7 +6,6 @@ import {
   CheckCircle,
   Eye,
   EyeOff,
-  Loader,
   Lock,
   Mail,
   Phone,
@@ -35,6 +34,7 @@ import {
   verifyPhoneOtp,
 } from "@/lib/auth/auth-client"
 import { staffLogin } from "@/lib/staff-auth-client"
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 const ACCOUNT_NOT_FOUND_MESSAGES = new Set(["ACCOUNT_NOT_FOUND", "Phone number is required for registration"])
 
@@ -311,7 +311,7 @@ export default function LoginPage() {
             disabled={submitting}
             className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {submitting ? <Loader className="size-4 animate-spin" /> : null}
+            {submitting ? <InlineOrb theme="light" /> : null}
             {submitting ? "Signing in..." : "Sign in with Email"}
           </button>
 
@@ -362,7 +362,7 @@ export default function LoginPage() {
                 disabled={submitting}
                 className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {submitting ? <Loader className="size-4 animate-spin" /> : null}
+                {submitting ? <InlineOrb theme="light" /> : null}
                 {submitting ? "Sending OTP..." : "Send OTP"}
               </button>
             </>
@@ -387,7 +387,7 @@ export default function LoginPage() {
                 disabled={submitting}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
               >
-                {submitting ? <Loader className="size-4 animate-spin" /> : null}
+                {submitting ? <InlineOrb theme="light" /> : null}
                 {submitting ? "Verifying..." : "Verify OTP"}
               </button>
               <button

@@ -15,6 +15,7 @@ import {
   User,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 function AppointmentCard({
   card,
@@ -179,12 +180,7 @@ function QueueSection({ id, title, emptyLabel, cards, mutatingId, onStart, onCom
 }
 
 function QueueSkeleton() {
-  return (
-    <div className="space-y-3">
-      <div className="h-24 animate-pulse rounded-xl bg-muted/50" />
-      <div className="h-24 animate-pulse rounded-xl bg-muted/50" />
-    </div>
-  );
+  return <LoadingOrb compact />;
 }
 
 export function AppointmentQueueBoard({

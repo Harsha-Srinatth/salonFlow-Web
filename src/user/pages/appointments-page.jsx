@@ -50,6 +50,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 async function fetchLoyaltySnapshot() {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -281,12 +283,7 @@ export default function UserAppointmentsPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Book Appointment">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading…" className="h-96" />
       </UserLayout>
     );
   }
@@ -650,7 +647,7 @@ export default function UserAppointmentsPage() {
             >
               {mutating || payPhase !== "idle" ? (
                 <>
-                  <span className="animate-spin mr-2">⏳</span>
+                  <InlineOrb theme="light" className="mr-2" />
                   {payPhase === "verifying"
                     ? "Verifying payment..."
                     : payPhase === "checkout"

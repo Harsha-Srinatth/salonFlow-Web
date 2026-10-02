@@ -31,6 +31,7 @@ import { Calendar, Clock, Crown, IndianRupee, User, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export function WalkInBookingForm({ layout = "default", onCreated }) {
   const dispatch = useDispatch();
@@ -301,7 +302,7 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
         onClearCombo={() => dispatch(clearReceptionComboOffer())}
       />
       <div className="space-y-3">
-        {servicesLoading ? <p className="text-xs text-muted-foreground">Loading services…</p> : null}
+        {servicesLoading ? <LoadingOrb compact label="Loading services…" /> : null}
         {servicesError ? <p className="text-sm text-destructive">{servicesError}</p> : null}
         <div className={isPageLayout ? "[&_.grid]:md:grid-cols-2 [&_.grid]:2xl:grid-cols-3" : ""}>
           <ServiceCatalogSelector

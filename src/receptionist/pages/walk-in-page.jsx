@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function ReceptionWalkInPage() {
   const navigate = useNavigate();
@@ -19,9 +20,7 @@ export default function ReceptionWalkInPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading walk-in booking…</p>
-      </div>
+      <LoadingOrb fullScreen label="Loading walk-in booking…" />
     );
   }
 

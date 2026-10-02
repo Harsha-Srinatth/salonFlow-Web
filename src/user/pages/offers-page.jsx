@@ -14,6 +14,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function UserOffersPage() {
   const { appUser, loading, logout } = useAuth();
@@ -35,12 +36,7 @@ export default function UserOffersPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Offers">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading offers...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading offers…" className="h-96" />
       </UserLayout>
     );
   }
@@ -88,12 +84,7 @@ export default function UserOffersPage() {
 
         {/* Offers Panel or Empty State */}
         {offersLoading ? (
-          <Card>
-            <CardContent className="pt-12 pb-12 text-center">
-              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse mb-4" />
-              <p className="text-muted-foreground">Loading offers...</p>
-            </CardContent>
-          </Card>
+          <LoadingOrb label="Loading offers…" />
         ) : !offers || offers.length === 0 ? (
           <Card className="border-dashed border-2">
             <CardContent className="pt-16 pb-16 text-center">

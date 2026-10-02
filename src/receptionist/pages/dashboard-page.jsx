@@ -16,6 +16,7 @@ import { LogOut } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function ReceptionDashboardPage() {
   const navigate = useNavigate();
@@ -43,12 +44,7 @@ export default function ReceptionDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto size-10 animate-pulse rounded-full bg-muted" />
-          <p className="text-sm text-muted-foreground">Loading command center…</p>
-        </div>
-      </div>
+      <LoadingOrb fullScreen label="Loading command center…" />
     );
   }
 

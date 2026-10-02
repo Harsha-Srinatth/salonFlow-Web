@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatBookingDateTime, formatCurrency } from "@/receptionist/lib/booking-utils";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const money = (value) => Math.round(Number(value ?? 0) * 100) / 100;
 
@@ -96,7 +97,7 @@ export function CancelBookingDialog({ bookingId, open, onOpenChange, loadPreview
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? <div className="h-32 animate-pulse rounded-lg bg-muted/50" /> : null}
+        {loading ? <LoadingOrb compact /> : null}
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {preview && preview.canCancel === false ? <p className="text-sm text-destructive">{preview.reason}</p> : null}
 

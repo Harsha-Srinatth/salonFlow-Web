@@ -24,6 +24,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 async function authGet(path) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -257,12 +258,7 @@ export default function UserLoyaltyPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Refer & Earn">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading…" className="h-96" />
       </UserLayout>
     );
   }
@@ -281,12 +277,7 @@ export default function UserLoyaltyPage() {
   return (
     <UserLayout pageTitle="Refer & Earn">
       {pageLoading ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading your rewards...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading your rewards…" className="h-96" />
       ) : (
         <div className="space-y-6 max-w-4xl">
           {/* Hero: wallet balance + referral link */}

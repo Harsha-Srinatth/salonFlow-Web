@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Loader, Phone, ShieldCheck } from "lucide-react"
+import { Phone, ShieldCheck } from "lucide-react"
 import { toast } from "sonner"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { isValidE164Phone, toE164Phone } from "@/auth/lib/phone"
@@ -13,6 +13,7 @@ import {
 } from "@/lib/otp-throttle"
 import { confirmStaffFirebasePhoneOtp, sendStaffFirebasePhoneOtp } from "@/lib/auth/auth-client"
 import { verifyStaffPhoneWithFirebaseIdToken } from "@/lib/staff-auth-client"
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 const SETUP_TOKEN_KEY = "staff_setup_token"
 
@@ -133,7 +134,7 @@ export default function StaffVerifyOtpPage() {
           disabled={submitting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {submitting ? <Loader className="size-4 animate-spin" /> : null}
+          {submitting ? <InlineOrb theme="light" /> : null}
           {submitting ? "Please wait…" : smsSent ? "Verify & continue" : "Send SMS code"}
         </button>
 

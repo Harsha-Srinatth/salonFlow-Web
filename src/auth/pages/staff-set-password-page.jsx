@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Eye, EyeOff, KeyRound, Loader } from "lucide-react"
+import { Eye, EyeOff, KeyRound } from "lucide-react"
 import { toast } from "sonner"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { setStaffPassword } from "@/lib/staff-auth-client"
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 const SETUP_TOKEN_KEY = "staff_setup_token"
 
@@ -118,7 +119,7 @@ export default function StaffSetPasswordPage() {
           disabled={submitting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {submitting ? <Loader className="size-4 animate-spin" /> : null}
+          {submitting ? <InlineOrb theme="light" /> : null}
           {submitting ? "Saving…" : "Save password"}
         </button>
       </form>

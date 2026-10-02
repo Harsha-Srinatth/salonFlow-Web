@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 async function fetchMembership() {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -131,12 +132,7 @@ export default function UserMembershipPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Membership">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading membership plans...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading membership plans…" className="h-96" />
       </UserLayout>
     );
   }
@@ -165,12 +161,7 @@ export default function UserMembershipPage() {
       }
     >
       {pageLoading ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading plans...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading plans…" className="h-96" />
       ) : (
         <div className="space-y-10">
           {/* Upgrade Banner */}

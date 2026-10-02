@@ -13,6 +13,7 @@ import { useEffect } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function ReceptionAppointmentsPage() {
   const navigate = useNavigate();
@@ -29,9 +30,7 @@ export default function ReceptionAppointmentsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
+      <LoadingOrb fullScreen label="Loading…" />
     );
   }
 

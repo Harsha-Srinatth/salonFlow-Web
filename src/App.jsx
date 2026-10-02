@@ -7,6 +7,7 @@ import { lazy, Suspense } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Provider } from "react-redux"
 import { store } from "@/store"
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 // Each page is its own chunk: a visitor on the landing page no longer downloads the admin,
 // reception and stylist portals (and a customer never downloads the other three).
@@ -47,8 +48,28 @@ const UserLoyaltyPage = lazy(() => import("@/user/pages/loyalty-page"))
 const UserProfilePage = lazy(() => import("@/user/pages/profile-page"))
 const UserQueuePage = lazy(() => import("@/user/pages/queue-page"))
 
+const lazyLayout = (loader, name) => lazy(() => loader().then((m) => ({ default: m[name] })))
+const AdminLayout = lazyLayout(() => import("@/admin/portal/admin-layout"), "AdminLayout")
+const EmployeeLayout = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeLayout")
+const ReceptionLayout = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionLayout")
+const UserLayout = lazyLayout(() => import("@/user/portal/user-layout"), "UserLayout")
+
+// Shown inside each portal's own shell, so the sidebar/header stay put while a page chunk loads.
+function ContentLoading() {
+  return <LoadingOrb />
+}
+const portalFallback = (Layout) => (
+  <Layout pageTitle="">
+    <ContentLoading />
+  </Layout>
+)
+const adminFallback = portalFallback(AdminLayout)
+const employeeFallback = portalFallback(EmployeeLayout)
+const receptionFallback = portalFallback(ReceptionLayout)
+const userFallback = portalFallback(UserLayout)
+
 function PageFallback() {
-  return <div className="flex min-h-screen items-center justify-center p-6 text-sm text-muted-foreground">Loading…</div>
+  return <LoadingOrb fullScreen />
 }
 
 function App() {
@@ -69,7 +90,7 @@ function App() {
             <Route path="/staff/verify-otp" element={<StaffVerifyOtpPage />} />
             <Route path="/staff/set-password" element={<StaffSetPasswordPage />} />
 
-            <Route element={<RequireRole roles={["ADMIN"]} />}>
+            <Route element={<RequireRole roles={["ADMIN"]} fallback={adminFallback} />}>
               <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
               <Route path="/admin-dashboard/appointments" element={<AdminAppointmentsPage />} />
               <Route path="/admin-dashboard/services" element={<AdminServicesPage />} />
@@ -86,20 +107,20 @@ function App() {
               <Route path="/admin-dashboard/loyalty" element={<AdminLoyaltyPage />} />
             </Route>
 
-            <Route element={<RequireRole roles={["STAFF"]} />}>
+            <Route element={<RequireRole roles={["STAFF"]} fallback={employeeFallback} />}>
               <Route path="/employee-dashboard" element={<EmployeeDashboardPage />} />
               <Route path="/employee-dashboard/appointments" element={<EmployeeAppointmentsPage />} />
               <Route path="/employee-dashboard/profile" element={<EmployeeProfilePage />} />
             </Route>
 
-            <Route element={<RequireRole roles={["RECEPTIONIST"]} />}>
+            <Route element={<RequireRole roles={["RECEPTIONIST"]} fallback={receptionFallback} />}>
               <Route path="/reception-dashboard" element={<ReceptionDashboardPage />} />
               <Route path="/reception-dashboard/walk-in" element={<ReceptionWalkInPage />} />
               <Route path="/reception-dashboard/appointments" element={<ReceptionAppointmentsPage />} />
               <Route path="/reception-dashboard/profile" element={<ReceptionProfilePage />} />
             </Route>
 
-            <Route element={<RequireRole roles={["USER"]} />}>
+            <Route element={<RequireRole roles={["USER"]} fallback={userFallback} />}>
               <Route path="/user-dashboard" element={<UserDashboardPage />} />
               <Route path="/user-dashboard/appointments" element={<UserAppointmentsPage />} />
               <Route path="/user-dashboard/queue" element={<UserQueuePage />} />

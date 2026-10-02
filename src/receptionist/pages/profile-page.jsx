@@ -8,6 +8,7 @@ import { staffLogout } from "@/lib/staff-auth-client";
 import { motion } from "framer-motion";
 import { LogOut, Mail, Shield, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function ReceptionProfilePage() {
   const navigate = useNavigate();
@@ -15,9 +16,7 @@ export default function ReceptionProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-sm text-muted-foreground">Loading profile…</p>
-      </div>
+      <LoadingOrb fullScreen label="Loading profile…" />
     );
   }
 

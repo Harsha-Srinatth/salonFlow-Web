@@ -49,6 +49,7 @@ import {
   isStartedPendingAutoComplete,
   normalizeBookingStatus,
 } from "@/lib/booking-pending-status";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 async function feedbackAuthFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -266,12 +267,7 @@ export default function UserBookingHistoryPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Booking History">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading…" className="h-96" />
       </UserLayout>
     );
   }
@@ -507,7 +503,7 @@ export default function UserBookingHistoryPage() {
           </DialogHeader>
 
           {cancellationPreviewLoading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Loading details...</p>
+            <LoadingOrb compact label="Loading details…" />
           ) : (
             <div className="space-y-4">
               {previewBooking && (

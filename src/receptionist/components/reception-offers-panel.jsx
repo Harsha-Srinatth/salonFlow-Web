@@ -5,6 +5,7 @@ import { CustomerOffersPanel } from "@/components/offers/customer-offers-panel";
 import { membershipSegmentBadgeClass, membershipSegmentLabel } from "@/lib/offers/offer-pricing";
 import { cn } from "@/lib/utils";
 import { Crown } from "lucide-react";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export function ReceptionOffersPanel({
   offers,
@@ -19,7 +20,7 @@ export function ReceptionOffersPanel({
   const planLabel = membershipPlanName ?? membershipSegmentLabel(segment);
 
   if (loading && !offers) {
-    return <div className="h-32 animate-pulse rounded-2xl bg-muted/40" />;
+    return <LoadingOrb compact />;
   }
 
   return (

@@ -30,6 +30,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 /** Fallback poll cadence used only while the websocket is down. */
 const OFFLINE_POLL_MS = 30000;
@@ -261,16 +262,7 @@ export default function UserQueuePage() {
           </div>
         ) : null}
 
-        {isFirstLoad ? (
-          <div className="space-y-4">
-            <div className="h-48 animate-pulse rounded-2xl bg-muted/50" />
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {[1, 2, 3, 4].map((item) => (
-                <div key={item} className="h-24 animate-pulse rounded-2xl bg-muted/50" />
-              ))}
-            </div>
-          </div>
-        ) : null}
+        {isFirstLoad ? <LoadingOrb label="Loading the queue…" /> : null}
 
         {!isFirstLoad && activeEntry ? (
           <MyTicketCard entry={activeEntry} confidence={summary?.confidence} />

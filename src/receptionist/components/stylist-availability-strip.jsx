@@ -5,6 +5,7 @@ import { computeStylistAvailability } from "@/receptionist/lib/booking-utils";
 import { motion } from "framer-motion";
 import { Clock3, Scissors, User } from "lucide-react";
 import { useMemo } from "react";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const statusStyles = {
   available: {
@@ -34,13 +35,7 @@ export function StylistAvailabilityStrip({ stylists = [], queue = [], loading })
   );
 
   if (loading && !availability.length) {
-    return (
-      <div className="flex gap-3 overflow-x-auto pb-1">
-        {[1, 2, 3, 4].map((item) => (
-          <div key={item} className="h-24 w-44 shrink-0 animate-pulse rounded-xl bg-muted/50" />
-        ))}
-      </div>
-    );
+    return <LoadingOrb compact />;
   }
 
   if (!availability.length) {

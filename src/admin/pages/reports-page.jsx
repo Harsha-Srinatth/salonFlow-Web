@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const reportIconMap = {
     DollarSign,
@@ -222,7 +223,6 @@ export default function AdminReportsPage() {
                 <RotateCw className="size-3.5" />
                 Reset filters
               </Button>
-              {reportsLoading ? <p className="text-xs text-muted-foreground">Loading...</p> : null}
             </div>
           </CardContent>
         </Card>

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { UserLayout } from "../portal/user-layout";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function UserDashboardPage() {
   const { appUser, loading, logout } = useAuth();
@@ -22,12 +23,7 @@ export default function UserDashboardPage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Dashboard">
-        <div className="flex items-center justify-center h-96">
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted animate-pulse" />
-            <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
-          </div>
-        </div>
+        <LoadingOrb label="Loading your dashboard…" className="h-96" />
       </UserLayout>
     );
   }

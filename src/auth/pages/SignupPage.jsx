@@ -10,11 +10,9 @@ import {
   Eye,
   EyeOff,
   Gift,
-  Loader,
   Lock,
   Mail,
   Phone,
-  RefreshCw,
   Sparkles,
   User,
 } from "lucide-react"
@@ -52,6 +50,7 @@ import {
   startEmailSignup,
   verifySignupPhoneOtp,
 } from "@/lib/auth/auth-client"
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 const genderOptions = ["Male", "Female", "Other"]
 
@@ -560,7 +559,7 @@ export default function SignupPage() {
             <VerificationRow icon={Mail} label="Email address" target={describeEmail(email)} verified={emailVerified}>
               <div className="space-y-3">
                 <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
-                  <RefreshCw className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                  <InlineOrb />
                   <p className="text-xs text-muted-foreground">
                     Open the link we sent — this page updates by itself, no need to come back and click anything.
                   </p>
@@ -578,7 +577,7 @@ export default function SignupPage() {
 
             {creatingAccount ? (
               <div className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-foreground">
-                <Loader className="size-4 animate-spin text-primary" />
+                <InlineOrb />
                 Creating your account…
               </div>
             ) : (
@@ -770,7 +769,7 @@ export default function SignupPage() {
               disabled={submitting || !detailsComplete}
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? <Loader className="size-4 animate-spin" /> : null}
+              {submitting ? <InlineOrb theme="light" /> : null}
               {submitting ? "Sending your codes..." : "Continue"}
             </button>
 

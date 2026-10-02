@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { Eye, EyeOff, Loader, Lock } from "lucide-react"
+import { Eye, EyeOff, Lock } from "lucide-react"
 import { toast } from "sonner"
 import { verifyPasswordResetCode } from "firebase/auth"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { completeDbPasswordReset } from "@/lib/auth/auth-client"
 import { firebaseAuth } from "@/lib/firebase/client"
+import { InlineOrb } from "@/components/shared/loading-orb"
 
 export default function AuthResetPasswordPage() {
   const navigate = useNavigate()
@@ -179,7 +180,7 @@ export default function AuthResetPasswordPage() {
           disabled={submitting}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {submitting ? <Loader className="size-4 animate-spin" /> : null}
+          {submitting ? <InlineOrb theme="light" /> : null}
           {submitting ? "Saving…" : "Update password"}
         </button>
       </form>

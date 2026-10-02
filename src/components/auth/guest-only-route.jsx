@@ -3,6 +3,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { getDashboardPathByRole } from "@/lib/auth/role-routing";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const DASHBOARD_ROLES = new Set(["ADMIN", "USER", "STAFF", "RECEPTIONIST"]);
 
@@ -17,7 +18,7 @@ export function GuestOnlyRoute({ children }) {
     }, [appUser, loading, navigate]);
 
     if (loading) {
-        return <div className="flex min-h-screen items-center justify-center p-6 text-sm text-muted-foreground">Loading…</div>;
+        return <LoadingOrb fullScreen />;
     }
     if (appUser?.role && DASHBOARD_ROLES.has(appUser.role))
         return null;

@@ -17,6 +17,7 @@ import { useCallback, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, Phone, Scissors, User, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 
 function BookingRow({ booking, isDelayed, updating, onCancel }) {
   return (
@@ -151,13 +152,7 @@ export function LiveOpsBoard({ isCriticalDelay }) {
   }
 
   if (queueLoading && !queue.length) {
-    return (
-      <div className="space-y-3">
-        {[1, 2, 3].map((item) => (
-          <div key={item} className="h-24 animate-pulse rounded-xl bg-muted/50" />
-        ))}
-      </div>
-    );
+    return <LoadingOrb compact />;
   }
 
   return (
