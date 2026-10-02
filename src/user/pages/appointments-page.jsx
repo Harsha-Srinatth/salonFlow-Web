@@ -14,8 +14,17 @@ import {
 import { ServiceCatalogSelector } from "@/components/services/service-catalog-selector";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
+import { authedRequest } from "@/lib/payments-api";
+import {
+  clearPendingPayment,
+  isTerminalState,
+  pollPaymentStatus,
+  readPendingPayment,
+  runRazorpayPayment,
+} from "@/lib/razorpay-checkout";
 import {
   createCustomerBookingAsync,
+  fetchCustomerBookings,
   fetchCustomerOffers,
   fetchCustomerSlots,
   fetchCustomerServices,
@@ -36,7 +45,7 @@ import {
   User,
   Wallet,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -83,6 +92,12 @@ export default function UserAppointmentsPage() {
   const [firstBookingDiscountPercent, setFirstBookingDiscountPercent] = useState(0);
   const [unclaimedVouchers, setUnclaimedVouchers] = useState(new Map());
   const [useVoucher, setUseVoucher] = useState(true);
+  // Payment lifecycle is tracked separately from the booking: nothing says "confirmed" until
+  // the backend reports CONFIRMED for the payment.
+  const [payPhase, setPayPhase] = useState("idle"); // idle | starting | loading_checkout | checkout | verifying
+  const [payStatus, setPayStatus] = useState(null); // last payment DTO from the backend
+  const payingRef = useRef(false); // synchronous guard: state updates are too late for double clicks
+  const pollingRef = useRef(false);
 
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const tomorrowIso = useMemo(() => {
@@ -170,7 +185,53 @@ export default function UserAppointmentsPage() {
   const walletRedeemAmount = useWalletCredit ? Math.min(walletBalance, afterVoucherDiscount) : 0;
   const finalPayableAmount = Math.max(0, afterVoucherDiscount - walletRedeemAmount);
 
+  function refreshAfterBooking() {
+    dispatch(resetCustomerBookingForm());
+    setUseWalletCredit(false);
+    void dispatch(fetchCustomerBookings());
+    void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
+    void fetchLoyaltySnapshot().then((snapshot) => {
+      setWalletBalance(snapshot.walletBalance);
+      setIsFirstTimeCustomer(snapshot.isFirstTimeCustomer);
+      setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
+    });
+  }
+
+  function applyPaymentResult(status) {
+    setPayStatus(status);
+    if (!status) return;
+    if (status.state === "CONFIRMED") {
+      clearPendingPayment();
+      toast.success("Payment received — booking confirmed");
+      refreshAfterBooking();
+    } else if (isTerminalState(status.state)) {
+      clearPendingPayment();
+      if (status.state === "FAILED") toast.error(status.message ?? "Payment failed");
+      else toast.message(status.message ?? "Payment not completed");
+    }
+  }
+
+  async function watchPayment(orderId) {
+    if (pollingRef.current) return;
+    pollingRef.current = true;
+    try {
+      const result = await pollPaymentStatus(authedRequest, orderId, {
+        onUpdate: (status) => setPayStatus(status),
+        shouldStop: () => !pollingRef.current,
+      });
+      applyPaymentResult(result);
+    } catch {
+      clearPendingPayment();
+      setPayStatus(null);
+    } finally {
+      pollingRef.current = false;
+    }
+  }
+
   async function createBooking() {
+    if (payingRef.current) return;
+    payingRef.current = true;
+    setPayStatus(null);
     const payload = {
       serviceIds: bookingForm.serviceIds,
       bookingDate: effectiveBookingDate,
@@ -180,34 +241,42 @@ export default function UserAppointmentsPage() {
       useWalletCredit: useWalletCredit && walletRedeemAmount > 0,
       redeemRewardServiceId: voucherDiscountAmount > 0 ? voucherServiceId : undefined,
     };
-    const closeNow = window.confirm("Payment methods coming soon.\nPress OK to continue booking confirmation.");
-    if (!closeNow) return;
-    const result = await dispatch(createCustomerBookingAsync(payload));
-    if (createCustomerBookingAsync.rejected.match(result)) {
-      toast.error(result.payload?.message ?? "Could not create booking");
-      return;
+    try {
+      const result = await runRazorpayPayment({ request: authedRequest, payload, onPhase: setPayPhase });
+      if (result.outcome === "NO_PAYMENT_REQUIRED") {
+        // Nothing owed (fully covered by credit / voucher): book directly.
+        const booked = await dispatch(createCustomerBookingAsync(payload));
+        if (createCustomerBookingAsync.rejected.match(booked)) {
+          toast.error(booked.payload?.message ?? "Could not create booking");
+          return;
+        }
+        toast.success("Booking Confirmed");
+        refreshAfterBooking();
+        return;
+      }
+      applyPaymentResult(result.status);
+      if (result.status && !isTerminalState(result.status.state) && result.status.orderId) {
+        void watchPayment(result.status.orderId);
+      }
+    } catch (error) {
+      toast.error(error?.message ?? "Could not start the payment");
+    } finally {
+      payingRef.current = false;
+      setPayPhase("idle");
     }
-    const redeemed = Number(result.payload?.walletRedeemAmount ?? 0);
-    const firstTimeSaved = Number(result.payload?.firstBookingDiscountAmount ?? 0);
-    const voucherSaved = Number(result.payload?.voucherDiscountAmount ?? 0);
-    if (voucherSaved > 0) {
-      toast.success(`Booking confirmed — ${voucherServiceName ?? "your free service"} redeemed!`);
-    } else if (firstTimeSaved > 0) {
-      toast.success(`Booking confirmed — ₹${firstTimeSaved} first-booking discount applied!`);
-    } else if (redeemed > 0) {
-      toast.success(`Booking confirmed — ₹${redeemed} wallet credit applied`);
-    } else {
-      toast.success("Booking Confirmed");
-    }
-    dispatch(resetCustomerBookingForm());
-    setUseWalletCredit(false);
-    void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
-    void fetchLoyaltySnapshot().then((snapshot) => {
-      setWalletBalance(snapshot.walletBalance);
-      setIsFirstTimeCustomer(snapshot.isFirstTimeCustomer);
-      setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
-    });
   }
+
+  // Page refresh / returning from a UPI app: resume a payment that had not finished instead of
+  // leaving the customer guessing (and instead of letting them pay a second time).
+  useEffect(() => {
+    if (!appUser || appUser.role !== "USER") return;
+    const pending = readPendingPayment();
+    if (pending?.orderId) void watchPayment(pending.orderId);
+    return () => {
+      pollingRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appUser]);
 
   if (loading) {
     return (
@@ -530,21 +599,68 @@ export default function UserAppointmentsPage() {
               </Card>
             </div>
 
+            {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" && (
+              <div
+                role="status"
+                className={`flex items-start gap-3 rounded-lg border p-3.5 ${
+                  ["FAILED", "EXPIRED", "REFUNDING", "REFUNDED"].includes(payStatus.state)
+                    ? "border-destructive/30 bg-destructive/5"
+                    : "border-border bg-muted/40"
+                }`}
+              >
+                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 text-sm">
+                  <p className="font-semibold">
+                    {payStatus.state === "PENDING" || payStatus.state === "PROCESSING"
+                      ? "Payment processing — booking not confirmed yet"
+                      : payStatus.state === "CANCELLED"
+                        ? "Payment cancelled"
+                        : payStatus.state === "FAILED"
+                          ? "Payment failed"
+                          : payStatus.state === "EXPIRED"
+                            ? "Payment session expired"
+                            : "Payment received, booking not made"}
+                  </p>
+                  <p className="text-muted-foreground mt-1">{payStatus.message}</p>
+                  {(payStatus.state === "PENDING" || payStatus.state === "PROCESSING") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => payStatus.orderId && void watchPayment(payStatus.orderId)}
+                    >
+                      Check status
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Submit Button */}
             <Button
               className="w-full h-12 rounded-lg text-base font-semibold mt-4"
-              disabled={mutating || !allFieldsFilled}
+              disabled={
+                mutating ||
+                payPhase !== "idle" ||
+                payStatus?.state === "PENDING" ||
+                payStatus?.state === "PROCESSING" ||
+                !allFieldsFilled
+              }
               onClick={() => void createBooking()}
             >
-              {mutating ? (
+              {mutating || payPhase !== "idle" ? (
                 <>
                   <span className="animate-spin mr-2">⏳</span>
-                  Confirming...
+                  {payPhase === "verifying"
+                    ? "Verifying payment..."
+                    : payPhase === "checkout"
+                      ? "Complete payment in the window..."
+                      : "Preparing payment..."}
                 </>
               ) : (
                 <>
                   <CheckCircle className="mr-2 w-5 h-5" />
-                  Confirm booking
+                  {finalPayableAmount > 0 ? `Pay ₹${finalPayableAmount.toFixed(2)} & book` : "Confirm booking"}
                 </>
               )}
             </Button>

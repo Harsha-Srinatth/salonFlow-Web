@@ -107,17 +107,31 @@ export const fetchAdminBookings = createAsyncThunk("adminPortal/fetchAdminBookin
 
 export const updateAdminBookingStatus = createAsyncThunk(
   "adminPortal/updateAdminBookingStatus",
-  async ({ bookingId, status }, { rejectWithValue }) => {
+  async ({ bookingId, status, refundPercent }, { rejectWithValue }) => {
     try {
       const res = await apiFetch(toApiUrl(`/api/admin/bookings/${bookingId}/status`), {
         method: "PATCH",
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(refundPercent === undefined ? { status } : { status, refundPercent }),
       });
       const data = await parseApiResponse(res);
       if (!res.ok) return rejectWithValue(data.error ?? "Could not update booking status");
       return data.booking ?? null;
     } catch {
       return rejectWithValue("Could not update booking status");
+    }
+  }
+);
+
+export const fetchAdminCancellationPreviewAsync = createAsyncThunk(
+  "adminPortal/cancellationPreview",
+  async (bookingId, { rejectWithValue }) => {
+    try {
+      const res = await apiFetch(toApiUrl(`/api/admin/bookings/${bookingId}/cancellation-preview`));
+      const data = await parseApiResponse(res);
+      if (!res.ok) return rejectWithValue(data.error ?? "Could not load cancellation details");
+      return data;
+    } catch {
+      return rejectWithValue("Could not load cancellation details");
     }
   }
 );

@@ -142,9 +142,10 @@ export const fetchReceptionQueue = createAsyncThunk("receptionBookings/fetchQueu
 
 export const updateReceptionBookingAsync = createAsyncThunk(
   "receptionBookings/updateBooking",
-  async ({ bookingId, action, startsAt, stylistId }, { rejectWithValue }) => {
+  async ({ bookingId, action, startsAt, stylistId, refundPercent }, { rejectWithValue }) => {
     try {
       const body = { action };
+      if (refundPercent !== undefined) body.refundPercent = refundPercent;
       if (startsAt) body.startsAt = startsAt;
       if (stylistId) body.stylistId = stylistId;
       const res = await apiFetch(toApiUrl(`/api/reception/bookings/${bookingId}`), {
@@ -156,6 +157,20 @@ export const updateReceptionBookingAsync = createAsyncThunk(
       return data.booking ?? null;
     } catch {
       return rejectWithValue("Could not update booking");
+    }
+  }
+);
+
+export const fetchReceptionCancellationPreviewAsync = createAsyncThunk(
+  "receptionBookings/cancellationPreview",
+  async (bookingId, { rejectWithValue }) => {
+    try {
+      const res = await apiFetch(toApiUrl(`/api/reception/bookings/${bookingId}/cancellation-preview`));
+      const data = await parseApiResponse(res);
+      if (!res.ok) return rejectWithValue(data.error ?? "Could not load cancellation details");
+      return data;
+    } catch {
+      return rejectWithValue("Could not load cancellation details");
     }
   }
 );

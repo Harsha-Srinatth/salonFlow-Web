@@ -2,6 +2,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CancelBookingDialog } from "@/components/shared/cancel-booking-dialog";
 import { Input } from "@/components/ui/input";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { EmptyState } from "@/admin/components/empty-state";
@@ -12,12 +13,13 @@ import { useRevealOnReady } from "@/admin/lib/motion";
 import { Calendar, ChevronLeft, ChevronRight, Clock, Mail, Phone, RotateCw, Scissors, User } from "lucide-react";
 import {
     fetchAdminBookings,
+    fetchAdminCancellationPreviewAsync,
     selectAdminAppointments,
     setAppointmentsQuery,
     setAppointmentsStatusFilter,
     updateAdminBookingStatus,
 } from "@/store/admin-portal-slice";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
@@ -70,6 +72,18 @@ export default function AdminAppointmentsPage() {
     const [toDate, setToDate] = useState("");
     const [selectedBooking, setSelectedBooking] = useState(null);
     const [markingNoShow, setMarkingNoShow] = useState(false);
+    const [cancelTargetId, setCancelTargetId] = useState(null);
+    // Same dialog and same backend refund code as the reception desk.
+    const loadCancelPreview = useCallback(async (bookingId) => {
+        const result = await dispatch(fetchAdminCancellationPreviewAsync(bookingId));
+        return fetchAdminCancellationPreviewAsync.rejected.match(result)
+            ? { ok: false, error: result.payload }
+            : { ok: true, data: result.payload };
+    }, [dispatch]);
+    const submitCancel = useCallback(async (bookingId, refundPercent) => {
+        const result = await dispatch(updateAdminBookingStatus({ bookingId, status: "CANCELLED", refundPercent }));
+        return updateAdminBookingStatus.rejected.match(result) ? { ok: false, error: result.payload } : { ok: true };
+    }, [dispatch]);
     const listRef = useRevealOnReady([appointmentsLoading, appointments.length], { selector: ":scope > *" });
 
     async function markNoShow(booking) {
@@ -322,10 +336,36 @@ export default function AdminAppointmentsPage() {
                   >
                     {markingNoShow ? "Marking..." : "Mark client did not visit"}
                   </Button>
+                  <div className="mt-3 border-t border-amber-300/40 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      Cancel this booking and choose how much of the amount paid goes back to the customer.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        const id = selectedBooking.id;
+                        setSelectedBooking(null);
+                        setCancelTargetId(id);
+                      }}
+                    >
+                      Cancel booking &amp; refund
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>) : null}
         </DialogContent>
       </Dialog>
+      <CancelBookingDialog
+        bookingId={cancelTargetId}
+        open={Boolean(cancelTargetId)}
+        onOpenChange={(open) => !open && setCancelTargetId(null)}
+        loadPreview={loadCancelPreview}
+        submitCancel={submitCancel}
+        onCancelled={refetchCurrent}
+      />
     </AdminLayout>);
 }

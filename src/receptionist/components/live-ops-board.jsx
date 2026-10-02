@@ -8,11 +8,15 @@ import {
   formatCurrency,
   groupQueueByStatus,
 } from "@/receptionist/lib/booking-utils";
-import { updateReceptionBookingAsync } from "@/store/reception-bookings-slice";
+import { CancelBookingDialog } from "@/components/shared/cancel-booking-dialog";
+import {
+  fetchReceptionCancellationPreviewAsync,
+  updateReceptionBookingAsync,
+} from "@/store/reception-bookings-slice";
+import { useCallback, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, Phone, Scissors, User, XCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
 
 function BookingRow({ booking, isDelayed, updating, onCancel }) {
   return (
@@ -119,18 +123,31 @@ function QueueSection({ title, emptyLabel, bookings, isCriticalDelay, updatingBo
 }
 
 export function LiveOpsBoard({ isCriticalDelay }) {
-  const dispatch = useDispatch();
   const { queue, queueLoading, updatingBookingId } = useSelector((state) => state.receptionBookings);
   const { upcoming, inService } = groupQueueByStatus(queue);
 
-  async function handleCancel(bookingId) {
-    if (!window.confirm("Cancel this booking? Any eligible refund is recorded automatically.")) return;
-    const result = await dispatch(updateReceptionBookingAsync({ bookingId, action: "cancel" }));
-    if (updateReceptionBookingAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Could not cancel booking");
-      return;
-    }
-    toast.success("Booking cancelled");
+  const dispatch = useDispatch();
+  const [cancelTargetId, setCancelTargetId] = useState(null);
+
+  const loadPreview = useCallback(
+    async (bookingId) => {
+      const result = await dispatch(fetchReceptionCancellationPreviewAsync(bookingId));
+      return fetchReceptionCancellationPreviewAsync.rejected.match(result)
+        ? { ok: false, error: result.payload }
+        : { ok: true, data: result.payload };
+    },
+    [dispatch]
+  );
+  const submitCancel = useCallback(
+    async (bookingId, refundPercent) => {
+      const result = await dispatch(updateReceptionBookingAsync({ bookingId, action: "cancel", refundPercent }));
+      return updateReceptionBookingAsync.rejected.match(result) ? { ok: false, error: result.payload } : { ok: true };
+    },
+    [dispatch]
+  );
+
+  function handleCancel(bookingId) {
+    setCancelTargetId(bookingId);
   }
 
   if (queueLoading && !queue.length) {
@@ -160,6 +177,13 @@ export function LiveOpsBoard({ isCriticalDelay }) {
         isCriticalDelay={isCriticalDelay}
         updatingBookingId={updatingBookingId}
         onCancel={handleCancel}
+      />
+      <CancelBookingDialog
+        bookingId={cancelTargetId}
+        open={Boolean(cancelTargetId)}
+        onOpenChange={(open) => !open && setCancelTargetId(null)}
+        loadPreview={loadPreview}
+        submitCancel={submitCancel}
       />
     </div>
   );
