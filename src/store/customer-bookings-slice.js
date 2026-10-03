@@ -85,6 +85,29 @@ function cacheServices(services) {
   }
 }
 
+// The selected services ("cart") survive a page refresh or a trip to another tab of the portal.
+// sessionStorage, not localStorage: logout clears it, so a shared device never shows the
+// previous customer's picks.
+const CART_KEY = "sahasra.customerCart.v1";
+function uniqueIds(ids) {
+  return Array.from(new Set((Array.isArray(ids) ? ids : []).map((id) => `${id ?? ""}`.trim()).filter(Boolean)));
+}
+function readCart() {
+  try {
+    return uniqueIds(JSON.parse(sessionStorage.getItem(CART_KEY) ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+function writeCart(ids) {
+  try {
+    if (ids.length) sessionStorage.setItem(CART_KEY, JSON.stringify(ids));
+    else sessionStorage.removeItem(CART_KEY);
+  } catch {
+    /* storage can be blocked; the cart then just lasts for this page view */
+  }
+}
+
 export const fetchCustomerBookings = createAsyncThunk("customerBookings/fetchBookings", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/bookings"));
@@ -268,13 +291,16 @@ export const disconnectCustomerRealtime = createAsyncThunk("customerBookings/dis
   return true;
 });
 
+const initialCachedServices = readCachedServices();
+const initialCart = readCart();
+
 const customerBookingsSlice = createSlice({
   name: "customerBookings",
   initialState: {
     bookings: [],
     stylists: [],
     recommendedStylists: [],
-    services: readCachedServices(),
+    services: initialCachedServices,
     servicesLoading: false,
     slotsLoading: false,
     offers: null,
@@ -282,17 +308,12 @@ const customerBookingsSlice = createSlice({
     bookingForm: {
       bookingDate: "",
       startsAt: "",
-      serviceIds: [],
+      serviceIds: initialCart,
       stylistId: "",
       comboId: "",
     },
     slots: [],
-    priceSummary: {
-      totalAmount: 0,
-      discountAmount: 0,
-      payableAmount: 0,
-      offerLabel: null,
-    },
+    priceSummary: computeCustomerPriceSummary({ serviceIds: initialCart, comboId: "", services: initialCachedServices, offers: null }),
     loading: false,
     mutating: false,
     deletingBookingId: null,
@@ -304,9 +325,12 @@ const customerBookingsSlice = createSlice({
   },
   reducers: {
     setCustomerBookingField(state, action) {
-      const { field, value } = action.payload;
+      const { field } = action.payload;
+      // A service can be in the booking once; duplicates (double taps, assistant suggestions) collapse.
+      const value = field === "serviceIds" ? uniqueIds(action.payload.value) : action.payload.value;
       state.bookingForm[field] = value;
       if (field === "serviceIds") {
+        writeCart(value);
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
@@ -333,6 +357,7 @@ const customerBookingsSlice = createSlice({
       }
     },
     resetCustomerBookingForm(state) {
+      writeCart([]);
       state.bookingForm = {
         bookingDate: "",
         startsAt: "",
@@ -352,7 +377,8 @@ const customerBookingsSlice = createSlice({
       const combo = action.payload;
       if (!combo?.id || !Array.isArray(combo.serviceIds)) return;
       state.bookingForm.comboId = combo.id;
-      state.bookingForm.serviceIds = [...combo.serviceIds];
+      state.bookingForm.serviceIds = uniqueIds(combo.serviceIds);
+      writeCart(state.bookingForm.serviceIds);
       state.bookingForm.startsAt = "";
       state.bookingForm.stylistId = "";
       state.slots = [];
@@ -421,6 +447,18 @@ const customerBookingsSlice = createSlice({
         state.servicesLoading = false;
         state.services = action.payload;
         cacheServices(action.payload);
+        // Drop picks that are no longer bookable (deactivated/removed since they were added), so
+        // the cart never holds an id the server will reject at checkout.
+        const available = new Set(action.payload.map((service) => service.id));
+        const kept = state.bookingForm.serviceIds.filter((id) => available.has(id));
+        if (kept.length !== state.bookingForm.serviceIds.length) {
+          state.bookingForm.serviceIds = kept;
+          state.bookingForm.startsAt = "";
+          state.bookingForm.stylistId = "";
+          state.bookingForm.comboId = "";
+          state.slots = [];
+          writeCart(kept);
+        }
         state.priceSummary = computeCustomerPriceSummary({
           serviceIds: state.bookingForm.serviceIds,
           comboId: state.bookingForm.comboId,

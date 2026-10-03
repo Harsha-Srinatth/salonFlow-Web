@@ -1,3 +1,4 @@
+import { GOOGLE_RATING } from "@/lib/public-claims";
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
@@ -216,7 +217,7 @@ export default function LoginPage() {
       sideTitle="Welcome Back"
       sideDescription="Your perfect salon experience awaits. Login to continue booking."
       sideCards={[
-        { icon: Star, text: "4.8/5 Rating", sub: "500+ customers" },
+        { icon: Star, text: GOOGLE_RATING.label, sub: GOOGLE_RATING.sub },
         { icon: CheckCircle, text: "Instant Booking", sub: "In under 60 seconds" },
         { icon: Award, text: "Premium Service", sub: "Expert stylists" },
       ]}
@@ -227,10 +228,8 @@ export default function LoginPage() {
               <Star key={i} className="size-4 fill-primary text-primary" />
             ))}
           </div>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            &ldquo;Best salon experience ever! The booking was smooth and the service was exceptional.&rdquo;
-          </p>
-          <p className="mt-3 text-sm font-semibold text-foreground">— Priya Sharma</p>
+          <p className="mt-3 font-display text-2xl font-bold text-foreground">{GOOGLE_RATING.value} / 5</p>
+          <p className="mt-1 text-sm text-muted-foreground">from {GOOGLE_RATING.reviews} Google reviews</p>
         </div>
       }
     >

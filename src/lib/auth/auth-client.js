@@ -203,7 +203,18 @@ export async function signOutUser() {
     await signOut(firebaseAuth).catch(() => undefined);
     clearBrowserSessionState();
 }
-export async function fetchCurrentAppUser() {
+// Several places ask "who is signed in?" during the same page load (provider start-up and the
+// Firebase auth callback); share one in-flight request instead of sending three.
+let currentUserRequest = null;
+export function fetchCurrentAppUser() {
+    if (!currentUserRequest) {
+        currentUserRequest = loadCurrentAppUser().finally(() => {
+            currentUserRequest = null;
+        });
+    }
+    return currentUserRequest;
+}
+async function loadCurrentAppUser() {
     try {
         const response = await fetch(toApiUrl("/api/auth/me"), { credentials: "include" });
         if (handleUnauthorizedStatus(response.status))

@@ -1,33 +1,38 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
+import { useBusinessInfo } from '@/lib/business-info';
 
-const faqs = [
+type PolicyRule = { when: string; refund: string };
+type BusinessInfo = { profile?: { faq?: { question: string; answer: string }[] }; cancellationPolicy?: PolicyRule[] };
+
+// Each answer describes what the product actually does today. Keep them in sync with the code
+// (booking window, payment flow, cancellation rules) rather than with marketing copy.
+const baseFaqs = [
   {
     q: 'How do I book an appointment?',
-    a: 'Simply tap "Book Appointment", choose your service, select an available time slot, and confirm. You\'ll receive instant confirmation via WhatsApp or SMS.',
+    a: 'Create an account, pick your services, choose a free time today or tomorrow, and pay online to confirm. Your booking then appears under Bookings in the app.',
   },
   {
     q: 'Can I walk in without a booking?',
-    a: 'Yes! Walk-ins are always welcome. Our receptionist will check live availability and assign you to the next available stylist.',
+    a: 'Yes. Our reception team can check live availability and book you into the next free slot.',
   },
   {
-    q: 'What payment methods do you accept?',
-    a: 'We accept cash, UPI, credit/debit cards, and all major digital wallets. Digital receipts are sent automatically after each visit.',
+    q: 'How do I pay?',
+    a: 'Online bookings are paid securely when you book, using the methods shown at checkout (such as UPI and cards). At the salon, reception can also take cash or UPI for walk-ins.',
   },
   {
-    q: 'How does the loyalty program work?',
-    a: 'Every service earns you points. Accumulate enough and redeem them for free services, discounts, or exclusive treatments.',
-  },
-  {
-    q: 'Can I cancel or reschedule my booking?',
-    a: 'Absolutely. You can cancel or reschedule up to 2 hours before your appointment through the app at no charge.',
-  },
-  {
-    q: 'Do you offer packages for families?',
-    a: 'Yes, we have family packages and membership plans that offer great value for regular visitors. Ask our receptionist for details.',
+    q: 'Do you have rewards or memberships?',
+    a: 'Yes. Refer friends to earn wallet credit and reward vouchers, and see Membership in the app for member offers.',
   },
 ];
+
+function cancellationAnswer(rules: PolicyRule[]) {
+  if (!rules.length) return 'You can cancel from Bookings > History in the app. The refund you will receive is shown before you confirm.';
+  return `You can cancel from Bookings > History in the app: ${rules
+    .map((rule) => `${rule.refund.toLowerCase()} if you cancel ${rule.when.charAt(0).toLowerCase()}${rule.when.slice(1)}`)
+    .join('; ')}. The exact amount is shown before you confirm. To change the time, cancel and book again or contact the salon.`;
+}
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -69,6 +74,16 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 }
 
 export default function FAQSection() {
+  const { info: rawInfo } = useBusinessInfo();
+  const info = rawInfo as BusinessInfo | null;
+  // The salon's own FAQ (Admin → Settings) comes first, then the product answers.
+  const ownFaqs = (info?.profile?.faq ?? []).map((item) => ({ q: item.question, a: item.answer }));
+  const faqs = [
+    ...ownFaqs,
+    ...baseFaqs.slice(0, 1),
+    { q: 'Can I cancel my booking?', a: cancellationAnswer(info?.cancellationPolicy ?? []) },
+    ...baseFaqs.slice(1),
+  ].filter((faq, index, all) => all.findIndex((other) => other.q.toLowerCase() === faq.q.toLowerCase()) === index);
   return (
     <section id="faq" className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
       <motion.div

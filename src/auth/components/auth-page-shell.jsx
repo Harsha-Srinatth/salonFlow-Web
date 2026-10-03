@@ -1,7 +1,33 @@
 import { Link } from "react-router-dom"
 import { motion } from "framer-motion"
-import { Moon, Scissors, Sun } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Clock, Gift, Home, Moon, Scissors, Sparkles, Sun } from "lucide-react"
 import { useAppThemeToggle } from "@/components/theme-provider"
+
+const HEADER_TAGLINES = [
+  { icon: Sparkles, text: "Premium salon care for everyone" },
+  { icon: Clock, text: "Book your visit in under a minute" },
+  { icon: Gift, text: "Earn rewards on every visit" },
+]
+
+/** Rotating one-line highlights so the header is never just a logo and a toggle. */
+function HeaderTagline() {
+  const [index, setIndex] = useState(0)
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined
+    const id = window.setInterval(() => setIndex(value => (value + 1) % HEADER_TAGLINES.length), 3200)
+    return () => window.clearInterval(id)
+  }, [])
+  const { icon: Icon, text } = HEADER_TAGLINES[index]
+  return (
+    <div className="hidden h-9 items-center overflow-hidden rounded-full border border-border bg-card/60 px-4 md:flex">
+      <div key={text} className="flex animate-tagline-in items-center gap-2 text-sm font-medium text-foreground">
+        <Icon className="size-4 text-primary" />
+        {text}
+      </div>
+    </div>
+  )
+}
 
 export function AuthPageShell({
   title,
@@ -27,14 +53,24 @@ export function AuthPageShell({
             </div>
             <span className="font-display text-base font-bold tracking-wide text-foreground">Sahasra</span>
           </Link>
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="inline-flex size-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-muted hover:text-foreground"
-            aria-label="Toggle theme"
-          >
-            {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-          </button>
+          <HeaderTagline />
+          <div className="flex items-center gap-2">
+            <Link
+              to="/"
+              className="hidden h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-sm font-medium text-foreground sm:inline-flex"
+            >
+              <Home className="size-4" />
+              Home
+            </Link>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="inline-flex size-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-muted hover:text-foreground"
+              aria-label="Toggle theme"
+            >
+              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
+          </div>
         </div>
       </header>
 

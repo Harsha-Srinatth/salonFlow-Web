@@ -2,7 +2,9 @@
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CustomerServicePicker } from "@/components/services/customer-service-picker";
+import { CustomerServicePicker, iconForCategory } from "@/components/services/customer-service-picker";
+import { ServiceDetailsSheet } from "@/components/services/service-details-sheet";
+import { salonDateIso, salonHour, salonTimeLabel } from "@/lib/salon-date";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { authedRequest } from "@/lib/payments-api";
@@ -26,6 +28,7 @@ import {
   setCustomerRecommendedStylists,
 } from "@/store/customer-bookings-slice";
 import { cn } from "@/lib/utils";
+import { describeCancellationWindows } from "@/lib/cancellation-policy";
 import {
   ArrowLeft,
   ArrowRight,
@@ -48,6 +51,10 @@ import {
   Sparkles,
   Sun,
   Sunset,
+  Ban,
+  BadgePercent,
+  Percent,
+  ShieldCheck,
   Ticket,
   TriangleAlert,
   User,
@@ -56,7 +63,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
 
@@ -94,8 +101,14 @@ const STEPS = [
   { label: "Review", icon: CreditCard },
 ];
 
+const REFUND_META = {
+  FULL: { icon: ShieldCheck, tone: "bg-success/10 text-success" },
+  PARTIAL: { icon: Percent, tone: "bg-warning/20 text-foreground" },
+  NONE: { icon: Ban, tone: "bg-destructive/10 text-destructive" },
+};
+
 const rupees = (value) => `₹${(Math.round(Number(value) * 100) / 100).toLocaleString("en-IN")}`;
-const timeLabel = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const timeLabel = (iso) => salonTimeLabel(iso);
 const dayLabel = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 
 function Stepper({ step, maxStep, onJump }) {
@@ -154,7 +167,7 @@ function SlotGroups({ slots, value, onPick }) {
       { key: "evening", label: "Evening", icon: Moon, items: [] },
     ];
     for (const slot of slots) {
-      const hour = new Date(slot.startsAt).getHours();
+      const hour = salonHour(slot.startsAt);
       buckets[hour < 12 ? 0 : hour < 17 ? 1 : 2].items.push(slot);
     }
     return buckets.filter((bucket) => bucket.items.length);
@@ -258,12 +271,53 @@ export default function UserAppointmentsPage() {
   const snapshotRef = useRef(null);
 
   const isUser = appUser?.role === "USER";
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const tomorrowIso = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+  // Salon-local dates (not UTC), re-checked when the tab comes back so a page left open past
+  // midnight does not keep offering yesterday.
+  const [todayIso, setTodayIso] = useState(() => salonDateIso(0));
+  useEffect(() => {
+    const refresh = () => setTodayIso((current) => (salonDateIso(0) === current ? current : salonDateIso(0)));
+    const timer = setInterval(refresh, 60_000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, []);
+  const tomorrowIso = useMemo(() => salonDateIso(1, new Date(`${todayIso}T12:00:00Z`)), [todayIso]);
+
+  // Service details open from the URL (?service=<id>) so the phone Back button closes them and a
+  // details link can be shared/reloaded. Opening details never touches the booking.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const detailsServiceId = searchParams.get("service");
+  const openServiceDetails = useCallback(
+    (serviceId) => {
+      setSearchParams(
+        (params) => {
+          const next = new URLSearchParams(params);
+          next.set("service", serviceId);
+          return next;
+        },
+        { state: { serviceDetailsFromCatalog: true } }
+      );
+    },
+    [setSearchParams]
+  );
+  const closeServiceDetails = useCallback(() => {
+    if (location.state?.serviceDetailsFromCatalog) {
+      navigate(-1);
+      return;
+    }
+    setSearchParams(
+      (params) => {
+        const next = new URLSearchParams(params);
+        next.delete("service");
+        return next;
+      },
+      { replace: true }
+    );
+  }, [location.state, navigate, setSearchParams]);
 
   const effectiveBookingDate = bookingForm.bookingDate || todayIso;
   const selectedSlot = useMemo(
@@ -280,11 +334,22 @@ export default function UserAppointmentsPage() {
     () => services.filter((service) => bookingForm.serviceIds.includes(service.id)),
     [services, bookingForm.serviceIds]
   );
+  const detailService = useMemo(
+    () => (detailsServiceId ? services.find((service) => service.id === detailsServiceId) ?? null : null),
+    [services, detailsServiceId]
+  );
+
+  // Keep the chosen day valid: an old date (restored cart, page left open overnight) resets to today.
+  useEffect(() => {
+    if (!isUser) return;
+    if (bookingForm.bookingDate !== todayIso && bookingForm.bookingDate !== tomorrowIso) {
+      dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
+    }
+  }, [bookingForm.bookingDate, dispatch, isUser, todayIso, tomorrowIso]);
 
   // Load everything once. (Previously this re-ran on every date change and refetched the catalog.)
   useEffect(() => {
     if (!isUser) return;
-    dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
     void dispatch(fetchCustomerStylists());
     void dispatch(fetchCustomerServices());
     void dispatch(fetchCustomerOffers());
@@ -294,7 +359,7 @@ export default function UserAppointmentsPage() {
       setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
     });
     void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
-  }, [dispatch, isUser, todayIso]);
+  }, [dispatch, isUser]);
 
   useEffect(() => {
     if (error) notify.error(error);
@@ -520,6 +585,8 @@ export default function UserAppointmentsPage() {
     );
   }
 
+  const totalSavings = Number(priceSummary.discountAmount ?? 0) + firstBookingDiscountAmount + voucherDiscountAmount;
+  const cancellation = describeCancellationWindows(bookingForm.startsAt);
   const busy = mutating || payPhase !== "idle" || watching;
   const slotGone = Boolean(bookingForm.startsAt) && !selectedSlot && !slotsLoading;
   const timeReady = Boolean(selectedSlot) && Boolean(selectedStylist);
@@ -596,7 +663,7 @@ export default function UserAppointmentsPage() {
   return (
     <UserLayout pageTitle="Book">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-6 pb-28 lg:pb-0">
+        <div className="min-w-0 space-y-6 pb-40 lg:pb-0">
           <Stepper step={step} maxStep={maxStep} onJump={goTo} />
 
           {bookingForm.comboId ? (
@@ -615,6 +682,7 @@ export default function UserAppointmentsPage() {
                 selectedIds={bookingForm.serviceIds}
                 pricedServices={offers?.pricedServices}
                 onToggle={toggleService}
+                onOpenDetails={openServiceDetails}
               />
             </section>
           ) : null}
@@ -709,15 +777,25 @@ export default function UserAppointmentsPage() {
           {step === 2 ? (
             <section className="space-y-4">
               <div className="space-y-1 rounded-3xl bg-card p-5">
-                {selectedServices.map((service) => (
+              {selectedServices.map((service) => {
+                const original = Number(service.basePrice ?? 0);
+                const final = unitPrice(service);
+                return (
                   <div key={service.id} className="flex items-center justify-between gap-3 py-1.5">
                     <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
                       <Scissors className="size-4 shrink-0 text-primary" />
                       <span className="truncate">{service.name}</span>
+                      <span className="shrink-0 text-xs font-normal text-muted-foreground">{service.duration} min</span>
                     </span>
-                    <span className="text-xs text-muted-foreground">{service.duration} min</span>
+                    <span className="flex shrink-0 items-baseline gap-1.5 text-sm font-semibold">
+                      {final < original ? (
+                        <span className="text-xs font-normal text-muted-foreground line-through">{rupees(original)}</span>
+                      ) : null}
+                      {rupees(final)}
+                    </span>
                   </div>
-                ))}
+                );
+              })}
                 <div className="my-3 h-px bg-border" />
                 <button type="button" onClick={() => goTo(1)} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
                   <CalendarClock className="size-4 shrink-0 text-primary" />
@@ -761,8 +839,15 @@ export default function UserAppointmentsPage() {
                 />
               ) : null}
 
-              <div className="space-y-2.5 rounded-3xl bg-card p-5">
-                <Row label="Subtotal" value={rupees(priceSummary.totalAmount)} />
+            {totalSavings > 0 ? (
+              <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-semibold text-success">
+                <BadgePercent className="size-5 shrink-0" />
+                You save {rupees(totalSavings)} on this booking
+              </div>
+            ) : null}
+
+            <div className="space-y-2.5 rounded-3xl bg-card p-5">
+              <Row label="Subtotal" value={rupees(priceSummary.totalAmount)} />
                 {priceSummary.discountAmount > 0 ? (
                   <Row label={priceSummary.offerLabel ?? "Offer"} value={`-${rupees(priceSummary.discountAmount)}`} tone="good" />
                 ) : null}
@@ -777,7 +862,48 @@ export default function UserAppointmentsPage() {
                 </div>
               </div>
 
-              {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" ? (
+            <div className="space-y-3 rounded-3xl bg-card p-5">
+              <h3 className="flex items-center gap-2 font-display text-base font-semibold">
+                <ShieldCheck className="size-5 text-primary" />
+                Cancellation and refunds
+              </h3>
+              <ul className="space-y-2">
+                {cancellation.tiers.map((tier) => {
+                  const meta = REFUND_META[tier.key];
+                  const Icon = meta.icon;
+                  const isCurrent = tier.key === cancellation.current;
+                  return (
+                    <li
+                      key={tier.key}
+                      className={cn(
+                        "flex items-start gap-3 rounded-2xl p-3",
+                        isCurrent ? meta.tone : "bg-secondary",
+                        !tier.available && "opacity-50"
+                      )}
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-card">
+                        <Icon className="size-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          {tier.title}
+                          {isCurrent ? (
+                            <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-bold uppercase">Applies now</span>
+                          ) : null}
+                        </span>
+                        <span className="block text-xs text-muted-foreground">{tier.when}</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Refunds are based on what you paid. The exact amount is shown before you confirm a cancellation, and you can
+                cancel from History.
+              </p>
+            </div>
+
+            {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" ? (
                 <div
                   role="status"
                   className={cn(
@@ -883,6 +1009,39 @@ export default function UserAppointmentsPage() {
               </div>
             ) : null}
 
+            {totalSavings > 0 || walletRedeemAmount > 0 ? (
+              <div className="space-y-1.5 border-t border-border pt-3 text-sm">
+                <p className="flex justify-between text-muted-foreground">
+                  <span>Subtotal</span>
+                  <span>{rupees(priceSummary.totalAmount)}</span>
+                </p>
+                {totalSavings > 0 ? (
+                  <p className="flex justify-between font-medium text-success">
+                    <span className="flex items-center gap-1.5">
+                      <BadgePercent className="size-4" /> Offers and discounts
+                    </span>
+                    <span>-{rupees(totalSavings)}</span>
+                  </p>
+                ) : null}
+                {walletRedeemAmount > 0 ? (
+                  <p className="flex justify-between font-medium text-success">
+                    <span className="flex items-center gap-1.5">
+                      <Wallet className="size-4" /> Wallet credit
+                    </span>
+                    <span>-{rupees(walletRedeemAmount)}</span>
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {bookingForm.startsAt && cancellation.current !== "NONE" ? (
+              <p className="flex items-start gap-2 rounded-2xl bg-secondary px-3 py-2 text-xs text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                {cancellation.current === "FULL" ? "Full refund" : "50% refund"} if you{" "}
+                {cancellation.tiers.find((tier) => tier.key === cancellation.current)?.when.replace("Cancel before", "cancel before")}
+              </p>
+            ) : null}
+
             <div className="flex items-center justify-between border-t border-border pt-3">
               <span className="text-sm text-muted-foreground">Total</span>
               <span className="font-display text-2xl font-bold text-primary">{rupees(finalPayableAmount)}</span>
@@ -902,6 +1061,23 @@ export default function UserAppointmentsPage() {
       {/* Phone and tablet: compact bar above the bottom tabs */}
       <div className="fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 px-3 lg:hidden">
         <div className="mx-auto max-w-xl space-y-2 rounded-3xl bg-card p-3 shadow-xl shadow-black/10">
+          {step === 0 && selectedServices.length ? (
+            <ul aria-label="Selected services" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
+              {selectedServices.map((service) => (
+                <li key={service.id} className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 py-1 pl-3 pr-1 text-xs font-semibold text-primary">
+                  <span className="max-w-[9rem] truncate">{service.name}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${service.name}`}
+                    onClick={() => toggleService(service.id, false)}
+                    className="grid size-6 place-items-center rounded-full bg-card"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <div className="flex items-center justify-between gap-3 px-1">
             <p className="min-w-0 truncate text-sm text-muted-foreground">
               {blocker ??
@@ -914,6 +1090,16 @@ export default function UserAppointmentsPage() {
           {actions}
         </div>
       </div>
+      <ServiceDetailsSheet
+        open={Boolean(detailsServiceId)}
+        state={detailService ? "ready" : servicesLoading || (!services.length && !error) ? "loading" : "missing"}
+        service={detailService}
+        selected={detailService ? bookingForm.serviceIds.includes(detailService.id) : false}
+        priced={detailService ? (offers?.pricedServices ?? []).find((item) => item.serviceId === detailService.id) : null}
+        fallbackIcon={detailService ? iconForCategory(detailService.category ?? "") : undefined}
+        onToggle={toggleService}
+        onClose={closeServiceDetails}
+      />
     </UserLayout>
   );
 }

@@ -1,3 +1,4 @@
+import { GOOGLE_RATING } from '@/lib/public-claims';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Calendar, Star, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
@@ -8,7 +9,7 @@ const floatingCard = {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { delay, duration: 0.5, ease: 'easeOut' },
+    transition: { delay, duration: 0.5, ease: 'easeOut' as const },
   }),
 };
 
@@ -17,7 +18,7 @@ const fadeUp = {
   visible: (delay = 0) => ({
     opacity: 1,
     y: 0,
-    transition: { delay, duration: 0.7, ease: [0.22, 1, 0.36, 1] },
+    transition: { delay, duration: 0.7, ease: [0.22, 1, 0.36, 1] as const },
   }),
 };
 
@@ -100,7 +101,7 @@ export default function HeroSection() {
             className="mt-8 flex flex-wrap items-center gap-5"
           >
             {[
-              { icon: Star, text: '4.8/5 Rating', sub: '500+ reviews' },
+              { icon: Star, text: GOOGLE_RATING.label, sub: GOOGLE_RATING.sub },
               { icon: CheckCircle, text: 'Certified Stylists', sub: 'Expert team' },
               { icon: Calendar, text: 'Easy Booking', sub: 'In 60 seconds' },
             ].map(({ icon: Icon, text, sub }) => (
@@ -120,7 +121,7 @@ export default function HeroSection() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] as const }}
             className="relative mx-auto aspect-[4/5] w-full max-w-sm overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-secondary to-muted shadow-2xl"
           >
             <img
@@ -164,7 +165,7 @@ export default function HeroSection() {
                   <Star key={i} className="size-3 fill-accent text-accent" />
                 ))}
               </div>
-              <span className="text-xs font-semibold text-foreground">500+ Happy Clients</span>
+              <span className="text-xs font-semibold text-foreground">{GOOGLE_RATING.label} · {GOOGLE_RATING.sub}</span>
             </div>
           </motion.div>
         </div>

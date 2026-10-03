@@ -1,0 +1,1 @@
+import{j as o,L as r}from"./index-9y5bbSWK.js";function n({className:t}){return o.jsx(r,{compact:!0,className:t})}function s({className:t}){return o.jsx(r,{compact:!0,className:t})}export{n as S,s as a};

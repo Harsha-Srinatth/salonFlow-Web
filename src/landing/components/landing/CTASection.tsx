@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles } from 'lucide-react';
+import { telHref, useBusinessInfo } from '@/lib/business-info';
 
 export default function CTASection() {
+  const { info } = useBusinessInfo();
+  const phone: string = (info as { profile?: { phone?: string } } | null)?.profile?.phone ?? '';
   return (
     <section id="book" className="px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto w-full max-w-7xl">
@@ -38,12 +41,15 @@ export default function CTASection() {
                 Book Appointment
                 <ArrowRight className="size-4" />
               </Link>
-              <a
-                href="tel:+919000000000"
-                className="inline-flex items-center justify-center rounded-xl border border-white/30 px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-white/10"
-              >
-                Call Us Now
-              </a>
+              {/* Only when the salon has published a number (Admin → Settings); never a placeholder. */}
+              {phone ? (
+                <a
+                  href={telHref(phone)}
+                  className="inline-flex items-center justify-center rounded-xl border border-white/30 px-7 py-3.5 text-sm font-semibold text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-white/10"
+                >
+                  Call Us Now
+                </a>
+              ) : null}
             </div>
           </div>
         </motion.div>

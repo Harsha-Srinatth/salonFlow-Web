@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { salonDateIso, salonTimeLabel } from "@/lib/salon-date";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -58,12 +59,9 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
     void dispatch(fetchReceptionOffers(membershipSegment));
   }, [dispatch, membershipSegment]);
 
-  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const tomorrowIso = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
-  }, []);
+  // Salon-local dates: the UTC date is still "yesterday" in India until 05:30.
+  const todayIso = salonDateIso(0);
+  const tomorrowIso = salonDateIso(1);
   const effectiveBookingDate = bookingForm.bookingDate || todayIso;
   const selectedSlot = useMemo(
     () => slots.find((slot) => slot.startsAt === bookingForm.startsAt) ?? null,
@@ -358,7 +356,7 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
           <SelectContent>
             {slots.map((slot) => (
               <SelectItem key={slot.startsAt} value={slot.startsAt}>
-                {new Date(slot.startsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                {salonTimeLabel(slot.startsAt)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -323,3 +323,23 @@
     z-index: 0;
   }
 }
+
+/* Auth header: each rotating tagline slides in. Driven by CSS so it never waits on JS animation frames. */
+@keyframes tagline-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@utility animate-tagline-in {
+  animation: tagline-in 0.4s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-tagline-in {
+    animation: none;
+  }
+}

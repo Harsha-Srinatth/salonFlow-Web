@@ -10,6 +10,8 @@ import {
   Droplets,
   Flower2,
   Hand,
+  Images,
+  Info,
   Layers,
   Scissors,
   Search,
@@ -27,7 +29,7 @@ const CATEGORY_ICONS = [
   [/make|bridal/i, Brush],
   [/wax|thread|shave|beard/i, Droplets],
 ];
-const iconForCategory = (category) => CATEGORY_ICONS.find(([re]) => re.test(category))?.[1] ?? Sparkles;
+export const iconForCategory = (category) => CATEGORY_ICONS.find(([re]) => re.test(category))?.[1] ?? Sparkles;
 
 const GENDERS = [
   { value: "ALL", label: "All" },
@@ -57,70 +59,94 @@ function Chip({ active, onClick, icon: Icon, children }) {
   );
 }
 
-const ServiceCard = memo(function ServiceCard({ service, selected, priced, onToggle }) {
+const ServiceCard = memo(function ServiceCard({ service, selected, priced, onToggle, onOpenDetails }) {
   const Icon = iconForCategory(service.category ?? "");
   const original = Number(priced?.originalPrice ?? service.basePrice ?? 0);
   const final = Number(priced?.finalPrice ?? service.basePrice ?? 0);
   const percent = Number(priced?.appliedPercent) > 0 ? Number(priced.appliedPercent) : 0;
   const hasOffer = final < original;
+  const photoCount = Array.isArray(service.images) ? service.images.length : service.image ? 1 : 0;
   return (
-    <button
-      type="button"
-      aria-pressed={selected}
-      onClick={() => onToggle(service.id, !selected)}
+    <div
       className={cn(
-        "relative flex w-full gap-3 rounded-2xl p-3 text-left [contain-intrinsic-size:auto_112px] [content-visibility:auto]",
+        "relative flex w-full items-stretch rounded-2xl [contain-intrinsic-size:auto_112px] [content-visibility:auto]",
         selected ? "bg-primary/10 ring-2 ring-primary" : "bg-card ring-2 ring-transparent"
       )}
     >
-      <span className="grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-primary">
-        {service.image ? (
-          <img
-            src={serviceImageUrl(service.image)}
-            alt=""
-            width={96}
-            height={96}
-            loading="lazy"
-            decoding="async"
-            className="size-full object-cover"
-          />
-        ) : (
-          <Icon className="size-8" />
-        )}
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col justify-between py-0.5 pr-7">
-        <span>
-          <span className="block truncate text-[15px] font-semibold">{service.name}</span>
-          {service.description ? (
-            <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">{service.description}</span>
+      {/* Opens the details only. Adding to the booking is the separate control on the right. */}
+      <button
+        type="button"
+        onClick={() => onOpenDetails(service.id)}
+        aria-label={`${service.name}: view details`}
+        className="flex min-w-0 flex-1 gap-3 rounded-2xl p-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <span className="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-primary">
+          {service.image ? (
+            <img
+              src={serviceImageUrl(service.image)}
+              alt=""
+              width={96}
+              height={96}
+              loading="lazy"
+              decoding="async"
+              className="size-full object-cover"
+            />
+          ) : (
+            <Icon className="size-8" />
+          )}
+          {photoCount > 1 ? (
+            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+              <Images className="size-3" /> {photoCount}
+            </span>
           ) : null}
         </span>
-        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Clock className="size-3.5" />
-            {service.duration} min
+        <span className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+          <span>
+            <span className="block truncate text-[15px] font-semibold">{service.name}</span>
+            {service.description ? (
+              <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">{service.description}</span>
+            ) : null}
           </span>
-          <span className="flex items-baseline gap-1.5">
-            <span className="text-base font-bold text-primary">{rupees(final)}</span>
-            {hasOffer ? <span className="text-xs text-muted-foreground line-through">{rupees(original)}</span> : null}
-            {hasOffer && percent ? <span className="text-xs font-semibold text-success">{percent.toFixed(0)}% off</span> : null}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="size-3.5" />
+              {service.duration} min
+            </span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-base font-bold text-primary">{rupees(final)}</span>
+              {hasOffer ? <span className="text-xs text-muted-foreground line-through">{rupees(original)}</span> : null}
+              {hasOffer && percent ? <span className="text-xs font-semibold text-success">{percent.toFixed(0)}% off</span> : null}
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-xs font-medium text-primary">
+            <Info className="size-3.5" /> Details
           </span>
         </span>
-      </span>
-      <span
-        className={cn(
-          "absolute right-3 top-3 grid size-6 place-items-center rounded-full",
-          selected ? "bg-primary text-primary-foreground" : "bg-muted text-transparent"
-        )}
+      </button>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label={selected ? `Remove ${service.name} from booking` : `Add ${service.name} to booking`}
+        onClick={() => onToggle(service.id, !selected)}
+        className="flex w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-r-2xl border-l border-border/60 text-[11px] font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
-        <Check className="size-4" />
-      </span>
-    </button>
+        <span
+          className={cn(
+            "grid size-7 place-items-center rounded-lg border-2 transition-colors",
+            selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-card text-transparent"
+          )}
+        >
+          <Check className="size-4" strokeWidth={3} />
+        </span>
+        <span className={selected ? "text-primary" : "text-muted-foreground"}>{selected ? "Added" : "Add"}</span>
+      </button>
+    </div>
   );
 });
 
 /** Customer-facing service chooser: image cards, icon chips, instant search. */
-export function CustomerServicePicker({ services, loading, selectedIds, pricedServices, onToggle }) {
+export function CustomerServicePicker({ services, loading, selectedIds, pricedServices, onToggle, onOpenDetails }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [gender, setGender] = useState("ALL");
@@ -214,6 +240,7 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
               selected={selected.has(service.id)}
               priced={pricedById.get(service.id)}
               onToggle={onToggle}
+              onOpenDetails={onOpenDetails}
             />
           ))}
         </div>

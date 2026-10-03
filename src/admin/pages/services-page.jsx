@@ -7,6 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
 import { StatusPill } from "@/admin/components/status-pill";
+import { ServiceDetailsEditor } from "@/admin/components/service-details-editor";
+import { apiJson } from "@/lib/api-json";
 import { useRevealOnReady } from "@/admin/lib/motion";
 import {
     connectAdminRealtime,
@@ -30,6 +32,10 @@ export default function AdminServicesPage() {
     const { services, serviceDraft, appointmentsMutating, appointmentsError, realtimeConnected } = useSelector((state) => state.adminPortal);
     const [searchText, setSearchText] = useState("");
     const [activeCategory, setActiveCategory] = useState("ALL");
+    const [aiAvailable, setAiAvailable] = useState(false);
+    useEffect(() => {
+        apiJson("/api/admin/agents", { auth: true }).then((data) => setAiAvailable(Boolean(data.llmConfigured))).catch(() => setAiAvailable(false));
+    }, []);
     const gridRef = useRevealOnReady([services.length, activeCategory, searchText], { selector: ":scope > *" });
 
     const categoryCounts = useMemo(() => {
@@ -337,6 +343,7 @@ export default function AdminServicesPage() {
                   <Button type="button" variant="outline" className="flex-1 sm:flex-none" disabled={appointmentsMutating} onClick={() => void saveService({ ...service, isActive: !service.isActive })}>
                     {service.isActive ? "Deactivate" : "Activate"}
                   </Button>
+                  <ServiceDetailsEditor service={service} aiAvailable={aiAvailable} />
                 </div>
                 </div>))}
             </div>

@@ -13,6 +13,8 @@ import {
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAppThemeToggle } from "@/components/theme-provider";
 import { NotificationBell } from "@/components/shared/notification-bell";
+import { SupportAssistant } from "@/components/assistant/support-assistant";
+import { useMediaQuery } from "@/lib/use-media-query";
 import { ProfileCompletionPrompts } from "@/components/shared/profile-completion-prompts";
 import { cn } from "@/lib/utils";
 import { usePortalClass } from "@/lib/use-portal-class";
@@ -107,7 +109,7 @@ function UserMenu({ appUser, logout, theme, toggleTheme }) {
 }
 
 /** Laptop: a floating pill dock instead of a sidebar + header bar. */
-function Dock({ activeHref, appUser, logout, theme, toggleTheme }) {
+function Dock({ activeHref, appUser, logout, theme, toggleTheme, showAssistant }) {
   return (
     <header className="sticky top-4 z-40 mx-auto hidden w-full max-w-7xl px-8 lg:block">
       <div className="flex items-center gap-2 rounded-full bg-card p-2 pl-3 shadow-lg shadow-black/5">
@@ -133,6 +135,7 @@ function Dock({ activeHref, appUser, logout, theme, toggleTheme }) {
             );
           })}
         </nav>
+        {showAssistant ? <SupportAssistant variant="portal" isCustomer={appUser?.role === "USER"} /> : null}
         <NotificationBell portal="customer" />
         <UserMenu appUser={appUser} logout={logout} theme={theme} toggleTheme={toggleTheme} />
       </div>
@@ -242,6 +245,8 @@ export function UserLayout({ pageTitle, actions, children, width }) {
   const { appUser, logout } = useAuth();
   const { theme, toggleTheme } = useAppThemeToggle();
   const activeHref = useActiveHref(pathname);
+  // One assistant instance at a time (phone header or laptop dock), so its chat state isn't split.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const menu = { appUser, logout, theme, toggleTheme };
 
   return (
@@ -250,12 +255,13 @@ export function UserLayout({ pageTitle, actions, children, width }) {
       <div className="sticky top-0 z-40 flex h-14 items-center justify-between bg-background px-4 lg:hidden">
         <Logo />
         <div className="flex items-center gap-2">
+          {!isDesktop ? <SupportAssistant variant="portal" isCustomer={appUser?.role === "USER"} /> : null}
           <NotificationBell portal="customer" />
           <UserMenu {...menu} />
         </div>
       </div>
 
-      <Dock activeHref={activeHref} {...menu} />
+      <Dock activeHref={activeHref} {...menu} showAssistant={isDesktop} />
 
       <main className="mx-auto w-full max-w-7xl px-4 pb-32 pt-2 sm:px-6 lg:px-8 lg:pb-16 lg:pt-8">
         <div className={cn("mx-auto w-full", WIDTHS[width])}>
