@@ -29,19 +29,21 @@ import { firebaseAuth } from "@/lib/firebase/client";
 const CONTAINER_ID = "sahasra-recaptcha-host";
 
 let activeVerifier = null;
+let activeHost = null;
 
 /**
- * Returns this module's host element, creating it on first use.
+ * Creates a brand-new host element for one send.
+ * A fresh node per send is what prevents "reCAPTCHA has already been rendered in
+ * this element": two overlapping sends (auto-send plus a tap, a re-render) can no
+ * longer render into the same node.
  * Zero-sized and fixed rather than `display: none` — reCAPTCHA refuses to run in
  * a container it considers hidden, but it does not mind one that is merely empty.
  *
  * @returns {HTMLElement}
  */
-function getRecaptchaHost() {
-  let host = document.getElementById(CONTAINER_ID);
-  if (host) return host;
-  host = document.createElement("div");
-  host.id = CONTAINER_ID;
+function createRecaptchaHost() {
+  const host = document.createElement("div");
+  host.id = `${CONTAINER_ID}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   host.style.position = "fixed";
   host.style.bottom = "0";
   host.style.right = "0";
@@ -70,8 +72,11 @@ export function destroyRecaptcha() {
     }
     activeVerifier = null;
   }
-  const host = document.getElementById(CONTAINER_ID);
-  if (host) host.innerHTML = "";
+  if (activeHost) {
+    activeHost.remove();
+    activeHost = null;
+  }
+  document.querySelectorAll(`[id^="${CONTAINER_ID}"]`).forEach(node => node.remove());
 }
 
 /**
@@ -88,7 +93,9 @@ export function destroyRecaptcha() {
  */
 export async function withFreshRecaptcha(send) {
   destroyRecaptcha();
-  const verifier = new RecaptchaVerifier(firebaseAuth, getRecaptchaHost(), { size: "invisible" });
+  const host = createRecaptchaHost();
+  activeHost = host;
+  const verifier = new RecaptchaVerifier(firebaseAuth, host, { size: "invisible" });
   activeVerifier = verifier;
   try {
     await verifier.render();

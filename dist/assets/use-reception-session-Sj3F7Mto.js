@@ -1,1 +1,0 @@
-import{h as c,r as t,_ as i}from"./index-BJ3w2ZxS.js";function l(){const s=c(),[r,n]=t.useState(!0),[u,o]=t.useState(null);return t.useEffect(()=>{let a=!1;return(async()=>{const e=await i();if(!a){if(n(!1),!e||e.role!=="RECEPTIONIST"){s("/auth/login",{replace:!0});return}o(e)}})(),()=>{a=!0}},[s]),{loading:r,user:u}}export{l as u};
