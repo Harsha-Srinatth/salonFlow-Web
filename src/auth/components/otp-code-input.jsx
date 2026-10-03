@@ -70,7 +70,7 @@ export function OtpCodeInput({ value, onChange, onComplete, disabled = false, in
           return (
             <div
               key={index}
-              className={`flex h-14 flex-1 items-center justify-center rounded-xl border bg-card font-mono text-xl font-semibold text-foreground transition-all ${
+              className={`flex h-14 flex-1 items-center justify-center rounded-xl border bg-card font-sans tabular-nums text-xl font-semibold text-foreground transition-all ${
                 invalid
                   ? "border-destructive"
                   : isActive

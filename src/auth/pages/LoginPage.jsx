@@ -379,7 +379,7 @@ export default function LoginPage() {
                   onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   placeholder="000000"
                   maxLength={6}
-                  className="w-full rounded-xl border border-border bg-card px-4 py-3 text-center font-mono text-lg tracking-widest text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  className="w-full rounded-xl border border-border bg-card px-4 py-3 text-center font-sans tabular-nums text-lg tracking-widest text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
                 />
               </div>
               <button

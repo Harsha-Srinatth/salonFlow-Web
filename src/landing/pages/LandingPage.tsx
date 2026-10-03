@@ -3,7 +3,6 @@ import HeroSection from '@/landing/components/landing/HeroSection';
 import ServicesSection from '@/landing/components/landing/ServicesSection';
 import WhyChooseSection from '@/landing/components/landing/WhyChooseSection';
 import HowItWorksSection from '@/landing/components/landing/HowItWorksSection';
-import FeaturesSection from '@/landing/components/landing/FeaturesSection';
 import GallerySection from '@/landing/components/landing/GallerySection';
 import TestimonialsSection from '@/landing/components/landing/TestimonialsSection';
 import StatsSection from '@/landing/components/landing/StatsSection';
@@ -19,7 +18,6 @@ export default function LandingPage() {
       <ServicesSection />
       <WhyChooseSection />
       <HowItWorksSection />
-      <FeaturesSection />
       <GallerySection />
       <TestimonialsSection />
       <StatsSection />

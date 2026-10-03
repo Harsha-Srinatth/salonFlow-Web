@@ -462,7 +462,7 @@ export default function SignupPage() {
             { num: "4.8/5", text: "Rating" },
           ].map(stat => (
             <div key={stat.text} className="rounded-lg border border-border bg-card/50 p-3 backdrop-blur-sm">
-              <p className="font-serif text-lg font-bold text-primary">{stat.num}</p>
+              <p className="font-display text-lg font-bold text-primary">{stat.num}</p>
               <p className="text-xs text-muted-foreground">{stat.text}</p>
             </div>
           ))}
@@ -609,7 +609,7 @@ export default function SignupPage() {
               <div className="flex items-center gap-2.5 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
                 <Gift className="size-4 shrink-0 text-accent" />
                 <p className="text-xs text-foreground/90">
-                  You were invited with code <span className="font-mono font-semibold text-accent">{referralCode}</span>{" "}
+                  You were invited with code <span className="font-sans tabular-nums font-semibold text-accent">{referralCode}</span>{" "}
                   — sign up to unlock your welcome bonus.
                 </p>
               </div>

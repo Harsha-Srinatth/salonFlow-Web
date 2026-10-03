@@ -25,7 +25,7 @@ export function AuthPageShell({
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-300 group-hover:scale-110">
               <Scissors className="size-4" />
             </div>
-            <span className="font-serif text-base font-bold tracking-wide text-foreground">Sahasra</span>
+            <span className="font-display text-base font-bold tracking-wide text-foreground">Sahasra</span>
           </Link>
           <button
             type="button"
@@ -50,7 +50,7 @@ export function AuthPageShell({
               transition={{ duration: 0.6 }}
               className="mb-12"
             >
-              <h2 className="font-serif text-4xl font-bold text-foreground">{sideTitle}</h2>
+              <h2 className="font-display text-4xl font-bold text-foreground">{sideTitle}</h2>
               <p className="mt-3 max-w-sm text-muted-foreground">{sideDescription}</p>
             </motion.div>
 
@@ -99,7 +99,7 @@ export function AuthPageShell({
         >
           <div className="w-full max-w-md">
             <div className="mb-8">
-              <h1 className="font-serif text-3xl font-bold text-foreground">{title}</h1>
+              <h1 className="font-display text-3xl font-bold text-foreground">{title}</h1>
               {subtitle ? (
                 <p className="mt-2 text-sm text-muted-foreground">
                   {subtitle}{" "}

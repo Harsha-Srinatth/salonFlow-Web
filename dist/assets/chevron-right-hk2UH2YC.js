@@ -1,1 +1,0 @@
-import{v as t}from"./index-5nVor7ii.js";const o=[["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["path",{d:"M18 17V9",key:"2bz60n"}],["path",{d:"M13 17V5",key:"1frdt8"}],["path",{d:"M8 17v-3",key:"17ska0"}]],c=t("chart-column",o);const a=[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]],e=t("chevron-right",a);export{e as C,c as a};

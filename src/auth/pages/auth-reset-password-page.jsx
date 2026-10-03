@@ -100,7 +100,7 @@ export default function AuthResetPasswordPage() {
         <p className="text-sm leading-6 text-muted-foreground">
           Finish reset on this site (not only Google&apos;s default page), or your database password will not update.
           In Firebase Console → Authentication → Templates → Password reset, set the action URL to{" "}
-          <span className="break-all font-mono text-xs text-foreground">{resetUrl}</span>
+          <span className="break-all font-sans tabular-nums text-xs text-foreground">{resetUrl}</span>
         </p>
         <Link
           to="/auth/login"
