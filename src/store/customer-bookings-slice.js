@@ -68,6 +68,23 @@ function computeCustomerPriceSummary({ serviceIds, comboId, services, offers }) 
   };
 }
 
+const SERVICES_CACHE_KEY = "sahasra.customerServices.v1";
+function readCachedServices() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(SERVICES_CACHE_KEY) ?? "null");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+function cacheServices(services) {
+  try {
+    sessionStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(services));
+  } catch {
+    /* storage can be blocked; the cache is only a speed-up */
+  }
+}
+
 export const fetchCustomerBookings = createAsyncThunk("customerBookings/fetchBookings", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/bookings"));
@@ -257,7 +274,9 @@ const customerBookingsSlice = createSlice({
     bookings: [],
     stylists: [],
     recommendedStylists: [],
-    services: [],
+    services: readCachedServices(),
+    servicesLoading: false,
+    slotsLoading: false,
     offers: null,
     offersLoading: false,
     bookingForm: {
@@ -391,8 +410,17 @@ const customerBookingsSlice = createSlice({
       .addCase(fetchCustomerStylists.fulfilled, (state, action) => {
         state.stylists = action.payload;
       })
+      .addCase(fetchCustomerServices.pending, (state) => {
+        state.servicesLoading = true;
+      })
+      .addCase(fetchCustomerServices.rejected, (state, action) => {
+        state.servicesLoading = false;
+        state.error = action.payload ?? "Could not load services";
+      })
       .addCase(fetchCustomerServices.fulfilled, (state, action) => {
+        state.servicesLoading = false;
         state.services = action.payload;
+        cacheServices(action.payload);
         state.priceSummary = computeCustomerPriceSummary({
           serviceIds: state.bookingForm.serviceIds,
           comboId: state.bookingForm.comboId,
@@ -419,10 +447,15 @@ const customerBookingsSlice = createSlice({
       .addCase(fetchRecommendedStylists.fulfilled, (state, action) => {
         state.recommendedStylists = action.payload;
       })
+      .addCase(fetchCustomerSlots.pending, (state) => {
+        state.slotsLoading = true;
+      })
       .addCase(fetchCustomerSlots.fulfilled, (state, action) => {
+        state.slotsLoading = false;
         state.slots = action.payload;
       })
       .addCase(fetchCustomerSlots.rejected, (state, action) => {
+        state.slotsLoading = false;
         state.error = action.payload ?? "Could not load slots";
       })
       .addCase(fetchCustomerStylists.rejected, (state, action) => {

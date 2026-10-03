@@ -1,7 +1,8 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { saveCustomerGender } from "@/lib/customer-profile";
 import { toApiUrl } from "@/lib/api-base";
@@ -13,18 +14,22 @@ import {
   CheckCircle2,
   Copy,
   Gift,
+  Hourglass,
+  Link2,
+  Loader2,
   PartyPopper,
   Share2,
   Sparkles,
   Ticket,
+  Trophy,
+  UserRound,
   Users,
   Wallet,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { LoadingOrb } from "@/components/shared/loading-orb";
 
 async function authGet(path) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -69,9 +74,9 @@ function prefersReducedMotion() {
 }
 
 const NEUTRAL_TONE = "bg-muted text-muted-foreground";
-const WAITING_TONE = "bg-amber-100 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300";
-const PROGRESS_TONE = "bg-blue-100 text-blue-900 dark:bg-blue-900/20 dark:text-blue-300";
-const DONE_TONE = "bg-green-100 text-green-900 dark:bg-green-900/20 dark:text-green-300";
+const WAITING_TONE = "bg-accent/15 text-accent";
+const PROGRESS_TONE = "bg-primary/10 text-primary";
+const DONE_TONE = "bg-success/15 text-success";
 
 /**
  * Every state a referral can be in, in the order it moves through them. The
@@ -79,12 +84,12 @@ const DONE_TONE = "bg-green-100 text-green-900 dark:bg-green-900/20 dark:text-gr
  * so the two never drift apart.
  */
 const REFERRAL_STATUS_META = {
-  PENDING: { label: "Awaiting first visit", tone: WAITING_TONE },
-  FIRST_ACTION_DONE: { label: "First visit done", tone: PROGRESS_TONE },
+  PENDING: { label: "Waiting", tone: WAITING_TONE },
+  FIRST_ACTION_DONE: { label: "Visited", tone: PROGRESS_TONE },
   COOLING: { label: "Verifying", tone: PROGRESS_TONE },
   APPROVED: { label: "Approved", tone: PROGRESS_TONE },
-  REWARDED: { label: "Reward earned", tone: DONE_TONE },
-  REJECTED: { label: "Not verified", tone: NEUTRAL_TONE },
+  REWARDED: { label: "Rewarded", tone: DONE_TONE },
+  REJECTED: { label: "Rejected", tone: NEUTRAL_TONE },
 };
 
 function formatCoolingCountdown(coolingUntil) {
@@ -131,9 +136,9 @@ export default function UserLoyaltyPage() {
       await saveCustomerGender(value);
       await refresh();
       await loadVault();
-      toast.success("Saved — your reward cards now match your services");
+      notify.success("Saved");
     } catch (error) {
-      toast.error(error.message ?? "Could not save your gender");
+      notify.error("Couldn't save", { description: error.message });
     } finally {
       setSavingGender(false);
     }
@@ -143,7 +148,7 @@ export default function UserLoyaltyPage() {
     if (!appUser || appUser.role !== "USER") return;
     void fetchLoyaltyOverview()
       .then(setOverview)
-      .catch((error) => toast.error(error.message ?? "Could not load your rewards"))
+      .catch((error) => notify.error("Couldn't load rewards", { description: error.message }))
       .finally(() => setPageLoading(false));
     void loadVault();
   }, [appUser]);
@@ -190,10 +195,10 @@ export default function UserLoyaltyPage() {
     try {
       await navigator.clipboard.writeText(referralLink);
       setCopied(true);
-      toast.success("Referral link copied");
+      notify.success("Link copied");
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      toast.error("Could not copy link — copy it manually");
+      notify.error("Couldn't copy the link");
     }
   }
 
@@ -237,7 +242,7 @@ export default function UserLoyaltyPage() {
       ]);
       setRevealedCard(result.card);
       await loadVault();
-      toast.success(`You won: ${result.card.serviceName}!`);
+      notify.success(`You won ${result.card.serviceName}`);
       window.requestAnimationFrame(() => {
         const winEl = cardFanRef.current?.querySelector(`[data-reward-card="${result.card.id}"]`);
         if (winEl && !reduceMotion) {
@@ -249,16 +254,19 @@ export default function UserLoyaltyPage() {
         }
       });
     } catch (error) {
-      toast.error(error.message ?? "Could not draw a reward right now");
+      notify.error("Couldn't draw a reward", { description: error.message });
     } finally {
       setDrawing(false);
     }
   }
 
-  if (loading) {
+  if (loading || pageLoading) {
     return (
       <UserLayout pageTitle="Refer & Earn">
-        <LoadingOrb label="Loading…" className="h-96" />
+        <div className="max-w-4xl space-y-4">
+          <Skeleton className="h-56 rounded-3xl" />
+          <Skeleton className="h-72 rounded-3xl" />
+        </div>
       </UserLayout>
     );
   }
@@ -274,317 +282,267 @@ export default function UserLoyaltyPage() {
     );
   }
 
+  const drawLabel = drawing
+    ? "Revealing"
+    : vault.needsGender
+      ? "Add gender to draw"
+      : vault.pendingDraws.length
+        ? "Draw reward"
+        : "No draws yet";
+
   return (
-    <UserLayout pageTitle="Refer & Earn">
-      {pageLoading ? (
-        <LoadingOrb label="Loading your rewards…" className="h-96" />
-      ) : (
-        <div className="space-y-6 max-w-4xl">
-          {/* Hero: wallet balance + referral link */}
-          <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent p-6 sm:p-8 overflow-hidden relative">
-            <div className="absolute -right-16 -top-16 w-40 h-40 bg-primary/10 rounded-full blur-3xl" />
-            <div className="relative z-10 space-y-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="inline-flex items-center gap-2 text-sm font-semibold text-primary mb-1">
-                    <Wallet className="w-4 h-4" />
-                    Wallet balance
-                  </p>
-                  <p className="text-4xl sm:text-5xl font-bold text-foreground">
-                    ₹<span ref={balanceRef}>0</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1">Applied automatically at checkout when you choose to use it</p>
-                  {overview?.pendingCredit > 0 ? (
-                    <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900 dark:bg-amber-900/20 dark:text-amber-300">
-                      ₹{Number(overview.pendingCredit).toLocaleString()} being verified — not spendable yet
-                    </p>
-                  ) : null}
-                </div>
-                <div className="flex gap-6 text-right">
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{overview?.totalReferred ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">Friends invited</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-warning">{overview?.totalPending ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">In progress</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-success">{overview?.totalRewarded ?? 0}</p>
-                    <p className="text-xs text-muted-foreground">Rewarded</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border/60 bg-card/70 backdrop-blur-sm p-4 space-y-3">
-                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Gift className="w-4 h-4 text-accent" />
-                  Invite friends, you both earn
+    <UserLayout pageTitle="Refer & Earn" width="lg">
+      <div className="space-y-4">
+        {/* Wallet + invite */}
+        <section className="space-y-6 rounded-3xl bg-primary p-6 text-primary-foreground sm:p-8">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="flex items-center gap-2 text-sm font-medium opacity-80">
+                <Wallet className="size-4" /> Wallet
+              </p>
+              <p className="font-display text-5xl font-bold">
+                ₹<span ref={balanceRef}>0</span>
+              </p>
+              {overview?.pendingCredit > 0 ? (
+                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
+                  <Hourglass className="size-3.5" />₹{Number(overview.pendingCredit).toLocaleString()} verifying
                 </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="flex-1 flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 font-mono text-sm">
-                    <span className="truncate">{referralLink}</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" onClick={() => void handleCopyLink()} className="flex-1 sm:flex-none">
-                      {copied ? <Check className="mr-1.5 w-4 h-4 text-success" /> : <Copy className="mr-1.5 w-4 h-4" />}
-                      {copied ? "Copied" : "Copy"}
-                    </Button>
-                    <Button type="button" onClick={() => void handleShare()} className="flex-1 sm:flex-none">
-                      <Share2 className="mr-1.5 w-4 h-4" />
-                      Share
-                    </Button>
-                  </div>
+              ) : null}
+            </div>
+            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto">
+              {[
+                { icon: Users, value: overview?.totalReferred ?? 0, label: "Invited" },
+                { icon: Hourglass, value: overview?.totalPending ?? 0, label: "Pending" },
+                { icon: Trophy, value: overview?.totalRewarded ?? 0, label: "Rewarded" },
+              ].map(({ icon: Icon, value, label }) => (
+                <div key={label} className="rounded-2xl bg-primary-foreground/10 p-3 text-center sm:min-w-[84px]">
+                  <Icon className="mx-auto size-4 opacity-80" />
+                  <p className="mt-1 font-display text-xl font-bold tabular-nums">{value}</p>
+                  <p className="text-[11px] opacity-80">{label}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Your code: <span className="font-mono font-semibold text-foreground">{overview?.referralCode}</span> — your
-                  friend gets a welcome bonus, and you earn wallet credit once they complete their first visit.
-                </p>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Reward Vault: gamified free-service draw, unlocked per converted referral */}
-          <div className="rounded-2xl border border-accent/20 bg-gradient-to-b from-accent/5 to-transparent p-6 sm:p-8 space-y-6">
-            <div className="flex flex-col items-center text-center gap-1">
-              <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Unlock Your Reward Vault</h2>
-              <p className="text-sm text-muted-foreground max-w-md">
-                Every friend who joins through your link and completes their first visit earns you a free-service
-                draw from the vault.
-              </p>
+          <div className="space-y-3 rounded-2xl bg-primary-foreground/10 p-4">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <Gift className="size-4" /> Invite a friend
+            </p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-card px-3 py-2.5 font-mono text-sm text-foreground">
+                <Link2 className="size-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">{referralLink}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => void handleCopyLink()}
+                  className="h-11 flex-1 rounded-full sm:flex-none"
+                >
+                  {copied ? <Check className="text-success" /> : <Copy />}
+                  {copied ? "Copied" : "Copy"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleShare()}
+                  className="h-11 flex-1 rounded-full bg-card text-primary customer:hover:bg-card! sm:flex-none"
+                >
+                  <Share2 /> Share
+                </Button>
+              </div>
             </div>
+          </div>
+        </section>
 
-            {vault.needsGender ? (
-              <div className="mx-auto flex max-w-lg flex-col items-center gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-center">
-                <p className="text-sm font-semibold text-foreground">One quick thing before you draw</p>
-                <p className="text-xs text-muted-foreground">
-                  Your account doesn't have a gender saved, so you're only being shown unisex cards. Tell us and the
-                  full set of cards you can actually book unlocks.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[
-                    { value: "MALE", label: "Male" },
-                    { value: "FEMALE", label: "Female" },
-                    { value: "OTHER", label: "Other" },
-                  ].map((option) => (
-                    <Button
-                      key={option.value}
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={savingGender}
-                      onClick={() => void handleSetGender(option.value)}
-                    >
-                      {option.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {vault.pendingDraws.length > 0 ? (
-              <div className="mx-auto flex max-w-lg flex-col items-center gap-1 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-center">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold text-success">
-                  <PartyPopper className="w-4 h-4" />
-                  {vault.pendingDraws.length} referral{vault.pendingDraws.length > 1 ? "s" : ""} successfully signed up!
-                </p>
-                <p className="text-xs text-muted-foreground">Withdraw your reward below.</p>
-              </div>
-            ) : null}
-
-            {vault.cards.length ? (
-              <div ref={cardFanRef} className="flex flex-wrap items-end justify-center gap-3 py-6">
-                {vault.cards.map((card, index) => {
-                  const isRevealed = revealedCard?.id === card.id;
-                  const rotation = CARD_ROTATIONS[index] ?? 0;
-                  return (
-                    <div
-                      key={card.id}
-                      data-reward-card={card.id}
-                      style={{ transform: `rotate(${rotation}deg)` }}
-                      className={`flex h-40 w-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-xl border-2 bg-card p-3 text-center shadow-md transition-shadow sm:h-44 sm:w-32 ${
-                        isRevealed ? "border-accent shadow-accent/30 shadow-lg" : "border-border/70"
-                      }`}
-                    >
-                      <Ticket className={`w-5 h-5 ${isRevealed ? "text-accent" : "text-muted-foreground/50"}`} />
-                      <p className="text-[11px] font-semibold leading-tight text-foreground line-clamp-3">{card.serviceName}</p>
-                      <p className="text-[10px] text-muted-foreground">Rs {card.serviceBasePrice.toFixed(0)} value</p>
-                      {isRevealed ? (
-                        <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">
-                          FREE!
-                        </span>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-center text-sm text-muted-foreground py-6">
-                Reward cards are being set up — check back soon for free-service draws.
-              </p>
-            )}
-
-            <div className="flex justify-center">
-              <Button
-                type="button"
-                size="lg"
-                className="px-10"
-                disabled={!vault.pendingDraws.length || !vault.cards.length || drawing || vault.needsGender}
-                onClick={() => void handleWithdrawReward()}
-              >
-                <Gift className="mr-2 w-5 h-5" />
-                {drawing
-                  ? "Revealing..."
-                  : vault.needsGender
-                    ? "Add your gender to draw"
-                    : vault.pendingDraws.length
-                      ? "Withdraw Reward"
-                      : "No rewards available yet"}
-              </Button>
+        {/* Reward vault */}
+        <section className="space-y-5 rounded-3xl bg-card p-6 sm:p-8">
+          <div className="flex items-center gap-3">
+            <span className="grid size-12 place-items-center rounded-2xl bg-accent/15 text-accent">
+              <Gift className="size-6" />
+            </span>
+            <div>
+              <h2 className="font-display text-xl font-bold">Reward vault</h2>
+              <p className="text-sm text-muted-foreground">1 friend's first visit = 1 free-service draw</p>
             </div>
-            {vault.cards.length ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Odds shown are configured by the salon; higher-value services are rarer.
-              </p>
-            ) : null}
           </div>
 
-          {vault.wins.length ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Ticket className="w-5 h-5 text-accent" />
-                  Your free-service wins
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2.5">
-                  {vault.wins.map((win) => (
-                    <div key={win.id} className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5">
-                      {win.status === "USED" ? (
-                        <CheckCircle2 className="w-5 h-5 text-muted-foreground shrink-0" />
-                      ) : (
-                        <Gift className="w-5 h-5 text-accent shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">{win.serviceName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Won {new Date(win.wonAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                        </p>
-                      </div>
-                      <span
-                        className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${
-                          win.status === "USED"
-                            ? "bg-muted text-muted-foreground"
-                            : "bg-accent/15 text-accent"
-                        }`}
-                      >
-                        {win.status === "USED" ? "Used" : "Ready to redeem"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Unused rewards apply automatically as a free service option when you book that exact service.
-                </p>
-              </CardContent>
-            </Card>
+          {vault.needsGender ? (
+            <div className="space-y-3 rounded-2xl bg-accent/10 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <UserRound className="size-4 text-accent" /> Pick your gender to unlock all cards
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { value: "MALE", label: "Male" },
+                  { value: "FEMALE", label: "Female" },
+                  { value: "OTHER", label: "Other" },
+                ].map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant="secondary"
+                    className="rounded-full"
+                    disabled={savingGender}
+                    onClick={() => void handleSetGender(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
           ) : null}
 
-          <div ref={listRef} className="grid gap-6 lg:grid-cols-2">
-            {/* Referrals */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Users className="w-5 h-5 text-primary" />
-                  Your referrals
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!overview?.referrals?.length ? (
-                  <div className="text-center py-10">
-                    <Sparkles className="mx-auto w-10 h-10 text-muted-foreground/20 mb-2" />
-                    <p className="text-sm font-medium text-foreground">No referrals yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Share your link above to start earning</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {overview.referrals.map((referral) => {
-                      const meta = REFERRAL_STATUS_META[referral.status] ?? REFERRAL_STATUS_META.PENDING;
-                      const countdown =
-                        referral.status === "COOLING" ? formatCoolingCountdown(referral.coolingUntil) : null;
-                      return (
-                        <div
-                          key={referral.id}
-                          data-loyalty-row
-                          className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-foreground">{referral.referredName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(referral.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                              {referral.statusLabel ? ` · ${referral.statusLabel}` : ""}
-                              {countdown ? ` · lands ${countdown}` : ""}
-                            </p>
-                            {referral.status === "REJECTED" && referral.rejectedReason ? (
-                              <p className="mt-0.5 text-xs text-muted-foreground">
-                                Contact the salon if you think this is a mistake.
-                              </p>
-                            ) : null}
-                          </div>
-                          <span className={`shrink-0 text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${meta.tone}`}>
-                            {meta.label}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+          {vault.pendingDraws.length > 0 ? (
+            <p className="flex items-center gap-2 rounded-2xl bg-success/10 p-3 text-sm font-semibold text-success">
+              <PartyPopper className="size-5 shrink-0" />
+              {vault.pendingDraws.length} draw{vault.pendingDraws.length > 1 ? "s" : ""} ready
+            </p>
+          ) : null}
 
-            {/* Wallet history */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Wallet className="w-5 h-5 text-primary" />
-                  Wallet activity
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!overview?.transactions?.length ? (
-                  <div className="text-center py-10">
-                    <Wallet className="mx-auto w-10 h-10 text-muted-foreground/20 mb-2" />
-                    <p className="text-sm font-medium text-foreground">No wallet activity yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Rewards you earn will show up here</p>
+          {vault.cards.length ? (
+            <div ref={cardFanRef} className="flex flex-wrap items-end justify-center gap-3 py-4">
+              {vault.cards.map((card, index) => {
+                const isRevealed = revealedCard?.id === card.id;
+                const rotation = CARD_ROTATIONS[index] ?? 0;
+                return (
+                  <div
+                    key={card.id}
+                    data-reward-card={card.id}
+                    style={{ transform: `rotate(${rotation}deg)` }}
+                    className={cn(
+                      "flex h-40 w-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl bg-secondary p-3 text-center shadow-md sm:h-44 sm:w-32",
+                      isRevealed && "bg-accent/15 shadow-lg ring-2 ring-accent"
+                    )}
+                  >
+                    <Ticket className={cn("size-6", isRevealed ? "text-accent" : "text-muted-foreground/60")} />
+                    <p className="line-clamp-3 text-[11px] font-semibold leading-tight">{card.serviceName}</p>
+                    <p className="text-[10px] text-muted-foreground">₹{card.serviceBasePrice.toFixed(0)}</p>
+                    {isRevealed ? (
+                      <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">FREE</span>
+                    ) : null}
                   </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {overview.transactions.map((tx) => (
-                      <div key={tx.id} data-loyalty-row className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3.5 py-2.5">
-                        {tx.type === "CREDIT" ? (
-                          <ArrowUpCircle className="w-5 h-5 text-success shrink-0" />
-                        ) : (
-                          <ArrowDownCircle className="w-5 h-5 text-muted-foreground shrink-0" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm text-foreground">{tx.description || tx.source}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(tx.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                          </p>
-                        </div>
-                        <p className={`shrink-0 text-sm font-bold ${tx.type === "CREDIT" ? "text-success" : "text-foreground"}`}>
-                          {tx.type === "CREDIT" ? "+" : "-"}₹{tx.amount}
+                );
+              })}
+            </div>
+          ) : (
+            <p className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Hourglass className="size-4" /> Cards coming soon
+            </p>
+          )}
+
+          <Button
+            type="button"
+            className="mx-auto flex h-12 rounded-full px-10"
+            disabled={!vault.pendingDraws.length || !vault.cards.length || drawing || vault.needsGender}
+            onClick={() => void handleWithdrawReward()}
+          >
+            {drawing ? <Loader2 className="animate-spin" /> : <Gift />}
+            {drawLabel}
+          </Button>
+        </section>
+
+        {vault.wins.length ? (
+          <section className="rounded-3xl bg-card p-5 sm:p-6">
+            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+              <Ticket className="size-5 text-accent" /> My vouchers
+            </h2>
+            <ul className="space-y-2">
+              {vault.wins.map((win) => (
+                <li key={win.id} className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
+                  {win.status === "USED" ? (
+                    <CheckCircle2 className="size-5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <Gift className="size-5 shrink-0 text-accent" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{win.serviceName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(win.wonAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
+                      win.status === "USED" ? "bg-muted text-muted-foreground" : "bg-accent/15 text-accent"
+                    )}
+                  >
+                    {win.status === "USED" ? "Used" : "Ready"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+
+        <div ref={listRef} className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-3xl bg-card p-5 sm:p-6">
+            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+              <Users className="size-5 text-primary" /> Referrals
+            </h2>
+            {!overview?.referrals?.length ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+                <Sparkles className="size-8" />
+                No referrals yet
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {overview.referrals.map((referral) => {
+                  const meta = REFERRAL_STATUS_META[referral.status] ?? REFERRAL_STATUS_META.PENDING;
+                  const countdown = referral.status === "COOLING" ? formatCoolingCountdown(referral.coolingUntil) : null;
+                  return (
+                    <li key={referral.id} data-loyalty-row className="flex items-center justify-between gap-3 rounded-2xl bg-secondary p-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{referral.referredName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(referral.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                          {countdown ? ` · ${countdown}` : ""}
                         </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold", meta.tone)}>
+                        {meta.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-3xl bg-card p-5 sm:p-6">
+            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+              <Wallet className="size-5 text-primary" /> Wallet activity
+            </h2>
+            {!overview?.transactions?.length ? (
+              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+                <Wallet className="size-8" />
+                Nothing yet
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {overview.transactions.map((tx) => (
+                  <li key={tx.id} data-loyalty-row className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
+                    {tx.type === "CREDIT" ? (
+                      <ArrowUpCircle className="size-5 shrink-0 text-success" />
+                    ) : (
+                      <ArrowDownCircle className="size-5 shrink-0 text-muted-foreground" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm">{tx.description || tx.source}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(tx.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                      </p>
+                    </div>
+                    <p className={cn("shrink-0 text-sm font-bold", tx.type === "CREDIT" && "text-success")}>
+                      {tx.type === "CREDIT" ? "+" : "-"}₹{tx.amount}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      )}
+      </div>
     </UserLayout>
   );
 }

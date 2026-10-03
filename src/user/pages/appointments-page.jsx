@@ -1,17 +1,8 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ServiceCatalogSelector } from "@/components/services/service-catalog-selector";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CustomerServicePicker } from "@/components/services/customer-service-picker";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { authedRequest } from "@/lib/payments-api";
@@ -34,60 +25,222 @@ import {
   setCustomerBookingField,
   setCustomerRecommendedStylists,
 } from "@/store/customer-bookings-slice";
+import { cn } from "@/lib/utils";
 import {
-  AlertCircle,
-  Calendar,
-  CheckCircle,
+  ArrowLeft,
+  ArrowRight,
+  CalendarCheck,
+  CalendarClock,
+  CalendarX,
+  Check,
+  CheckCircle2,
   Clock,
+  CreditCard,
   Gift,
+  History,
+  Loader2,
+  Moon,
+  ShoppingBag,
+  Info,
+  Pencil,
+  RefreshCw,
+  Scissors,
   Sparkles,
+  Sun,
+  Sunset,
   Ticket,
+  TriangleAlert,
   User,
   Wallet,
+  X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { LoadingOrb } from "@/components/shared/loading-orb";
-import { InlineOrb } from "@/components/shared/loading-orb"
 
-async function fetchLoyaltySnapshot() {
+async function authedJson(path) {
   const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl("/api/customer/loyalty"), {
+  const res = await fetch(toApiUrl(path), {
     credentials: "include",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { walletBalance: 0, isFirstTimeCustomer: false, firstBookingDiscountPercent: 0 };
+  return res.ok ? data : null;
+}
+
+async function fetchLoyaltySnapshot() {
+  const data = await authedJson("/api/customer/loyalty");
   return {
-    walletBalance: Number(data.walletBalance ?? 0),
-    isFirstTimeCustomer: Boolean(data.isFirstTimeCustomer),
-    firstBookingDiscountPercent: Number(data.firstBookingDiscountPercent ?? 0),
+    walletBalance: Number(data?.walletBalance ?? 0),
+    isFirstTimeCustomer: Boolean(data?.isFirstTimeCustomer),
+    firstBookingDiscountPercent: Number(data?.firstBookingDiscountPercent ?? 0),
   };
 }
 
 async function fetchUnclaimedVouchers() {
-  const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl("/api/customer/loyalty/vault"), {
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return new Map();
+  const data = await authedJson("/api/customer/loyalty/vault");
   const map = new Map();
-  for (const win of data.wins ?? []) {
+  for (const win of data?.wins ?? []) {
     if (win.status === "UNCLAIMED" && !map.has(win.serviceId)) map.set(win.serviceId, win.serviceName);
   }
   return map;
 }
 
+const STEPS = [
+  { label: "Services", icon: Scissors },
+  { label: "Date & time", icon: CalendarClock },
+  { label: "Review", icon: CreditCard },
+];
+
+const rupees = (value) => `₹${(Math.round(Number(value) * 100) / 100).toLocaleString("en-IN")}`;
+const timeLabel = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const dayLabel = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+
+function Stepper({ step, maxStep, onJump }) {
+  return (
+    <ol className="flex items-center gap-2" aria-label="Booking steps">
+      {STEPS.map(({ label, icon: Icon }, index) => {
+        const done = index < step;
+        const active = index === step;
+        const reachable = index <= maxStep;
+        return (
+          <li key={label} className="flex flex-1 items-center gap-2 last:flex-none sm:last:flex-1">
+            <button
+              type="button"
+              disabled={!reachable}
+              onClick={() => onJump(index)}
+              aria-current={active ? "step" : undefined}
+              className={cn(
+                "flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-semibold",
+                active ? "bg-primary text-primary-foreground" : done ? "bg-secondary text-foreground" : "bg-card text-muted-foreground"
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-7 place-items-center rounded-full",
+                  active ? "bg-primary-foreground/20" : done ? "bg-primary text-primary-foreground" : "bg-muted"
+                )}
+              >
+                {done ? <Check className="size-4" /> : <Icon className="size-4" />}
+              </span>
+              <span className={cn(active ? "inline" : "hidden sm:inline")}>{label}</span>
+            </button>
+            {index < STEPS.length - 1 ? (
+              <span className={cn("h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-muted")} />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function SectionTitle({ icon: Icon, children }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
+      <Icon className="size-5 text-primary" />
+      {children}
+    </h2>
+  );
+}
+
+function SlotGroups({ slots, value, onPick }) {
+  const groups = useMemo(() => {
+    const buckets = [
+      { key: "morning", label: "Morning", icon: Sun, items: [] },
+      { key: "afternoon", label: "Afternoon", icon: Sunset, items: [] },
+      { key: "evening", label: "Evening", icon: Moon, items: [] },
+    ];
+    for (const slot of slots) {
+      const hour = new Date(slot.startsAt).getHours();
+      buckets[hour < 12 ? 0 : hour < 17 ? 1 : 2].items.push(slot);
+    }
+    return buckets.filter((bucket) => bucket.items.length);
+  }, [slots]);
+
+  return (
+    <div className="space-y-4">
+      {groups.map(({ key, label, icon: Icon, items }) => (
+        <div key={key}>
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
+            <Icon className="size-4" />
+            {label}
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            {items.map((slot) => (
+              <button
+                key={slot.startsAt}
+                type="button"
+                aria-pressed={value === slot.startsAt}
+                onClick={() => onPick(slot.startsAt)}
+                className={cn(
+                  "h-11 rounded-xl text-sm font-semibold",
+                  value === slot.startsAt ? "bg-primary text-primary-foreground" : "bg-card"
+                )}
+              >
+                {timeLabel(slot.startsAt)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ToggleRow({ icon: Icon, title, hint, checked, onChange, amount }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center gap-3 rounded-2xl bg-secondary p-3 text-left"
+    >
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-card text-accent">
+        <Icon className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
+      </span>
+      {checked && amount > 0 ? <span className="text-sm font-bold text-success">-{rupees(amount)}</span> : null}
+      <span className={cn("flex h-6 w-11 shrink-0 items-center rounded-full p-0.5", checked ? "bg-primary" : "bg-muted-foreground/30")}>
+        <span className={cn("size-5 rounded-full bg-white transition-transform", checked ? "translate-x-5" : "translate-x-0")} />
+      </span>
+    </button>
+  );
+}
+
+function Row({ label, value, tone }) {
+  return (
+    <div className={cn("flex items-center justify-between gap-3 text-sm", tone === "good" && "text-success")}>
+      <span className={tone === "good" ? "" : "text-muted-foreground"}>{label}</span>
+      <span className="font-semibold">{value}</span>
+    </div>
+  );
+}
+
 export default function UserAppointmentsPage() {
-  const { appUser, loading, logout } = useAuth();
+  const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
-  const { stylists, services, slots, recommendedStylists, bookingForm, priceSummary, offers, mutating, error } =
-    useSelector((state) => state.customerBookings);
+  const {
+    stylists,
+    services,
+    servicesLoading,
+    slots,
+    slotsLoading,
+    recommendedStylists,
+    bookingForm,
+    priceSummary,
+    offers,
+    mutating,
+    error,
+  } = useSelector((state) => state.customerBookings);
+  const [step, setStep] = useState(0);
+  const [maxStep, setMaxStep] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWalletCredit, setUseWalletCredit] = useState(false);
   const [isFirstTimeCustomer, setIsFirstTimeCustomer] = useState(false);
@@ -98,9 +251,13 @@ export default function UserAppointmentsPage() {
   // the backend reports CONFIRMED for the payment.
   const [payPhase, setPayPhase] = useState("idle"); // idle | starting | loading_checkout | checkout | verifying
   const [payStatus, setPayStatus] = useState(null); // last payment DTO from the backend
+  const [watching, setWatching] = useState(false); // actively polling the backend for a result
+  const [confirmed, setConfirmed] = useState(null); // snapshot shown on the success screen
   const payingRef = useRef(false); // synchronous guard: state updates are too late for double clicks
   const pollingRef = useRef(false);
+  const snapshotRef = useRef(null);
 
+  const isUser = appUser?.role === "USER";
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const tomorrowIso = useMemo(() => {
     const d = new Date();
@@ -113,12 +270,21 @@ export default function UserAppointmentsPage() {
     () => slots.find((slot) => slot.startsAt === bookingForm.startsAt) ?? null,
     [slots, bookingForm.startsAt]
   );
+  const stylistOptions = useMemo(() => {
+    if (selectedSlot?.stylists?.length) return selectedSlot.stylists;
+    if (recommendedStylists.length) return recommendedStylists;
+    return stylists;
+  }, [selectedSlot, recommendedStylists, stylists]);
+  const selectedStylist = stylistOptions.find((item) => item.id === bookingForm.stylistId) ?? null;
+  const selectedServices = useMemo(
+    () => services.filter((service) => bookingForm.serviceIds.includes(service.id)),
+    [services, bookingForm.serviceIds]
+  );
 
+  // Load everything once. (Previously this re-ran on every date change and refetched the catalog.)
   useEffect(() => {
-    if (!appUser || appUser.role !== "USER") return;
-    if (!bookingForm.bookingDate) {
-      dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
-    }
+    if (!isUser) return;
+    dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
     void dispatch(fetchCustomerStylists());
     void dispatch(fetchCustomerServices());
     void dispatch(fetchCustomerOffers());
@@ -128,52 +294,51 @@ export default function UserAppointmentsPage() {
       setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
     });
     void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
-  }, [appUser, bookingForm.bookingDate, dispatch, todayIso]);
+  }, [dispatch, isUser, todayIso]);
 
   useEffect(() => {
-    if (error) toast.error(error);
+    if (error) notify.error(error);
   }, [error]);
 
   useEffect(() => {
-    if (!bookingForm.serviceIds.length || !effectiveBookingDate || !bookingForm.startsAt) {
+    if (!bookingForm.serviceIds.length || !bookingForm.startsAt) {
       dispatch(setCustomerRecommendedStylists([]));
       return;
     }
-    void dispatch(
-      fetchRecommendedStylists({
-        serviceIds: bookingForm.serviceIds,
-        startsAt: bookingForm.startsAt,
-      })
-    );
-  }, [effectiveBookingDate, bookingForm.startsAt, bookingForm.serviceIds, dispatch]);
+    void dispatch(fetchRecommendedStylists({ serviceIds: bookingForm.serviceIds, startsAt: bookingForm.startsAt }));
+  }, [bookingForm.startsAt, bookingForm.serviceIds, dispatch]);
 
   useEffect(() => {
     if (!bookingForm.serviceIds.length || !effectiveBookingDate) return;
     void dispatch(fetchCustomerSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate }));
   }, [effectiveBookingDate, bookingForm.serviceIds, dispatch]);
 
+  // Always keep a valid stylist once a time is chosen, so the form can never look complete yet stay blocked.
   useEffect(() => {
-    if (!selectedSlot?.stylists?.length) return;
-    if (!selectedSlot.stylists.some((item) => item.id === bookingForm.stylistId)) {
-      dispatch(setCustomerBookingField({ field: "stylistId", value: selectedSlot.stylists[0].id }));
+    if (!selectedSlot || !stylistOptions.length) return;
+    if (!stylistOptions.some((item) => item.id === bookingForm.stylistId)) {
+      dispatch(setCustomerBookingField({ field: "stylistId", value: stylistOptions[0].id }));
     }
-  }, [bookingForm.stylistId, dispatch, selectedSlot]);
+  }, [bookingForm.stylistId, dispatch, selectedSlot, stylistOptions]);
 
-  function toggleService(serviceId, checked) {
-    const current = bookingForm.serviceIds ?? [];
-    const next = checked
-      ? Array.from(new Set([...current, serviceId]))
-      : current.filter((id) => id !== serviceId);
-    dispatch(setCustomerBookingField({ field: "serviceIds", value: next }));
-  }
+  // Stable identity (reads the latest ids from a ref) so memoised service cards don't all re-render on each tap.
+  const serviceIdsRef = useRef(bookingForm.serviceIds);
+  serviceIdsRef.current = bookingForm.serviceIds;
+  const toggleService = useCallback(
+    (serviceId, checked) => {
+      const current = serviceIdsRef.current ?? [];
+      const next = checked ? Array.from(new Set([...current, serviceId])) : current.filter((id) => id !== serviceId);
+      dispatch(setCustomerBookingField({ field: "serviceIds", value: next }));
+    },
+    [dispatch]
+  );
 
   const firstBookingDiscountAmount = isFirstTimeCustomer
     ? Math.round(priceSummary.payableAmount * (firstBookingDiscountPercent / 100) * 100) / 100
     : 0;
   const afterFirstBookingDiscount = Math.max(0, priceSummary.payableAmount - firstBookingDiscountAmount);
 
-  // Not offered alongside a combo — see the matching guard in createCustomerBooking
-  // on the backend (combo pricing has no per-service bundle share to redeem against).
+  // Not offered alongside a combo — see the matching guard in createCustomerBooking on the backend.
   const voucherServiceId = !bookingForm.comboId ? bookingForm.serviceIds.find((id) => unclaimedVouchers.has(id)) ?? null : null;
   const voucherServiceName = voucherServiceId ? unclaimedVouchers.get(voucherServiceId) : null;
   const voucherPriced = voucherServiceId ? (offers?.pricedServices ?? []).find((item) => item.serviceId === voucherServiceId) : null;
@@ -183,13 +348,16 @@ export default function UserAppointmentsPage() {
       ? Math.min(afterFirstBookingDiscount, Number(voucherPriced?.finalPrice ?? voucherService?.basePrice ?? 0))
       : 0;
   const afterVoucherDiscount = Math.max(0, afterFirstBookingDiscount - voucherDiscountAmount);
-
   const walletRedeemAmount = useWalletCredit ? Math.min(walletBalance, afterVoucherDiscount) : 0;
   const finalPayableAmount = Math.max(0, afterVoucherDiscount - walletRedeemAmount);
 
   function refreshAfterBooking() {
+    setConfirmed(snapshotRef.current ?? {});
     dispatch(resetCustomerBookingForm());
+    dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
     setUseWalletCredit(false);
+    setStep(0);
+    setMaxStep(0);
     void dispatch(fetchCustomerBookings());
     void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
     void fetchLoyaltySnapshot().then((snapshot) => {
@@ -204,18 +372,18 @@ export default function UserAppointmentsPage() {
     if (!status) return;
     if (status.state === "CONFIRMED") {
       clearPendingPayment();
-      toast.success("Payment received — booking confirmed");
       refreshAfterBooking();
     } else if (isTerminalState(status.state)) {
       clearPendingPayment();
-      if (status.state === "FAILED") toast.error(status.message ?? "Payment failed");
-      else toast.message(status.message ?? "Payment not completed");
+      if (status.state === "FAILED") notify.error("Payment failed", { description: status.message });
+      else notify.message("Payment not completed", { description: status.message });
     }
   }
 
   async function watchPayment(orderId) {
     if (pollingRef.current) return;
     pollingRef.current = true;
+    setWatching(true);
     try {
       const result = await pollPaymentStatus(authedRequest, orderId, {
         onUpdate: (status) => setPayStatus(status),
@@ -227,6 +395,7 @@ export default function UserAppointmentsPage() {
       setPayStatus(null);
     } finally {
       pollingRef.current = false;
+      setWatching(false);
     }
   }
 
@@ -234,6 +403,12 @@ export default function UserAppointmentsPage() {
     if (payingRef.current) return;
     payingRef.current = true;
     setPayStatus(null);
+    snapshotRef.current = {
+      services: selectedServices.map((service) => service.name),
+      startsAt: bookingForm.startsAt,
+      stylist: selectedStylist?.name,
+      amount: finalPayableAmount,
+    };
     const payload = {
       serviceIds: bookingForm.serviceIds,
       bookingDate: effectiveBookingDate,
@@ -249,10 +424,9 @@ export default function UserAppointmentsPage() {
         // Nothing owed (fully covered by credit / voucher): book directly.
         const booked = await dispatch(createCustomerBookingAsync(payload));
         if (createCustomerBookingAsync.rejected.match(booked)) {
-          toast.error(booked.payload?.message ?? "Could not create booking");
+          notify.error(booked.payload?.message ?? "Could not create booking");
           return;
         }
-        toast.success("Booking Confirmed");
         refreshAfterBooking();
         return;
       }
@@ -260,8 +434,8 @@ export default function UserAppointmentsPage() {
       if (result.status && !isTerminalState(result.status.state) && result.status.orderId) {
         void watchPayment(result.status.orderId);
       }
-    } catch (error) {
-      toast.error(error?.message ?? "Could not start the payment");
+    } catch (err) {
+      notify.error(err?.message ?? "Could not start the payment");
     } finally {
       payingRef.current = false;
       setPayPhase("idle");
@@ -271,24 +445,30 @@ export default function UserAppointmentsPage() {
   // Page refresh / returning from a UPI app: resume a payment that had not finished instead of
   // leaving the customer guessing (and instead of letting them pay a second time).
   useEffect(() => {
-    if (!appUser || appUser.role !== "USER") return;
+    if (!isUser) return;
     const pending = readPendingPayment();
     if (pending?.orderId) void watchPayment(pending.orderId);
     return () => {
       pollingRef.current = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appUser]);
+  }, [isUser]);
+
+  function goTo(next) {
+    setStep(next);
+    setMaxStep((current) => Math.max(current, next));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   if (loading) {
     return (
-      <UserLayout pageTitle="Book Appointment">
-        <LoadingOrb label="Loading…" className="h-96" />
+      <UserLayout pageTitle="Book">
+        <Skeleton className="h-96 rounded-3xl" />
       </UserLayout>
     );
   }
 
-  if (!appUser || appUser.role !== "USER") {
+  if (!isUser) {
     return (
       <div className="mx-auto max-w-md space-y-4 p-6">
         <p>Sign in as a customer to book appointments.</p>
@@ -299,370 +479,440 @@ export default function UserAppointmentsPage() {
     );
   }
 
-  const allFieldsFilled = bookingForm.serviceIds.length && bookingForm.startsAt && bookingForm.stylistId;
+  if (confirmed) {
+    return (
+      <UserLayout pageTitle="">
+        <div className="mx-auto flex max-w-lg flex-col items-center gap-5 rounded-3xl bg-card p-8 text-center">
+          <span className="grid size-20 place-items-center rounded-full bg-success/15 text-success">
+            <CheckCircle2 className="size-10" />
+          </span>
+          <div>
+            <h1 className="font-display text-2xl font-bold">You're booked</h1>
+            {confirmed.startsAt ? (
+              <p className="mt-1 text-muted-foreground">
+                {dayLabel(confirmed.startsAt.slice(0, 10))} · {timeLabel(confirmed.startsAt)}
+                {confirmed.stylist ? ` · ${confirmed.stylist}` : ""}
+              </p>
+            ) : null}
+          </div>
+          {confirmed.services?.length ? (
+            <ul className="w-full space-y-2 rounded-2xl bg-secondary p-4 text-left text-sm">
+              {confirmed.services.map((name) => (
+                <li key={name} className="flex items-center gap-2 font-medium">
+                  <Scissors className="size-4 text-primary" />
+                  {name}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="flex w-full flex-col gap-3 sm:flex-row">
+            <Button asChild className="h-12 flex-1 rounded-full">
+              <Link to="/user-dashboard/booking-history">
+                <History /> My bookings
+              </Link>
+            </Button>
+            <Button variant="secondary" className="h-12 flex-1 rounded-full" onClick={() => setConfirmed(null)}>
+              <CalendarCheck /> Book another
+            </Button>
+          </div>
+        </div>
+      </UserLayout>
+    );
+  }
+
+  const busy = mutating || payPhase !== "idle" || watching;
+  const slotGone = Boolean(bookingForm.startsAt) && !selectedSlot && !slotsLoading;
+  const timeReady = Boolean(selectedSlot) && Boolean(selectedStylist);
+
+  // One place decides whether "continue" is enabled and, if not, says why.
+  let blocker = null;
+  if (step === 0 && !bookingForm.serviceIds.length) blocker = "Pick at least one service";
+  else if (step === 1 && !timeReady) blocker = slotGone ? "That time was just taken. Pick another" : "Choose a time";
+  else if (step === 2 && !timeReady) blocker = "Choose a time first";
+
+  const stepBack = step > 0 && !busy;
+  const payLabel =
+    payPhase === "verifying"
+      ? "Verifying payment"
+      : payPhase === "checkout"
+        ? "Finish paying in the window"
+        : "Preparing payment";
+
+  const unitPrice = (service) => {
+    const priced = (offers?.pricedServices ?? []).find((item) => item.serviceId === service.id);
+    return Number(priced?.finalPrice ?? service.basePrice ?? 0);
+  };
+  const nextLabel = step === 0 ? "Pick a time" : "Review";
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      {stepBack ? (
+        <Button
+          type="button"
+          variant="secondary"
+          size="icon"
+          aria-label="Back"
+          className="size-12 shrink-0 rounded-full"
+          onClick={() => goTo(step - 1)}
+        >
+          <ArrowLeft />
+        </Button>
+      ) : null}
+      {step < 2 ? (
+        <Button
+          type="button"
+          className="h-12 flex-1 rounded-full px-6 text-base"
+          disabled={Boolean(blocker)}
+          onClick={() => goTo(step + 1)}
+        >
+          {nextLabel} <ArrowRight />
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          className="h-12 flex-1 rounded-full px-6 text-base"
+          disabled={busy || Boolean(blocker)}
+          onClick={() => void createBooking()}
+        >
+          {busy ? (
+            <>
+              <Loader2 className="animate-spin" />
+              {watching && payPhase === "idle" ? "Checking" : payLabel}
+            </>
+          ) : finalPayableAmount > 0 ? (
+            <>
+              <CreditCard /> Pay {rupees(finalPayableAmount)}
+            </>
+          ) : (
+            <>
+              <CheckCircle2 /> Confirm
+            </>
+          )}
+        </Button>
+      )}
+    </div>
+  );
 
   return (
-    <UserLayout
-      pageTitle="Book Appointment"
-      actions={
-        <Button variant="destructive" onClick={() => void logout()}>
-          Sign out
-        </Button>
-      }
-    >
-      <div className="space-y-6 max-w-4xl">
-        {/* Offer Alert */}
-        {bookingForm.comboId ? (
-          <Card className="border-success/30 bg-success/5">
-            <CardContent className="flex items-start gap-3 pt-4">
-              <Gift className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-success">Combo offer applied</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {priceSummary.offerLabel ?? "Your combo discount is included in the final amount."}
-                  <Link to="/user-dashboard/offers" className="ml-1 text-success underline font-medium">
-                    View more offers
-                  </Link>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : offers?.globalDiscount || offers?.serviceOffers?.length ? (
-          <Card className="border-success/30 bg-success/5">
-            <CardContent className="flex items-start gap-3 pt-4">
-              <Gift className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-              <div className="space-y-1 text-sm">
-                {offers.globalDiscount ? (
-                  <p className="font-semibold text-success">{offers.globalDiscount.label}</p>
-                ) : null}
-                {offers.serviceOffers?.length ? (
-                  <p className="text-muted-foreground">
-                    {offers.serviceOffers.length} service-specific offer
-                    {offers.serviceOffers.length === 1 ? "" : "s"} — best price shown per service below.
-                  </p>
-                ) : null}
-                <Link to="/user-dashboard/offers" className="text-success underline font-medium">
-                  View all offers & combos
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card className="border-amber-200/50 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/10">
-            <CardContent className="flex items-start gap-3 pt-4">
-              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-foreground">
-                Browse available discounts on{" "}
-                <Link to="/user-dashboard/offers" className="font-semibold text-primary underline">
-                  Offers
-                </Link>
-                .
-              </p>
-            </CardContent>
-          </Card>
-        )}
+    <UserLayout pageTitle="Book">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-6 pb-28 lg:pb-0">
+          <Stepper step={step} maxStep={maxStep} onJump={goTo} />
 
-        {/* Main Booking Card */}
-        <Card className="border-border shadow-lg">
-          <CardHeader className="pb-6 border-b border-border/50">
-            <div className="space-y-2">
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <Sparkles className="w-6 h-6 text-accent" />
-                Create your appointment
-              </CardTitle>
-              <p className="text-sm text-muted-foreground font-medium">
-                Select services, date, time, and your preferred stylist
-              </p>
+          {bookingForm.comboId ? (
+            <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-medium text-success">
+              <Gift className="size-5 shrink-0" />
+              {priceSummary.offerLabel ?? "Combo offer applied"}
             </div>
-          </CardHeader>
+          ) : null}
 
-          <CardContent className="pt-8 space-y-8">
-            {/* Step 1: Services */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                  1
-                </div>
-                <Label className="text-base font-bold">Select services</Label>
-              </div>
-              <ServiceCatalogSelector
+          {step === 0 ? (
+            <section>
+              <SectionTitle icon={Scissors}>What would you like?</SectionTitle>
+              <CustomerServicePicker
                 services={services}
-                mode="multi"
-                label=""
-                selectedServiceIds={bookingForm.serviceIds}
-                onToggleServiceId={toggleService}
+                loading={servicesLoading}
+                selectedIds={bookingForm.serviceIds}
                 pricedServices={offers?.pricedServices}
+                onToggle={toggleService}
               />
-            </div>
+            </section>
+          ) : null}
 
-            {/* Step 2: Date, Time, Stylist */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                  2
-                </div>
-                <Label className="text-base font-bold">Choose date & time</Label>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Date Picker */}
-                <div className="space-y-2">
-                  <Label htmlFor="date" className="flex items-center gap-2 text-sm font-medium">
-                    <Calendar className="w-4 h-4" />
-                    Date
-                  </Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={effectiveBookingDate}
-                    min={todayIso}
-                    max={tomorrowIso}
-                    onChange={(e) =>
-                      dispatch(setCustomerBookingField({ field: "bookingDate", value: e.target.value }))
-                    }
-                    className="rounded-lg h-11"
-                  />
-                  <p className="text-xs text-muted-foreground">Today or tomorrow</p>
-                </div>
-
-                {/* Time Slot */}
-                <div className="space-y-2">
-                  <Label htmlFor="slot" className="flex items-center gap-2 text-sm font-medium">
-                    <Clock className="w-4 h-4" />
-                    Time
-                  </Label>
-                  <Select
-                    value={slots.some((slot) => slot.startsAt === bookingForm.startsAt) ? bookingForm.startsAt : undefined}
-                    onValueChange={(value) =>
-                      dispatch(setCustomerBookingField({ field: "startsAt", value }))
-                    }
-                    disabled={!slots.length}
-                  >
-                    <SelectTrigger id="slot" className="rounded-lg h-11" disabled={!slots.length}>
-                      <SelectValue
-                        placeholder={slots.length ? "Select time" : "No slots available"}
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {slots.map((slot) => (
-                        <SelectItem key={slot.startsAt} value={slot.startsAt}>
-                          {new Date(slot.startsAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {!slots.length && bookingForm.serviceIds.length && (
-                    <p className="text-xs text-destructive font-medium">No available slots</p>
-                  )}
-                </div>
-
-                {/* Stylist */}
-                <div className="space-y-2">
-                  <Label htmlFor="stylist" className="flex items-center gap-2 text-sm font-medium">
-                    <User className="w-4 h-4" />
-                    Stylist
-                  </Label>
-                  <Select
-                    value={bookingForm.stylistId}
-                    onValueChange={(value) =>
-                      dispatch(setCustomerBookingField({ field: "stylistId", value }))
-                    }
-                  >
-                    <SelectTrigger id="stylist" className="rounded-lg h-11">
-                      <SelectValue placeholder="Select stylist" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(selectedSlot?.stylists?.length
-                        ? selectedSlot.stylists
-                        : recommendedStylists.length
-                          ? recommendedStylists
-                          : stylists
-                      ).map((stylist) => (
-                        <SelectItem key={stylist.id} value={stylist.id}>
-                          {stylist.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {recommendedStylists.length > 0 && (
-                    <p className="text-xs text-muted-foreground">Recommended availability</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Step 3: Payment Summary */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                  3
-                </div>
-                <Label className="text-base font-bold">Payment summary</Label>
-              </div>
-
-              {isFirstTimeCustomer && firstBookingDiscountPercent > 0 && (
-                <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/5 p-3.5">
-                  <Sparkles className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-foreground">
-                    <span className="font-semibold text-success">Welcome to Sahasra!</span> You get{" "}
-                    <span className="font-semibold">{firstBookingDiscountPercent}% off</span> your first booking,
-                    applied automatically below.
-                  </p>
-                </div>
-              )}
-
-              <Card className="bg-muted/40 border-border">
-                <CardContent className="pt-6 space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">Total amount</span>
-                    <span className="font-semibold">₹{priceSummary.totalAmount.toFixed(2)}</span>
-                  </div>
-
-                  {priceSummary.discountAmount > 0 && (
-                    <>
-                      <div className="flex justify-between items-center text-sm text-success">
-                        <span>Discount</span>
-                        <span className="font-semibold">-₹{priceSummary.discountAmount.toFixed(2)}</span>
-                      </div>
-                      {priceSummary.offerLabel && (
-                        <p className="text-xs text-muted-foreground">{priceSummary.offerLabel}</p>
+          {step === 1 ? (
+            <section className="space-y-8">
+              <div>
+                <SectionTitle icon={CalendarClock}>Day</SectionTitle>
+                <div className="grid grid-cols-2 gap-3">
+                  {[todayIso, tomorrowIso].map((iso, index) => (
+                    <button
+                      key={iso}
+                      type="button"
+                      aria-pressed={effectiveBookingDate === iso}
+                      onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: iso }))}
+                      className={cn(
+                        "flex flex-col items-start rounded-2xl p-4 text-left",
+                        effectiveBookingDate === iso ? "bg-primary text-primary-foreground" : "bg-card"
                       )}
-                    </>
-                  )}
-
-                  {firstBookingDiscountAmount > 0 && (
-                    <div className="flex justify-between items-center text-sm text-success">
-                      <span>First booking discount ({firstBookingDiscountPercent}%)</span>
-                      <span className="font-semibold">-₹{firstBookingDiscountAmount.toFixed(2)}</span>
-                    </div>
-                  )}
-
-                  {voucherServiceId && (
-                    <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5">
-                      <span className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={useVoucher}
-                          onChange={(e) => setUseVoucher(e.target.checked)}
-                          className="mt-0.5 size-4 accent-accent"
-                        />
-                        <span className="flex flex-col">
-                          <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                            <Ticket className="w-3.5 h-3.5 text-accent" />
-                            Redeem free-service voucher
-                          </span>
-                          <span className="text-xs text-muted-foreground">{voucherServiceName} — won from Refer &amp; Earn</span>
-                        </span>
-                      </span>
-                      {useVoucher && voucherDiscountAmount > 0 && (
-                        <span className="shrink-0 text-sm font-semibold text-accent">-₹{voucherDiscountAmount.toFixed(2)}</span>
-                      )}
-                    </label>
-                  )}
-
-                  {walletBalance > 0 && afterVoucherDiscount > 0 && (
-                    <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border border-accent/30 bg-accent/5 px-3 py-2.5">
-                      <span className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={useWalletCredit}
-                          onChange={(e) => setUseWalletCredit(e.target.checked)}
-                          className="mt-0.5 size-4 accent-accent"
-                        />
-                        <span className="flex flex-col">
-                          <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                            <Wallet className="w-3.5 h-3.5 text-accent" />
-                            Use wallet credit
-                          </span>
-                          <span className="text-xs text-muted-foreground">Available: ₹{walletBalance}</span>
-                        </span>
-                      </span>
-                      {useWalletCredit && walletRedeemAmount > 0 && (
-                        <span className="shrink-0 text-sm font-semibold text-accent">-₹{walletRedeemAmount.toFixed(2)}</span>
-                      )}
-                    </label>
-                  )}
-
-                  <div className="border-t border-border pt-3 flex justify-between items-center">
-                    <span className="font-bold text-foreground">You pay</span>
-                    <span className="text-xl font-bold text-primary">
-                      ₹{finalPayableAmount.toFixed(2)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" && (
-              <div
-                role="status"
-                className={`flex items-start gap-3 rounded-lg border p-3.5 ${
-                  ["FAILED", "EXPIRED", "REFUNDING", "REFUNDED"].includes(payStatus.state)
-                    ? "border-destructive/30 bg-destructive/5"
-                    : "border-border bg-muted/40"
-                }`}
-              >
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 text-sm">
-                  <p className="font-semibold">
-                    {payStatus.state === "PENDING" || payStatus.state === "PROCESSING"
-                      ? "Payment processing — booking not confirmed yet"
-                      : payStatus.state === "CANCELLED"
-                        ? "Payment cancelled"
-                        : payStatus.state === "FAILED"
-                          ? "Payment failed"
-                          : payStatus.state === "EXPIRED"
-                            ? "Payment session expired"
-                            : "Payment received, booking not made"}
-                  </p>
-                  <p className="text-muted-foreground mt-1">{payStatus.message}</p>
-                  {(payStatus.state === "PENDING" || payStatus.state === "PROCESSING") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() => payStatus.orderId && void watchPayment(payStatus.orderId)}
                     >
-                      Check status
-                    </Button>
-                  )}
+                      <span className="text-xs font-semibold uppercase tracking-wide opacity-80">
+                        {index === 0 ? "Today" : "Tomorrow"}
+                      </span>
+                      <span className="text-lg font-bold">{dayLabel(iso)}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
+
+              <div>
+                <SectionTitle icon={Clock}>Time</SectionTitle>
+                {slotsLoading && !slots.length ? (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <Skeleton key={i} className="h-11" />
+                    ))}
+                  </div>
+                ) : slots.length ? (
+                  <SlotGroups
+                    slots={slots}
+                    value={bookingForm.startsAt}
+                    onPick={(value) => dispatch(setCustomerBookingField({ field: "startsAt", value }))}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 rounded-2xl bg-card py-10 text-center">
+                    <CalendarX className="size-8 text-muted-foreground" />
+                    <p className="font-semibold">No free times this day</p>
+                    {effectiveBookingDate === todayIso ? (
+                      <button
+                        type="button"
+                        className="text-sm font-medium text-primary underline"
+                        onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: tomorrowIso }))}
+                      >
+                        Try tomorrow
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              {selectedSlot && stylistOptions.length ? (
+                <div>
+                  <SectionTitle icon={User}>Stylist</SectionTitle>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {stylistOptions.map((stylist) => {
+                      const active = stylist.id === bookingForm.stylistId;
+                      return (
+                        <button
+                          key={stylist.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => dispatch(setCustomerBookingField({ field: "stylistId", value: stylist.id }))}
+                          className={cn(
+                            "flex items-center gap-3 rounded-2xl p-3 text-left ring-2",
+                            active ? "bg-primary/10 ring-primary" : "bg-card ring-transparent"
+                          )}
+                        >
+                          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-accent-foreground">
+                            {`${stylist.name ?? "?"}`.charAt(0).toUpperCase()}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-semibold">{stylist.name}</span>
+                          {active ? <Check className="size-5 text-primary" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+          {step === 2 ? (
+            <section className="space-y-4">
+              <div className="space-y-1 rounded-3xl bg-card p-5">
+                {selectedServices.map((service) => (
+                  <div key={service.id} className="flex items-center justify-between gap-3 py-1.5">
+                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                      <Scissors className="size-4 shrink-0 text-primary" />
+                      <span className="truncate">{service.name}</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">{service.duration} min</span>
+                  </div>
+                ))}
+                <div className="my-3 h-px bg-border" />
+                <button type="button" onClick={() => goTo(1)} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
+                  <CalendarClock className="size-4 shrink-0 text-primary" />
+                  <span className="flex-1 font-medium">
+                    {dayLabel(effectiveBookingDate)} · {bookingForm.startsAt ? timeLabel(bookingForm.startsAt) : "-"}
+                  </span>
+                  <Pencil className="size-4 text-muted-foreground" />
+                </button>
+                <button type="button" onClick={() => goTo(1)} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
+                  <User className="size-4 shrink-0 text-primary" />
+                  <span className="flex-1 font-medium">{selectedStylist?.name ?? "-"}</span>
+                  <Pencil className="size-4 text-muted-foreground" />
+                </button>
+              </div>
+
+              {isFirstTimeCustomer && firstBookingDiscountPercent > 0 ? (
+                <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-medium text-success">
+                  <Sparkles className="size-5 shrink-0" />
+                  {firstBookingDiscountPercent}% off your first booking
+                </div>
+              ) : null}
+
+              {voucherServiceId ? (
+                <ToggleRow
+                  icon={Ticket}
+                  title="Free-service voucher"
+                  hint={voucherServiceName}
+                  checked={useVoucher}
+                  onChange={setUseVoucher}
+                  amount={voucherDiscountAmount}
+                />
+              ) : null}
+              {walletBalance > 0 && afterVoucherDiscount > 0 ? (
+                <ToggleRow
+                  icon={Wallet}
+                  title="Wallet credit"
+                  hint={`${rupees(walletBalance)} available`}
+                  checked={useWalletCredit}
+                  onChange={setUseWalletCredit}
+                  amount={walletRedeemAmount}
+                />
+              ) : null}
+
+              <div className="space-y-2.5 rounded-3xl bg-card p-5">
+                <Row label="Subtotal" value={rupees(priceSummary.totalAmount)} />
+                {priceSummary.discountAmount > 0 ? (
+                  <Row label={priceSummary.offerLabel ?? "Offer"} value={`-${rupees(priceSummary.discountAmount)}`} tone="good" />
+                ) : null}
+                {firstBookingDiscountAmount > 0 ? (
+                  <Row label="First booking" value={`-${rupees(firstBookingDiscountAmount)}`} tone="good" />
+                ) : null}
+                {voucherDiscountAmount > 0 ? <Row label="Voucher" value={`-${rupees(voucherDiscountAmount)}`} tone="good" /> : null}
+                {walletRedeemAmount > 0 ? <Row label="Wallet" value={`-${rupees(walletRedeemAmount)}`} tone="good" /> : null}
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <span className="font-semibold">Total</span>
+                  <span className="font-display text-2xl font-bold text-primary">{rupees(finalPayableAmount)}</span>
+                </div>
+              </div>
+
+              {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" ? (
+                <div
+                  role="status"
+                  className={cn(
+                    "flex items-start gap-3 rounded-2xl p-4 text-sm",
+                    ["FAILED", "EXPIRED", "REFUNDING", "REFUNDED"].includes(payStatus.state) ? "bg-destructive/10" : "bg-secondary"
+                  )}
+                >
+                  {watching ? (
+                    <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin" />
+                  ) : (
+                    <TriangleAlert className="mt-0.5 size-5 shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-semibold">
+                      {payStatus.state === "PENDING" || payStatus.state === "PROCESSING"
+                        ? watching
+                          ? "Checking your payment…"
+                          : "Payment not confirmed yet"
+                        : payStatus.state === "CANCELLED"
+                          ? "Payment cancelled"
+                          : payStatus.state === "FAILED"
+                            ? "Payment failed"
+                            : payStatus.state === "EXPIRED"
+                              ? "Payment timed out"
+                              : "Payment received, booking not made"}
+                    </p>
+                    {payStatus.message ? <p className="mt-0.5 text-muted-foreground">{payStatus.message}</p> : null}
+                    {(payStatus.state === "PENDING" || payStatus.state === "PROCESSING") && !watching ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => payStatus.orderId && void watchPayment(payStatus.orderId)}
+                        >
+                          <RefreshCw /> Check again
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => {
+                            clearPendingPayment();
+                            setPayStatus(null);
+                          }}
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
+        </div>
+
+        {/* Desktop: live summary beside the steps, with the action buttons inside it */}
+        <aside className="hidden lg:block" aria-label="Your booking">
+          <div className="sticky top-28 space-y-4 rounded-3xl bg-card p-5">
+            <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
+              <ShoppingBag className="size-5 text-primary" />
+              Your booking
+            </h2>
+
+            {selectedServices.length ? (
+              <ul className="space-y-2">
+                {selectedServices.map((service) => (
+                  <li key={service.id} className="flex items-center gap-2 text-sm">
+                    <Scissors className="size-4 shrink-0 text-primary" />
+                    <span className="min-w-0 flex-1 truncate font-medium">{service.name}</span>
+                    <span className="font-semibold">{rupees(unitPrice(service))}</span>
+                    {step === 0 ? (
+                      <button
+                        type="button"
+                        aria-label={`Remove ${service.name}`}
+                        onClick={() => toggleService(service.id, false)}
+                        className="grid size-6 place-items-center rounded-full bg-muted"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="rounded-2xl bg-secondary p-4 text-sm text-muted-foreground">No services picked yet</p>
             )}
 
-            {/* Submit Button */}
-            <Button
-              className="w-full h-12 rounded-lg text-base font-semibold mt-4"
-              disabled={
-                mutating ||
-                payPhase !== "idle" ||
-                payStatus?.state === "PENDING" ||
-                payStatus?.state === "PROCESSING" ||
-                !allFieldsFilled
-              }
-              onClick={() => void createBooking()}
-            >
-              {mutating || payPhase !== "idle" ? (
-                <>
-                  <InlineOrb theme="light" className="mr-2" />
-                  {payPhase === "verifying"
-                    ? "Verifying payment..."
-                    : payPhase === "checkout"
-                      ? "Complete payment in the window..."
-                      : "Preparing payment..."}
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="mr-2 w-5 h-5" />
-                  {finalPayableAmount > 0 ? `Pay ₹${finalPayableAmount.toFixed(2)} & book` : "Confirm booking"}
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+            {bookingForm.startsAt ? (
+              <div className="space-y-2 border-t border-border pt-3 text-sm">
+                <p className="flex items-center gap-2 font-medium">
+                  <CalendarClock className="size-4 text-primary" />
+                  {dayLabel(effectiveBookingDate)} · {timeLabel(bookingForm.startsAt)}
+                </p>
+                {selectedStylist ? (
+                  <p className="flex items-center gap-2 font-medium">
+                    <User className="size-4 text-primary" />
+                    {selectedStylist.name}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="flex items-center justify-between border-t border-border pt-3">
+              <span className="text-sm text-muted-foreground">Total</span>
+              <span className="font-display text-2xl font-bold text-primary">{rupees(finalPayableAmount)}</span>
+            </div>
+
+            {blocker ? (
+              <p className="flex items-center gap-2 rounded-2xl bg-secondary px-3 py-2 text-sm text-muted-foreground">
+                <Info className="size-4 shrink-0" />
+                {blocker}
+              </p>
+            ) : null}
+            {actions}
+          </div>
+        </aside>
+      </div>
+
+      {/* Phone and tablet: compact bar above the bottom tabs */}
+      <div className="fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 px-3 lg:hidden">
+        <div className="mx-auto max-w-xl space-y-2 rounded-3xl bg-card p-3 shadow-xl shadow-black/10">
+          <div className="flex items-center justify-between gap-3 px-1">
+            <p className="min-w-0 truncate text-sm text-muted-foreground">
+              {blocker ??
+                `${bookingForm.serviceIds.length} service${bookingForm.serviceIds.length === 1 ? "" : "s"}${
+                  step > 0 && bookingForm.startsAt ? ` · ${timeLabel(bookingForm.startsAt)}` : ""
+                }`}
+            </p>
+            <p className="shrink-0 font-display text-lg font-bold">{rupees(finalPayableAmount)}</p>
+          </div>
+          {actions}
+        </div>
       </div>
     </UserLayout>
   );

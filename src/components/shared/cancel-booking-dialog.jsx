@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatBookingDateTime, formatCurrency } from "@/receptionist/lib/booking-utils";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const money = (value) => Math.round(Number(value ?? 0) * 100) / 100;
@@ -73,10 +73,10 @@ export function CancelBookingDialog({ bookingId, open, onOpenChange, loadPreview
     const result = await submitCancel(bookingId, Number(percent));
     setSubmitting(false);
     if (!result.ok) {
-      toast.error(result.error ?? "Could not cancel booking");
+      notify.error(result.error ?? "Could not cancel booking");
       return;
     }
-    toast.success(
+    notify.success(
       refund > 0
         ? `Booking cancelled — ${formatCurrency(refund)} (${percent}%) refunded${preview?.paidOnline ? " to the customer's original payment method" : ""}`
         : "Booking cancelled — no refund"

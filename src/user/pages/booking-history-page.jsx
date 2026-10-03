@@ -1,7 +1,9 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/empty-state";
+import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -24,22 +26,29 @@ import {
 } from "@/store/customer-bookings-slice";
 import { animate } from "animejs";
 import {
-  AlertCircle,
   Ban,
-  Calendar,
+  CalendarCheck,
+  CalendarClock,
+  CalendarPlus,
+  CheckCircle2,
+  ChevronDown,
+  Clock,
   Download,
   Flag,
+  History,
   Info,
+  Loader2,
   MessageSquareHeart,
+  ShieldAlert,
   Trash2,
-  Clock,
   User,
-  CheckCircle,
+  Wallet,
+  XCircle,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
 import {
   formatCountdownMs,
@@ -49,7 +58,6 @@ import {
   isStartedPendingAutoComplete,
   normalizeBookingStatus,
 } from "@/lib/booking-pending-status";
-import { LoadingOrb } from "@/components/shared/loading-orb";
 
 async function feedbackAuthFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -68,21 +76,9 @@ async function feedbackAuthFetch(path, init) {
 }
 
 const CANCELLATION_POLICY_SUMMARY = [
-  {
-    condition: "24 hours or more before",
-    refund: "100% refund",
-    detail: "Full amount paid is credited back to you.",
-  },
-  {
-    condition: "30 mins to 24 hours before",
-    refund: "50% refund",
-    detail: "Half is credited back; the stylist slot is freed immediately.",
-  },
-  {
-    condition: "30 minutes or less before",
-    refund: "No refund",
-    detail: "No payback; the stylist slot is still freed for others.",
-  },
+  { condition: "24h+ before", refund: "100% back", tone: "bg-success/15 text-success" },
+  { condition: "30 min to 24h", refund: "50% back", tone: "bg-warning/20 text-warning" },
+  { condition: "Under 30 min", refund: "No refund", tone: "bg-destructive/15 text-destructive" },
 ];
 
 function normalizeStatus(status) {
@@ -103,24 +99,17 @@ function canReviewBooking(status) {
   return normalizeStatus(status) === "COMPLETED";
 }
 
-function getStatusColor(status) {
-  const s = normalizeStatus(status);
-  switch (s) {
-    case "CONFIRMED":
-      return "bg-blue-100 text-blue-900 dark:bg-blue-900/20 dark:text-blue-300";
-    case "COMPLETED":
-      return "bg-green-100 text-green-900 dark:bg-green-900/20 dark:text-green-300";
-    case "CANCELLED":
-      return "bg-red-100 text-red-900 dark:bg-red-900/20 dark:text-red-300";
-    case "NO-SHOW":
-      return "bg-amber-100 text-amber-900 dark:bg-amber-900/20 dark:text-amber-300";
-    default:
-      return "bg-gray-100 text-gray-900 dark:bg-gray-900/20 dark:text-gray-300";
-  }
-}
+const STATUS_STYLE = {
+  CONFIRMED: { tone: "bg-primary/10 text-primary", icon: CalendarCheck, label: "Confirmed" },
+  PENDING: { tone: "bg-accent/15 text-accent", icon: Clock, label: "Pending" },
+  COMPLETED: { tone: "bg-success/15 text-success", icon: CheckCircle2, label: "Done" },
+  CANCELLED: { tone: "bg-destructive/10 text-destructive", icon: XCircle, label: "Cancelled" },
+  "NO-SHOW": { tone: "bg-warning/20 text-warning", icon: ShieldAlert, label: "Missed" },
+};
+const UPCOMING_STATUSES = new Set(["PENDING", "CONFIRMED", "STARTED"]);
 
 export default function UserBookingHistoryPage() {
-  const { appUser, loading, logout } = useAuth();
+  const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
   const {
     bookings,
@@ -132,6 +121,8 @@ export default function UserBookingHistoryPage() {
     error,
   } = useSelector((state) => state.customerBookings);
 
+  const [tab, setTab] = useState("upcoming");
+  const [showPolicy, setShowPolicy] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTargetId, setCancelTargetId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -161,7 +152,7 @@ export default function UserBookingHistoryPage() {
   }, [appUser, dispatch]);
 
   useEffect(() => {
-    if (error) toast.error(error);
+    if (error) notify.error(error);
   }, [error]);
 
   async function loadFeedback() {
@@ -197,7 +188,7 @@ export default function UserBookingHistoryPage() {
   async function submitReview() {
     if (!reviewTarget) return;
     if (reviewRating < 1) {
-      toast.error("Please select a star rating");
+      notify.error("Pick a star rating");
       return;
     }
     setSubmittingReview(true);
@@ -212,7 +203,7 @@ export default function UserBookingHistoryPage() {
       });
       const reviewedBookingId = reviewTarget.id;
       setFeedbackByBooking((prev) => ({ ...prev, [reviewedBookingId]: data.feedback }));
-      toast.success("Thanks for sharing — it truly helps us glow up!");
+      notify.success("Thanks for your review");
       closeReviewDialog();
       window.requestAnimationFrame(() => {
         const el = reviewedBadgeRefs.current[reviewedBookingId];
@@ -225,7 +216,7 @@ export default function UserBookingHistoryPage() {
         });
       });
     } catch (error) {
-      toast.error(error.message ?? "Could not submit your review");
+      notify.error("Couldn't send your review", { description: error.message });
     } finally {
       setSubmittingReview(false);
     }
@@ -241,22 +232,22 @@ export default function UserBookingHistoryPage() {
     if (!cancelTargetId) return;
     const result = await dispatch(cancelCustomerBookingAsync(cancelTargetId));
     if (cancelCustomerBookingAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Could not cancel booking");
+      notify.error(result.payload ?? "Could not cancel booking");
       return;
     }
     const refundMsg = result.payload?.refund?.message;
-    toast.success(refundMsg ?? "Booking cancelled successfully");
+    notify.success("Booking cancelled", { description: refundMsg });
     closeCancelDialog();
   }
 
   async function handleRemoveFromHistory(booking) {
-    if (!window.confirm("Remove this booking from history permanently?")) return;
+    if (!window.confirm("Remove this booking from your history?")) return;
     const result = await dispatch(removeCustomerBookingFromHistoryAsync(booking.id));
     if (removeCustomerBookingFromHistoryAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Could not remove booking");
+      notify.error(result.payload ?? "Could not remove booking");
       return;
     }
-    toast.success("Booking removed from history");
+    notify.success("Removed from history");
   }
 
   const preview = cancellationPreview?.preview;
@@ -264,10 +255,18 @@ export default function UserBookingHistoryPage() {
   const policyRules = cancellationPreview?.policyRules ?? CANCELLATION_POLICY_SUMMARY;
   const isCancelling = Boolean(cancelTargetId && cancellingBookingId === cancelTargetId);
 
+  const sorted = useMemo(
+    () => [...bookings].sort((x, y) => new Date(y.startsAt) - new Date(x.startsAt)),
+    [bookings]
+  );
+  const upcoming = sorted.filter((b) => UPCOMING_STATUSES.has(normalizeStatus(b.status))).reverse();
+  const past = sorted.filter((b) => !UPCOMING_STATUSES.has(normalizeStatus(b.status)));
+  const visible = tab === "upcoming" ? upcoming : past;
+
   if (loading) {
     return (
-      <UserLayout pageTitle="Booking History">
-        <LoadingOrb label="Loading…" className="h-96" />
+      <UserLayout pageTitle="History">
+        <Skeleton className="h-96 max-w-4xl rounded-3xl" />
       </UserLayout>
     );
   }
@@ -285,355 +284,312 @@ export default function UserBookingHistoryPage() {
 
   return (
     <UserLayout
-      pageTitle="Booking History"
+      pageTitle="History"
+      width="lg"
       actions={
-        <Button variant="destructive" onClick={() => void logout()}>
-          Sign out
-        </Button>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
+            realtimeConnected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+          )}
+        >
+          <span className={cn("size-2 rounded-full", realtimeConnected ? "bg-success" : "bg-muted-foreground")} />
+          {realtimeConnected ? "Live" : "Offline"}
+        </span>
       }
     >
-      <div className="space-y-6 max-w-4xl">
-        {/* Cancellation Policy Card */}
-        <Card className="border-amber-200/50 bg-amber-50/50 dark:border-amber-900/30 dark:bg-amber-950/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              Cancellation policy
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            {CANCELLATION_POLICY_SUMMARY.map((rule, idx) => (
-              <div key={idx} className="flex gap-3">
-                <div className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-600 mt-2" />
-                <div>
-                  <p className="font-semibold text-foreground">{rule.condition}</p>
-                  <p className="text-amber-600 font-medium">{rule.refund}</p>
-                  <p className="text-muted-foreground text-xs mt-1">{rule.detail}</p>
-                </div>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex gap-1 rounded-full bg-card p-1" role="tablist">
+            {[
+              { key: "upcoming", label: "Upcoming", icon: CalendarClock, count: upcoming.length },
+              { key: "past", label: "Past", icon: History, count: past.length },
+            ].map(({ key, label, icon: Icon, count }) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={cn(
+                  "flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold",
+                  tab === key ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                )}
+              >
+                <Icon className="size-4" />
+                {label}
+                <span className="opacity-70">{count}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPolicy((open) => !open)}
+            aria-expanded={showPolicy}
+            className="flex h-10 items-center gap-1.5 rounded-full bg-card px-4 text-sm font-medium"
+          >
+            <Info className="size-4 text-primary" />
+            Refunds
+            <ChevronDown className={cn("size-4 transition-transform", showPolicy && "rotate-180")} />
+          </button>
+        </div>
+
+        {showPolicy ? (
+          <div className="grid gap-2 sm:grid-cols-3">
+            {CANCELLATION_POLICY_SUMMARY.map((rule) => (
+              <div key={rule.condition} className="flex items-center justify-between gap-3 rounded-2xl bg-card p-3">
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Clock className="size-4 text-muted-foreground" />
+                  {rule.condition}
+                </span>
+                <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", rule.tone)}>{rule.refund}</span>
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        ) : null}
 
-        {/* Bookings List */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>My bookings</CardTitle>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${
-                realtimeConnected
-                  ? "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-                  : "bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400"
-              }`}>
-                {realtimeConnected ? "● Live" : "● Offline"}
-              </span>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!bookings.length ? (
-              <div className="text-center py-12">
-                <Calendar className="mx-auto w-16 h-16 text-muted-foreground/20 mb-3" />
-                <p className="text-lg font-semibold text-foreground mb-1">No bookings yet</p>
-                <p className="text-sm text-muted-foreground mb-6">
-                  Your confirmed bookings will appear here
-                </p>
-                <Button asChild>
-                  <Link to="/user-dashboard/appointments">Book your first appointment</Link>
+        {!visible.length ? (
+          <EmptyState
+            icon={tab === "upcoming" ? CalendarPlus : History}
+            title={tab === "upcoming" ? "Nothing coming up" : "No past visits"}
+            action={
+              tab === "upcoming" ? (
+                <Button asChild className="h-11 rounded-full px-6">
+                  <Link to="/user-dashboard/appointments">
+                    <CalendarPlus /> Book now
+                  </Link>
                 </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {bookings.map((booking) => {
-                  const cancellable = canCancelBooking(booking.status);
-                  const removable = canRemoveFromHistory(booking.status);
-                  const reviewable = canReviewBooking(booking.status);
-                  const existingFeedback = feedbackByBooking[booking.id];
-                  const pendingAutoComplete = isStartedPendingAutoComplete(booking);
-                  const displayStatus = getBookingDisplayStatus(booking);
-                  const pendingTimerText = pendingAutoComplete
-                    ? formatCountdownMs(getPendingAutoCompleteCountdownMs(booking, nowMs))
-                    : null;
-                  const isDeleting = deletingBookingId === booking.id;
+              ) : null
+            }
+          />
+        ) : (
+          <ul className="space-y-3">
+            {visible.map((booking) => {
+              const status = STATUS_STYLE[normalizeStatus(booking.status)] ?? STATUS_STYLE.PENDING;
+              const StatusIcon = status.icon;
+              const cancellable = canCancelBooking(booking.status);
+              const removable = canRemoveFromHistory(booking.status);
+              const reviewable = canReviewBooking(booking.status);
+              const existingFeedback = feedbackByBooking[booking.id];
+              const pendingAutoComplete = isStartedPendingAutoComplete(booking);
+              const displayStatus = pendingAutoComplete ? "In service" : status.label;
+              const isDeleting = deletingBookingId === booking.id;
+              const when = new Date(booking.startsAt);
 
-                  return (
-                    <Card key={booking.id} className="bg-muted/30 hover:shadow-md transition-shadow">
-                      <CardContent className="pt-4">
-                        <div className="space-y-4">
-                          {/* Header Row */}
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1">
-                              <p className="font-bold text-lg text-foreground">{booking.service}</p>
-                              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
-                                <Calendar className="w-4 h-4" />
-                                {new Date(booking.startsAt).toLocaleDateString([], {
-                                  weekday: "short",
-                                  month: "short",
-                                  day: "numeric",
-                                })}
-                                <Clock className="w-4 h-4 ml-2" />
-                                {new Date(booking.startsAt).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </div>
-                            </div>
-                            <span
-                              className={`text-xs font-bold px-3 py-1 rounded-full whitespace-nowrap ${getStatusColor(
-                                booking.status
-                              )}`}
-                            >
-                              {displayStatus}
-                            </span>
-                          </div>
+              return (
+                <li key={booking.id} className="space-y-4 rounded-3xl bg-card p-4 sm:p-5">
+                  <div className="flex items-start gap-4">
+                    <div className="grid w-14 shrink-0 place-items-center rounded-2xl bg-secondary py-2 text-primary">
+                      <span className="text-xs font-semibold uppercase">{when.toLocaleDateString([], { month: "short" })}</span>
+                      <span className="font-display text-2xl font-bold leading-none">{when.getDate()}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-lg font-semibold">{booking.service}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="size-4" />
+                          {when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <User className="size-4" />
+                          {booking.stylistName ?? "To be assigned"}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Wallet className="size-4" />₹{Math.round(Number(booking.payableAmount ?? 0))}
+                        </span>
+                      </p>
+                    </div>
+                    <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", status.tone)}>
+                      <StatusIcon className="size-3.5" />
+                      {displayStatus}
+                    </span>
+                  </div>
 
-                          {/* Details Grid */}
-                          <div className="grid grid-cols-2 gap-4 text-sm py-3 border-t border-b border-border/50">
-                            <div>
-                              <p className="text-muted-foreground">Stylist</p>
-                              <p className="font-semibold text-foreground flex items-center gap-1">
-                                <User className="w-4 h-4" />
-                                {booking.stylistName ?? "To be assigned"}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-muted-foreground">Amount paid</p>
-                              <p className="font-semibold text-foreground">
-                                ₹{Number(booking.payableAmount ?? 0).toFixed(2)}
-                              </p>
-                            </div>
-                          </div>
+                  {pendingAutoComplete ? (
+                    <p className="flex items-center gap-2 rounded-2xl bg-accent/15 px-3 py-2 text-sm font-medium text-accent">
+                      <Loader2 className="size-4 animate-spin" />
+                      Wraps up in {formatCountdownMs(getPendingAutoCompleteCountdownMs(booking, nowMs))}
+                    </p>
+                  ) : null}
 
-                          {/* Auto-complete Timer */}
-                          {pendingAutoComplete && (
-                            <div className="rounded-lg bg-amber-100/50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-400 font-medium">
-                              Service in progress • Auto-completes in {pendingTimerText}
-                            </div>
-                          )}
+                  {isNoShowBooking(booking) ? (
+                    <p className="flex items-center gap-2 rounded-2xl bg-warning/15 px-3 py-2 text-sm font-medium">
+                      <ShieldAlert className="size-4 shrink-0" />
+                      Missed visit · no refund
+                    </p>
+                  ) : null}
 
-                          {/* No-show notice */}
-                          {isNoShowBooking(booking) && (
-                            <div className="flex items-start gap-2 rounded-lg bg-amber-100/50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-400">
-                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                              <span>
-                                This slot passed without a visit, so it was marked as a missed appointment. The ₹
-                                {Number(booking.payableAmount ?? 0).toFixed(2)} paid for it is non-refundable.
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Actions */}
-                          <div className="flex flex-wrap gap-2 pt-2">
-                            <a
-                              href={toApiUrl(
-                                `/api/customer/bookings/${booking.id}/invoice.pdf`
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium underline"
-                            >
-                              <Download className="w-4 h-4" />
-                              Invoice
-                            </a>
-                            {reviewable &&
-                              (existingFeedback ? (
-                                <span
-                                  ref={(el) => (reviewedBadgeRefs.current[booking.id] = el)}
-                                  className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent"
-                                >
-                                  <StarRating value={existingFeedback.rating} readOnly size="sm" />
-                                  Reviewed
-                                </span>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-accent hover:text-accent hover:bg-accent/10"
-                                  onClick={() => openReviewDialog(booking)}
-                                >
-                                  <MessageSquareHeart className="mr-1.5 w-4 h-4" />
-                                  Rate &amp; review
-                                </Button>
-                              ))}
-                            {cancellable && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => void openCancelDialog(booking)}
-                              >
-                                <Ban className="mr-1.5 w-4 h-4" />
-                                Cancel
-                              </Button>
-                            )}
-                            {removable && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                disabled={isDeleting}
-                                onClick={() => void handleRemoveFromHistory(booking)}
-                              >
-                                <Trash2 className="mr-1.5 w-4 h-4" />
-                                {isDeleting ? "Removing..." : "Remove"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild variant="secondary" size="sm" className="rounded-full">
+                      <a href={toApiUrl(`/api/customer/bookings/${booking.id}/invoice.pdf`)} target="_blank" rel="noreferrer">
+                        <Download /> Invoice
+                      </a>
+                    </Button>
+                    {reviewable ? (
+                      existingFeedback ? (
+                        <span
+                          ref={(el) => (reviewedBadgeRefs.current[booking.id] = el)}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent"
+                        >
+                          <StarRating value={existingFeedback.rating} readOnly size="sm" />
+                        </span>
+                      ) : (
+                        <Button type="button" variant="secondary" size="sm" className="rounded-full" onClick={() => openReviewDialog(booking)}>
+                          <MessageSquareHeart className="text-accent" /> Review
+                        </Button>
+                      )
+                    ) : null}
+                    {cancellable ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="rounded-full text-destructive"
+                        onClick={() => void openCancelDialog(booking)}
+                      >
+                        <Ban /> Cancel
+                      </Button>
+                    ) : null}
+                    {removable ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-full text-muted-foreground"
+                        disabled={isDeleting}
+                        onClick={() => void handleRemoveFromHistory(booking)}
+                      >
+                        {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />} Remove
+                      </Button>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
-      {/* Cancel Dialog */}
+      {/* Cancel dialog */}
       <Dialog open={cancelDialogOpen} onOpenChange={(open) => !open && closeCancelDialog()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
-            <DialogTitle>Cancel booking</DialogTitle>
-            <DialogDescription>
-              Review your refund before confirming cancellation
-            </DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Ban className="size-5 text-destructive" />
+              Cancel booking
+            </DialogTitle>
+            <DialogDescription className="sr-only">Check your refund before cancelling</DialogDescription>
           </DialogHeader>
 
           {cancellationPreviewLoading ? (
-            <LoadingOrb compact label="Loading details…" />
+            <div className="space-y-3">
+              <Skeleton className="h-16" />
+              <Skeleton className="h-24" />
+            </div>
           ) : (
-            <div className="space-y-4">
-              {previewBooking && (
-                <Card className="bg-muted/30">
-                  <CardContent className="pt-4">
-                    <p className="font-bold text-lg">{previewBooking.service}</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      {new Date(previewBooking.startsAt).toLocaleString()}
-                    </p>
-                    <p className="text-sm font-semibold text-foreground mt-2">
-                      Amount paid: ₹{Number(previewBooking.payableAmount ?? 0).toFixed(2)}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {preview?.canCancel ? (
-                <Card className="border-success/30 bg-success/5">
-                  <CardContent className="pt-4">
-                    <div className="space-y-2">
-                      <p className="font-bold text-success text-lg">{preview.tierLabel}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Time until appointment: about {preview.minutesUntilStart} minutes
-                      </p>
-                      <div className="space-y-1 pt-2 border-t border-success/20">
-                        <p className="text-sm font-semibold text-foreground">
-                          You will get: ₹{Number(preview.refundAmount ?? 0).toFixed(2)} ({preview.refundPercent}%)
-                        </p>
-                        {Number(preview.retainedAmount ?? 0) > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            Non-refundable: ₹{Number(preview.retainedAmount ?? 0).toFixed(2)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                  <p className="text-sm text-destructive font-medium">
-                    {preview?.reason ?? "This booking cannot be cancelled."}
+            <div className="space-y-3">
+              {previewBooking ? (
+                <div className="rounded-2xl bg-secondary p-4">
+                  <p className="font-semibold">{previewBooking.service}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground">
+                    {new Date(previewBooking.startsAt).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
                   </p>
                 </div>
+              ) : null}
+
+              {preview?.canCancel ? (
+                <div className="rounded-2xl bg-success/10 p-4">
+                  <p className="text-sm font-semibold text-success">{preview.tierLabel}</p>
+                  <p className="mt-1 font-display text-3xl font-bold">
+                    ₹{Math.round(Number(preview.refundAmount ?? 0))}
+                    <span className="ml-2 font-sans text-sm font-medium text-muted-foreground">back · {preview.refundPercent}%</span>
+                  </p>
+                  {Number(preview.retainedAmount ?? 0) > 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">₹{Math.round(Number(preview.retainedAmount))} not refundable</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="flex items-center gap-2 rounded-2xl bg-destructive/10 p-4 text-sm font-medium text-destructive">
+                  <ShieldAlert className="size-5 shrink-0" />
+                  {preview?.reason ?? "This booking can't be cancelled."}
+                </p>
               )}
             </div>
           )}
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeCancelDialog}>
-              Keep booking
+            <Button type="button" variant="secondary" className="rounded-full" onClick={closeCancelDialog}>
+              Keep it
             </Button>
             <Button
               type="button"
               variant="destructive"
+              className="rounded-full"
               disabled={cancellationPreviewLoading || !preview?.canCancel || isCancelling}
               onClick={() => void confirmCancelBooking()}
             >
-              {isCancelling ? "Cancelling..." : "Confirm cancellation"}
+              {isCancelling ? <Loader2 className="animate-spin" /> : <Ban />}
+              Cancel booking
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Rate & Review Dialog */}
+      {/* Review dialog */}
       <Dialog open={reviewDialogOpen} onOpenChange={(open) => !open && closeReviewDialog()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <MessageSquareHeart className="w-5 h-5 text-accent" />
-              How was your visit?
+              <MessageSquareHeart className="size-5 text-accent" />
+              {reviewTarget?.service ?? "Your visit"}
             </DialogTitle>
-            <DialogDescription>
-              {reviewTarget?.service ? `Rate your ${reviewTarget.service} experience` : "Share your experience"} — it
-              helps us keep making you look and feel your best.
-            </DialogDescription>
+            <DialogDescription className="sr-only">Rate your visit</DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-5 py-2">
+          <div className="space-y-5">
             <div className="flex flex-col items-center gap-2">
               <StarRating value={reviewRating} onChange={setReviewRating} size="lg" />
-              <p className="text-xs text-muted-foreground">
-                {reviewRating === 0 && "Tap a star to rate"}
-                {reviewRating === 1 && "We're sorry to hear that"}
-                {reviewRating === 2 && "We can do better"}
-                {reviewRating === 3 && "Thanks for the honest feedback"}
-                {reviewRating === 4 && "Glad you enjoyed it!"}
-                {reviewRating === 5 && "You're glowing! Thank you!"}
+              <p className="h-4 text-xs text-muted-foreground">
+                {["Tap a star", "Sorry to hear that", "We can do better", "Thanks for the feedback", "Glad you liked it", "Wonderful!"][reviewRating]}
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="review-comment">
-                Tell us more (optional)
-              </label>
-              <textarea
-                id="review-comment"
-                rows={4}
-                maxLength={2000}
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="What made your visit great, or what could we improve?"
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-              />
-            </div>
+            <textarea
+              id="review-comment"
+              rows={3}
+              maxLength={2000}
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              placeholder="Add a comment (optional)"
+              aria-label="Comment"
+              className="flex w-full rounded-2xl bg-secondary px-4 py-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            />
 
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={reviewIsComplaint}
-                onChange={(e) => setReviewIsComplaint(e.target.checked)}
-                className="mt-0.5 size-4 accent-destructive"
-              />
-              <span>
-                <span className="flex items-center gap-1.5 font-medium text-foreground">
-                  <Flag className="w-3.5 h-3.5" />
-                  This is a complaint
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  Flag this so our team follows up directly on what went wrong.
-                </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={reviewIsComplaint}
+              onClick={() => setReviewIsComplaint((value) => !value)}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-2xl p-3 text-left text-sm font-medium",
+                reviewIsComplaint ? "bg-destructive/10 text-destructive" : "bg-secondary"
+              )}
+            >
+              <Flag className="size-4 shrink-0" />
+              <span className="flex-1">This is a complaint</span>
+              <span className={cn("flex h-6 w-11 shrink-0 items-center rounded-full p-0.5", reviewIsComplaint ? "bg-destructive" : "bg-muted-foreground/30")}>
+                <span className={cn("size-5 rounded-full bg-white transition-transform", reviewIsComplaint ? "translate-x-5" : "translate-x-0")} />
               </span>
-            </label>
+            </button>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeReviewDialog}>
+            <Button type="button" variant="secondary" className="rounded-full" onClick={closeReviewDialog}>
               Cancel
             </Button>
-            <Button type="button" disabled={submittingReview} onClick={() => void submitReview()}>
-              {submittingReview ? "Submitting..." : "Submit review"}
+            <Button type="button" className="rounded-full" disabled={submittingReview || reviewRating < 1} onClick={() => void submitReview()}>
+              {submittingReview ? <Loader2 className="animate-spin" /> : null}
+              Send
             </Button>
           </DialogFooter>
         </DialogContent>

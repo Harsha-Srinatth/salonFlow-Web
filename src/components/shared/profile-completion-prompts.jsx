@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Cake, Check, Gift, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -186,11 +186,11 @@ export function ProfileCompletionPrompts() {
       // Refreshing is what closes this popup and lets the next one take its
       // place — the dialogs are driven by the saved account, not local state.
       await refresh();
-      toast.success(
+      notify.success(
         updates.gender ? "Thanks — your services are tailored now" : "Saved — we'll be in touch on your birthday"
       );
     } catch (error) {
-      toast.error(error.message ?? "Could not save that — please try again");
+      notify.error(error.message ?? "Could not save that — please try again");
     } finally {
       setSaving(false);
     }

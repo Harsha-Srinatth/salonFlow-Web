@@ -2,7 +2,8 @@
 
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/empty-state";
 import { cn } from "@/lib/utils";
 import {
   QUEUE_CONFIDENCE_LABEL,
@@ -17,20 +18,23 @@ import {
 } from "@/store/queue-slice";
 import {
   AlertTriangle,
+  CalendarPlus,
   Clock3,
   Hourglass,
+  Info,
   RefreshCw,
   Scissors,
   Ticket,
+  User,
   Users,
   Wifi,
   WifiOff,
+  Zap,
 } from "lucide-react";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
 import { UserLayout } from "../portal/user-layout";
-import { LoadingOrb } from "@/components/shared/loading-orb";
 
 /** Fallback poll cadence used only while the websocket is down. */
 const OFFLINE_POLL_MS = 30000;
@@ -38,145 +42,134 @@ const OFFLINE_POLL_MS = 30000;
 const STALE_TICKET_POLL_MS = 60000;
 
 function StatTile({ icon: Icon, label, value, tone = "primary" }) {
-  const toneClasses = {
+  const tones = {
     primary: "bg-primary/10 text-primary",
     accent: "bg-accent/15 text-accent",
-    success: "bg-success/10 text-success",
+    success: "bg-success/15 text-success",
     neutral: "bg-muted text-muted-foreground",
   };
   return (
-    <div className="rounded-2xl border border-border/70 bg-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight tabular-nums">{value}</p>
-        </div>
-        {Icon ? (
-          <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", toneClasses[tone])}>
-            <Icon className="size-5" />
-          </span>
-        ) : null}
+    <div className="flex items-center gap-3 rounded-2xl bg-card p-4">
+      <span className={cn("grid size-11 shrink-0 place-items-center rounded-xl", tones[tone])}>
+        <Icon className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="font-display text-xl font-bold tabular-nums">{value}</p>
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
       </div>
+    </div>
+  );
+}
+
+/** One dot per person in front of you, then you — readable at a glance. */
+function QueueDots({ ahead }) {
+  const shown = Math.min(ahead, 8);
+  return (
+    <div className="flex items-center gap-1.5" aria-label={`${ahead} ahead of you`}>
+      {Array.from({ length: shown }, (_, i) => (
+        <span key={i} className="size-3 rounded-full bg-primary-foreground/35" />
+      ))}
+      {ahead > shown ? <span className="text-xs font-semibold opacity-80">+{ahead - shown}</span> : null}
+      <span className="grid size-6 place-items-center rounded-full bg-card text-primary">
+        <User className="size-3.5" />
+      </span>
+    </div>
+  );
+}
+
+function Fact({ icon: Icon, label, value }) {
+  return (
+    <div className="min-w-0 rounded-2xl bg-primary-foreground/10 p-3">
+      <p className="flex items-center gap-1.5 text-xs opacity-80">
+        <Icon className="size-3.5" />
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-base font-semibold tabular-nums">{value}</p>
     </div>
   );
 }
 
 function MyTicketCard({ entry, confidence }) {
-  const isInService = entry.status === "STARTED";
+  const inService = entry.status === "STARTED";
+  const minutes = inService ? entry.remainingMinutes : entry.waitMinutes;
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-accent/5 to-transparent p-6 sm:p-8">
-      <div className="absolute -right-20 -top-20 size-40 rounded-full bg-primary/5 blur-3xl" />
-      <div className="relative z-10 space-y-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-sm font-semibold text-primary">
-            <Ticket className="size-4" />
-            {entry.ticket}
+    <section className="rounded-3xl bg-primary p-6 text-primary-foreground sm:p-8">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-sm font-bold text-primary">
+          <Ticket className="size-4" />
+          {entry.ticket}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-xs font-semibold">
+          {inService ? <Scissors className="size-3.5" /> : <Hourglass className="size-3.5" />}
+          {inService ? "In service" : "Waiting"}
+        </span>
+        {entry.needsAssignment ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive px-3 py-1.5 text-xs font-semibold text-white">
+            <AlertTriangle className="size-3.5" />
+            Stylist pending
           </span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
-              isInService ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
-            )}
-          >
-            {isInService ? "In service" : "Waiting"}
-          </span>
-          {entry.needsAssignment ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-3 py-1.5 text-xs font-semibold text-destructive">
-              <AlertTriangle className="size-3.5" />
-              Awaiting stylist assignment
-            </span>
-          ) : null}
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            {isInService ? "Estimated time remaining" : "Estimated wait"}
-          </p>
-          <p className="mt-1 text-4xl font-bold tracking-tight sm:text-5xl">
-            {formatWaitLabel(isInService ? entry.remainingMinutes : entry.waitMinutes)}
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {isInService
-              ? `Expected to finish around ${formatClockTime(entry.expectedEndAt)}`
-              : `You should be seated around ${formatClockTime(entry.expectedStartAt)}`}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Ahead of you</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {isInService ? "—" : entry.peopleAhead}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Salon position</p>
-            <p className="mt-1 text-lg font-semibold tabular-nums">
-              {isInService ? "—" : (entry.salonPosition ?? "—")}
-            </p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Service</p>
-            <p className="mt-1 truncate text-lg font-semibold">{entry.serviceName}</p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Stylist</p>
-            <p className="mt-1 truncate text-lg font-semibold">{entry.stylistName ?? "To be assigned"}</p>
-          </div>
-        </div>
-
-        {entry.delayMinutes > 0 ? (
-          <p className="flex items-center gap-2 rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
-            <Clock3 className="size-4 shrink-0" />
-            Running about {formatWaitLabel(entry.delayMinutes)} behind the {formatClockTime(entry.scheduledStartAt)} slot.
-          </p>
         ) : null}
-
-        <p className="text-xs text-muted-foreground">
-          {QUEUE_CONFIDENCE_LABEL[confidence] ?? QUEUE_CONFIDENCE_LABEL.LOW}
-        </p>
+        <span className="ml-auto" title={QUEUE_CONFIDENCE_LABEL[confidence] ?? QUEUE_CONFIDENCE_LABEL.LOW}>
+          <Info className="size-4 opacity-70" />
+        </span>
       </div>
-    </div>
+
+      <div className="mt-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-sm opacity-80">{inService ? "Done in about" : "Your turn in about"}</p>
+          <p className="font-display text-5xl font-bold tracking-tight tabular-nums sm:text-6xl">{formatWaitLabel(minutes)}</p>
+          <p className="mt-1 flex items-center gap-1.5 text-sm opacity-90">
+            <Clock3 className="size-4" />
+            {inService ? formatClockTime(entry.expectedEndAt) : formatClockTime(entry.expectedStartAt)}
+          </p>
+        </div>
+        {!inService ? <QueueDots ahead={entry.peopleAhead ?? 0} /> : null}
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Fact icon={Users} label="Ahead" value={inService ? "-" : entry.peopleAhead} />
+        <Fact icon={Hourglass} label="Position" value={inService ? "-" : (entry.salonPosition ?? "-")} />
+        <Fact icon={Scissors} label="Service" value={entry.serviceName} />
+        <Fact icon={User} label="Stylist" value={entry.stylistName ?? "Pending"} />
+      </div>
+
+      {entry.delayMinutes > 0 ? (
+        <p className="mt-4 flex items-center gap-2 rounded-2xl bg-primary-foreground/10 px-3 py-2 text-sm">
+          <Clock3 className="size-4 shrink-0" />
+          Running {formatWaitLabel(entry.delayMinutes)} late
+        </p>
+      ) : null}
+    </section>
   );
 }
 
 function QueueBoardRow({ entry, isMine }) {
-  const isInService = entry.status === "STARTED";
+  const inService = entry.status === "STARTED";
   return (
-    <li
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3",
-        isMine ? "border-primary bg-primary/5" : "border-border/70 bg-card"
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-3">
-        <span
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-lg text-xs font-bold tabular-nums",
-            isInService ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
-          )}
-        >
-          {isInService ? "•" : (entry.salonPosition ?? "—")}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">
-            {entry.ticket}
-            {isMine ? <span className="ml-2 text-xs font-medium text-primary">You</span> : null}
-          </p>
-          <p className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-            <Scissors className="size-3 shrink-0" />
-            {entry.serviceName}
-            {entry.stylistName ? ` · ${entry.stylistName}` : ""}
-          </p>
-        </div>
+    <li className={cn("flex items-center gap-3 rounded-2xl p-3", isMine ? "bg-primary/10 ring-2 ring-primary" : "bg-card")}>
+      <span
+        className={cn(
+          "grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold tabular-nums",
+          inService ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
+        )}
+      >
+        {inService ? <Scissors className="size-4" /> : (entry.salonPosition ?? "-")}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">
+          {entry.ticket}
+          {isMine ? <span className="ml-2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">YOU</span> : null}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {entry.serviceName}
+          {entry.stylistName ? ` · ${entry.stylistName}` : ""}
+        </p>
       </div>
       <div className="text-right">
         <p className="text-sm font-semibold tabular-nums">
-          {isInService ? formatWaitLabel(entry.remainingMinutes) : formatWaitLabel(entry.waitMinutes)}
+          {formatWaitLabel(inService ? entry.remainingMinutes : entry.waitMinutes)}
         </p>
-        <p className="text-xs text-muted-foreground">
-          {isInService ? "left in chair" : formatClockTime(entry.expectedStartAt)}
-        </p>
+        <p className="text-xs text-muted-foreground">{inService ? "left" : formatClockTime(entry.expectedStartAt)}</p>
       </div>
     </li>
   );
@@ -223,121 +216,107 @@ export default function UserQueuePage() {
   const activeEntry = mine?.current ?? null;
   const myTickets = new Set(myEntries.map((entry) => entry.ticket));
   const isFirstLoad = (boardLoading || mineLoading) && !board && !mine;
+  const refreshing = boardLoading || mineLoading;
+
+  const next = summary?.nextWalkInWaitMinutes;
 
   return (
     <UserLayout
       pageTitle="Live Queue"
       actions={
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={() => {
-            void dispatch(fetchQueueBoard());
-            void dispatch(fetchMyQueueStatus());
-          }}
-          disabled={boardLoading || mineLoading}
-        >
-          <RefreshCw className={cn("size-4", (boardLoading || mineLoading) && "animate-spin")} />
-          Refresh
-        </Button>
-      }
-    >
-      <div className="space-y-8">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <>
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium",
-              realtimeConnected ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
+              realtimeConnected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
             )}
           >
             {realtimeConnected ? <Wifi className="size-3.5" /> : <WifiOff className="size-3.5" />}
-            {realtimeConnected ? "Live" : "Reconnecting"}
+            {realtimeConnected ? "Live" : "Offline"}
           </span>
-          {board?.generatedAt ? <span>Updated {formatClockTime(board.generatedAt)}</span> : null}
-        </div>
-
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Refresh"
+            className="rounded-full"
+            disabled={refreshing}
+            onClick={() => {
+              void dispatch(fetchQueueBoard());
+              void dispatch(fetchMyQueueStatus());
+            }}
+          >
+            <RefreshCw className={cn(refreshing && "animate-spin")} />
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-6">
         {boardError || mineError ? (
-          <div className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-center gap-3 rounded-2xl bg-destructive/10 p-4 text-sm font-medium text-destructive">
+            <AlertTriangle className="size-5 shrink-0" />
             {boardError ?? mineError}
           </div>
         ) : null}
 
-        {isFirstLoad ? <LoadingOrb label="Loading the queue…" /> : null}
+        {isFirstLoad ? <Skeleton className="h-64 rounded-3xl" /> : null}
 
-        {!isFirstLoad && activeEntry ? (
-          <MyTicketCard entry={activeEntry} confidence={summary?.confidence} />
-        ) : null}
+        {!isFirstLoad && activeEntry ? <MyTicketCard entry={activeEntry} confidence={summary?.confidence} /> : null}
 
         {!isFirstLoad && !activeEntry ? (
-          <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Ticket className="size-5 text-primary" />
-                You&apos;re not in today&apos;s queue
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {summary?.nextWalkInWaitMinutes === 0
-                  ? "A stylist is free right now — book and walk straight in."
-                  : summary?.nextWalkInWaitMinutes != null
-                    ? `The next stylist frees up in about ${formatWaitLabel(summary.nextWalkInWaitMinutes)}.`
-                    : "Book an appointment to get a ticket and a live wait time."}
-              </p>
-              <Button asChild>
-                <Link to="/user-dashboard/appointments">Book an appointment</Link>
+          <EmptyState
+            icon={Ticket}
+            title="You're not in the queue"
+            description={
+              next === 0
+                ? "A stylist is free right now."
+                : next != null
+                  ? `Next stylist free in about ${formatWaitLabel(next)}.`
+                  : undefined
+            }
+            action={
+              <Button asChild className="h-11 rounded-full px-6">
+                <Link to="/user-dashboard/appointments">
+                  <CalendarPlus /> Book now
+                </Link>
               </Button>
-            </CardContent>
-          </Card>
+            }
+          />
         ) : null}
 
         {summary ? (
-          <div>
-            <h3 className="mb-4 text-xl font-semibold">Salon right now</h3>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile icon={Users} label="Waiting" value={summary.waitingCount} />
-              <StatTile icon={Scissors} label="In service" value={summary.inServiceCount} tone="accent" />
-              <StatTile
-                icon={Hourglass}
-                label="Average wait"
-                value={summary.averageWaitMinutes ? formatWaitLabel(summary.averageWaitMinutes) : "No wait"}
-                tone="neutral"
-              />
-              <StatTile
-                icon={Clock3}
-                label="Next free stylist"
-                value={
-                  summary.nextWalkInWaitMinutes == null ? "—" : formatWaitLabel(summary.nextWalkInWaitMinutes)
-                }
-                tone="success"
-              />
-            </div>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatTile icon={Users} label="Waiting" value={summary.waitingCount} />
+            <StatTile icon={Scissors} label="In service" value={summary.inServiceCount} tone="accent" />
+            <StatTile
+              icon={Hourglass}
+              label="Avg. wait"
+              value={summary.averageWaitMinutes ? formatWaitLabel(summary.averageWaitMinutes) : "None"}
+              tone="neutral"
+            />
+            <StatTile icon={Zap} label="Next free" value={next == null ? "-" : formatWaitLabel(next)} tone="success" />
           </div>
         ) : null}
 
         <div>
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <h3 className="text-xl font-semibold">Live board</h3>
-              <p className="text-sm text-muted-foreground">
-                Everyone is shown by ticket code — no personal details are published here.
-              </p>
-            </div>
-          </div>
+          <h2 className="mb-3 font-display text-xl font-semibold">Live board</h2>
           {board?.entries?.length ? (
             <ul className="space-y-2">
               {board.entries.map((entry) => (
                 <QueueBoardRow key={entry.ticket} entry={entry} isMine={myTickets.has(entry.ticket)} />
               ))}
             </ul>
-          ) : (
-            <div className="rounded-xl border border-dashed bg-muted/20 px-4 py-10 text-center text-sm text-muted-foreground">
-              {isFirstLoad ? "Loading the queue…" : "No one is waiting right now."}
+          ) : isFirstLoad ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }, (_, i) => (
+                <Skeleton key={i} className="h-16 rounded-2xl" />
+              ))}
             </div>
+          ) : (
+            <EmptyState icon={Users} title="No one waiting" className="py-8" />
           )}
           {board?.truncated ? (
             <p className="mt-3 text-xs text-muted-foreground">
-              Showing the next {board.entries.length} of {board.totalEntries} appointments.
+              Showing {board.entries.length} of {board.totalEntries}
             </p>
           ) : null}
         </div>

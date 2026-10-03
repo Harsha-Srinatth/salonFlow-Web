@@ -1,7 +1,7 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -12,24 +12,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { calculateAge, updateCustomerProfile } from "@/lib/customer-profile";
-import {
-  Award,
-  Cake,
-  Calendar,
-  Clock,
-  LogOut,
-  Mail,
-  Phone,
-  User,
-  Edit3,
-  Zap,
-  CheckCircle,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { Cake, Check, Crown, Loader2, LogOut, Mail, Pencil, Phone, User, UserRound, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { LoadingOrb } from "@/components/shared/loading-orb";
 
 const GENDER_LABELS = { MALE: "Male", FEMALE: "Female", OTHER: "Other" };
 
@@ -38,6 +25,22 @@ function todayIso() {
   const now = new Date();
   return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, "0")}-${`${now.getDate()}`.padStart(2, "0")}`;
 }
+
+function InfoRow({ icon: Icon, label, children }) {
+  return (
+    <div className="flex items-center gap-4 py-3">
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-secondary text-primary">
+        <Icon className="size-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <div className="truncate text-[15px] font-semibold">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const Unset = ({ children }) => <span className="text-sm font-normal text-muted-foreground">{children}</span>;
 
 export default function UserProfilePage() {
   const { appUser, loading, logout, refresh } = useAuth();
@@ -56,11 +59,21 @@ export default function UserProfilePage() {
     });
   }, [appUser, editing]);
 
+  // Enabled as soon as the name is valid and something actually changed.
+  const dirty = useMemo(
+    () =>
+      form.name.trim() !== (appUser?.name ?? "") ||
+      form.gender !== (GENDER_LABELS[appUser?.gender] ? appUser.gender : "") ||
+      form.dateOfBirth !== (appUser?.dateOfBirth ?? ""),
+    [appUser, form]
+  );
+  const canSave = form.name.trim().length > 0 && dirty && !saving;
+
   async function handleSave() {
     setSaving(true);
     try {
       await updateCustomerProfile({
-        name: form.name,
+        name: form.name.trim(),
         // Omit rather than send "": the endpoint treats a missing key as "leave
         // alone", and there is no way to un-answer gender once it's set.
         ...(form.gender ? { gender: form.gender } : {}),
@@ -68,9 +81,9 @@ export default function UserProfilePage() {
       });
       await refresh();
       setEditing(false);
-      toast.success("Profile updated");
+      notify.success("Profile saved");
     } catch (error) {
-      toast.error(error.message ?? "Could not save your profile");
+      notify.error("Couldn't save your profile", { description: error.message });
     } finally {
       setSaving(false);
     }
@@ -79,7 +92,7 @@ export default function UserProfilePage() {
   if (loading) {
     return (
       <UserLayout pageTitle="Profile">
-        <LoadingOrb label="Loading your profile…" className="h-96" />
+        <Skeleton className="h-96 max-w-2xl rounded-3xl" />
       </UserLayout>
     );
   }
@@ -95,285 +108,130 @@ export default function UserProfilePage() {
     );
   }
 
-  const membershipSegment = `${appUser.membershipSegment ?? "FREE"}`.toUpperCase();
-  const createdDate = new Date().toLocaleDateString([], {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const segment = `${appUser.membershipSegment ?? "FREE"}`.toUpperCase();
+  const age = calculateAge(form.dateOfBirth);
 
   return (
-    <UserLayout
-      pageTitle="My Profile"
-      actions={
-        <Button variant="destructive" onClick={() => void logout()}>
-          <LogOut className="mr-2 w-4 h-4" />
-          Sign out
-        </Button>
-      }
-    >
-      <div className="space-y-6 max-w-2xl">
-        {/* Profile Header Card */}
-        <Card className="border-primary/20 overflow-hidden">
-          <div className="h-24 bg-gradient-to-r from-primary/10 to-accent/10" />
-          <CardContent className="pt-0 px-6 pb-6">
-            <div className="flex flex-col sm:flex-row sm:items-end gap-6 -mt-12 mb-6">
-              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center text-white text-5xl font-bold shadow-lg ring-4 ring-card">
-                {appUser.name.charAt(0).toUpperCase()}
-              </div>
+    <UserLayout pageTitle="Profile" width="md">
+      <div className="space-y-4">
+        <section className="flex flex-wrap items-center gap-4 rounded-3xl bg-primary p-5 text-primary-foreground sm:p-6">
+          <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-card font-display text-3xl font-bold text-primary">
+            {appUser.name.charAt(0).toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1 basis-40">
+            <h2 className="truncate font-display text-xl font-bold sm:text-2xl">{appUser.name}</h2>
+            <p className="truncate text-sm opacity-80">{appUser.email}</p>
+          </div>
+          <Link
+            to="/user-dashboard/membership"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1.5 text-sm font-semibold"
+          >
+            <Crown className="size-4" />
+            {segment === "FREE" ? "Free" : segment}
+          </Link>
+        </section>
 
-              <div className="flex-1 pb-1">
-                <h1 className="text-3xl font-bold text-foreground">{appUser.name}</h1>
-                <p className="text-muted-foreground flex items-center gap-2 mt-1">
-                  <Mail className="w-4 h-4" />
-                  {appUser.email}
-                </p>
-              </div>
-
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary font-semibold text-sm">
-                <Award className="w-4 h-4" />
-                {membershipSegment === "FREE" ? "Free member" : `${membershipSegment} member`}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Personal Information */}
-        <Card>
-          <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <User className="w-5 h-5" />
-              Personal information
-            </CardTitle>
+        <section className="rounded-3xl bg-card p-5 sm:p-6">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Details</h2>
             {editing ? null : (
-              <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-                <Edit3 className="mr-2 w-4 h-4" />
-                Edit
+              <Button type="button" variant="secondary" size="sm" className="rounded-full" onClick={() => setEditing(true)}>
+                <Pencil /> Edit
               </Button>
             )}
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {editing ? (
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="profileName">Full name</Label>
-                  <Input
-                    id="profileName"
-                    value={form.name}
-                    autoComplete="name"
-                    onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
-                  />
-                </div>
+          </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="profileGender">Gender</Label>
-                  <Select
-                    value={form.gender || undefined}
-                    onValueChange={(value) => setForm((prev) => ({ ...prev, gender: value }))}
-                  >
-                    <SelectTrigger id="profileGender" className="w-full">
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MALE">Male</SelectItem>
-                      <SelectItem value="FEMALE">Female</SelectItem>
-                      <SelectItem value="OTHER">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Decides which services, stylists and reward cards you're shown.
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="profileDob">Date of birth</Label>
-                  <Input
-                    id="profileDob"
-                    type="date"
-                    max={todayIso()}
-                    min="1900-01-01"
-                    value={form.dateOfBirth}
-                    onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {calculateAge(form.dateOfBirth) !== null
-                      ? `You're ${calculateAge(form.dateOfBirth)} — we'll use this for birthday offers.`
-                      : "Optional. We'll use it for birthday offers."}
-                  </p>
-                </div>
-
-                <div className="rounded-lg bg-muted/40 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Email and phone are verified when you sign in and can't be changed here — contact the salon if
-                    they're wrong.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={saving} onClick={() => void handleSave()}>
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                  <Button type="button" variant="outline" disabled={saving} onClick={() => setEditing(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="pb-4 border-b border-border/50">
-                  <p className="text-sm text-muted-foreground font-medium mb-1">Full name</p>
-                  <p className="text-base font-semibold text-foreground">{appUser.name}</p>
-                </div>
-                <div className="pb-4 border-b border-border/50">
-                  <p className="text-sm text-muted-foreground font-medium mb-1">Email address</p>
-                  <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-muted-foreground" />
-                    {appUser.email}
-                  </p>
-                </div>
-                {appUser.phone && (
-                  <div className="pb-4 border-b border-border/50">
-                    <p className="text-sm text-muted-foreground font-medium mb-1">Phone number</p>
-                    <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      {appUser.phone}
-                    </p>
-                  </div>
-                )}
-                <div className="pb-4 border-b border-border/50">
-                  <p className="text-sm text-muted-foreground font-medium mb-1">Gender</p>
-                  {GENDER_LABELS[appUser.gender] ? (
-                    <p className="text-base font-semibold text-foreground">{GENDER_LABELS[appUser.gender]}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Not set — add it so your services, stylists and reward cards match you.
-                    </p>
-                  )}
-                </div>
-                <div className="last:border-0 last:pb-0">
-                  <p className="text-sm text-muted-foreground font-medium mb-1">Date of birth</p>
-                  {appUser.dateOfBirth ? (
-                    <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                      <Cake className="w-4 h-4 text-muted-foreground" />
-                      {new Date(`${appUser.dateOfBirth}T00:00:00`).toLocaleDateString([], {
-                        year: "numeric",
-                        month: "long",
-                        day: "numeric",
-                      })}
-                      {appUser.age !== null && appUser.age !== undefined ? (
-                        <span className="text-sm font-normal text-muted-foreground">({appUser.age} years old)</span>
-                      ) : null}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Not set — add it to get birthday offers.</p>
-                  )}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Account Status */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Zap className="w-5 h-5 text-accent" />
-              Account status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-2">Membership plan</p>
-                <p className="text-2xl font-bold text-primary">
-                  {membershipSegment === "FREE" ? "Free" : membershipSegment}
-                </p>
-                {membershipSegment === "FREE" && (
-                  <Button asChild variant="outline" size="sm" className="mt-3">
-                    <Link to="/user-dashboard/membership">Upgrade to premium</Link>
-                  </Button>
-                )}
+          {editing ? (
+            <div className="space-y-5 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="profileName" className="flex items-center gap-2">
+                  <User className="size-4 text-primary" /> Name
+                </Label>
+                <Input
+                  id="profileName"
+                  value={form.name}
+                  autoComplete="name"
+                  className="h-12 rounded-xl"
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                />
               </div>
 
-              <div>
-                <p className="text-sm text-muted-foreground font-medium mb-2">Member since</p>
-                <p className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  {createdDate}
-                </p>
+              <div className="space-y-2">
+                <Label htmlFor="profileGender" className="flex items-center gap-2">
+                  <UserRound className="size-4 text-primary" /> Gender
+                </Label>
+                <Select
+                  value={form.gender || undefined}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, gender: value }))}
+                >
+                  <SelectTrigger id="profileGender" className="h-12 w-full rounded-xl">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MALE">Male</SelectItem>
+                    <SelectItem value="FEMALE">Female</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="profileDob" className="flex items-center gap-2">
+                  <Cake className="size-4 text-primary" /> Birthday
+                  {age !== null ? <span className="font-normal text-muted-foreground">· {age} yrs</span> : null}
+                </Label>
+                <Input
+                  id="profileDob"
+                  type="date"
+                  max={todayIso()}
+                  min="1900-01-01"
+                  value={form.dateOfBirth}
+                  className="h-12 rounded-xl"
+                  onChange={(e) => setForm((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <Button type="button" className="h-11 flex-1 rounded-full" disabled={!canSave} onClick={() => void handleSave()}>
+                  {saving ? <Loader2 className="animate-spin" /> : <Check />}
+                  Save
+                </Button>
+                <Button type="button" variant="secondary" className="h-11 rounded-full" disabled={saving} onClick={() => setEditing(false)}>
+                  <X /> Cancel
+                </Button>
               </div>
             </div>
+          ) : (
+            <div className="divide-y divide-border">
+              <InfoRow icon={Mail} label="Email">
+                {appUser.email}
+              </InfoRow>
+              {appUser.phone ? (
+                <InfoRow icon={Phone} label="Phone">
+                  {appUser.phone}
+                </InfoRow>
+              ) : null}
+              <InfoRow icon={UserRound} label="Gender">
+                {GENDER_LABELS[appUser.gender] ?? <Unset>Add gender</Unset>}
+              </InfoRow>
+              <InfoRow icon={Cake} label="Birthday">
+                {appUser.dateOfBirth ? (
+                  new Date(`${appUser.dateOfBirth}T00:00:00`).toLocaleDateString([], {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                ) : (
+                  <Unset>Add birthday</Unset>
+                )}
+              </InfoRow>
+            </div>
+          )}
+        </section>
 
-            {membershipSegment !== "FREE" && (
-              <div className="rounded-lg bg-success/10 border border-success/30 p-4 flex items-start gap-3">
-                <CheckCircle className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold text-success text-sm">Member benefits active</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    You're enjoying exclusive discounts and offers on every visit!
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Quick access</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <Button asChild className="w-full justify-start" variant="outline" size="lg">
-              <Link to="/user-dashboard/appointments">
-                <span className="text-lg mr-3">📅</span>
-                <span className="font-medium">Book an appointment</span>
-              </Link>
-            </Button>
-            <Button asChild className="w-full justify-start" variant="outline" size="lg">
-              <Link to="/user-dashboard/offers">
-                <span className="text-lg mr-3">🎁</span>
-                <span className="font-medium">View available offers</span>
-              </Link>
-            </Button>
-            <Button asChild className="w-full justify-start" variant="outline" size="lg">
-              <Link to="/user-dashboard/booking-history">
-                <span className="text-lg mr-3">📜</span>
-                <span className="font-medium">View booking history</span>
-              </Link>
-            </Button>
-            <Button asChild className="w-full justify-start" variant="outline" size="lg">
-              <Link to="/user-dashboard/membership">
-                <span className="text-lg mr-3">👑</span>
-                <span className="font-medium">Membership details</span>
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Sign Out Section */}
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg text-destructive flex items-center gap-2">
-              <LogOut className="w-5 h-5" />
-              Sign out
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Sign out of your account on this device. You'll need to log in again to access your profile.
-            </p>
-            <Button
-              variant="destructive"
-              className="w-full sm:w-auto"
-              size="lg"
-              onClick={() => void logout()}
-            >
-              <LogOut className="mr-2 w-4 h-4" />
-              Sign out now
-            </Button>
-          </CardContent>
-        </Card>
+        <Button variant="secondary" className="h-12 w-full rounded-full text-destructive" onClick={() => void logout()}>
+          <LogOut /> Sign out
+        </Button>
       </div>
     </UserLayout>
   );

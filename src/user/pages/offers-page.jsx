@@ -1,23 +1,110 @@
 "use client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CustomerOffersPanel } from "@/components/offers/customer-offers-panel";
+import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/empty-state";
 import {
   applyCustomerComboOffer,
   clearCustomerComboOffer,
   fetchCustomerOffers,
 } from "@/store/customer-bookings-slice";
-import { Gift, Sparkles, ArrowRight } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { ArrowRight, Check, Crown, Gift, PackageOpen, Percent, Scissors, Sparkles, X } from "lucide-react";
 import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+
+const rupees = (value) => `₹${Math.round(Number(value) || 0)}`;
+
+function endsLabel(endAt) {
+  if (!endAt) return null;
+  return `Ends ${new Date(endAt).toLocaleDateString([], { day: "numeric", month: "short" })}`;
+}
+
+function SectionTitle({ icon: Icon, children }) {
+  return (
+    <h2 className="mb-3 flex items-center gap-2 font-display text-xl font-semibold">
+      <Icon className="size-5 text-primary" />
+      {children}
+    </h2>
+  );
+}
+
+function PriceOffer({ offer, member }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-card p-4">
+      <span
+        className={cn(
+          "grid size-12 shrink-0 place-items-center rounded-xl font-display text-sm font-bold",
+          member ? "bg-accent/15 text-accent" : "bg-primary/10 text-primary"
+        )}
+      >
+        {Math.round(offer.discountPercent)}%
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold">{offer.serviceName}</p>
+        <p className="text-sm">
+          <span className="font-bold text-primary">{rupees(offer.finalPrice)}</span>{" "}
+          <span className="text-muted-foreground line-through">{rupees(offer.originalPrice)}</span>
+        </p>
+      </div>
+      {member ? <Crown className="size-5 shrink-0 text-accent" /> : null}
+    </div>
+  );
+}
+
+function ComboCard({ combo, applied, onApply, onClear }) {
+  return (
+    <div className={cn("flex flex-col gap-3 rounded-2xl bg-card p-4 ring-2", applied ? "ring-primary" : "ring-transparent")}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold">
+            <Gift className="size-5 shrink-0 text-accent" />
+            <span className="truncate">{combo.name}</span>
+          </p>
+          <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Scissors className="mt-0.5 size-3.5 shrink-0" />
+            {(combo.serviceNames ?? []).join(" · ")}
+          </p>
+        </div>
+        {Number(combo.savings) > 0 ? (
+          <span className="shrink-0 rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success">
+            Save {rupees(combo.savings)}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <p>
+          <span className="font-display text-2xl font-bold text-primary">{rupees(combo.offerPrice)}</span>{" "}
+          <span className="text-sm text-muted-foreground line-through">{rupees(combo.actualPrice)}</span>
+        </p>
+        <div className="flex gap-2">
+          {applied ? (
+            <Button type="button" size="icon" variant="secondary" className="rounded-full" aria-label="Remove combo" onClick={onClear}>
+              <X />
+            </Button>
+          ) : null}
+          <Button type="button" className="rounded-full" variant={applied ? "secondary" : "default"} onClick={() => onApply(combo)}>
+            {applied ? (
+              <>
+                <Check /> Applied
+              </>
+            ) : (
+              <>
+                Apply <ArrowRight />
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function UserOffersPage() {
-  const { appUser, loading, logout } = useAuth();
+  const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { offers, offersLoading, bookingForm } = useSelector((state) => state.customerBookings);
@@ -29,14 +116,14 @@ export default function UserOffersPage() {
 
   function onApplyCombo(combo) {
     dispatch(applyCustomerComboOffer(combo));
-    toast.success("Combo applied! Proceed to booking.");
+    notify.success("Combo applied", { description: "Pick a time to finish booking." });
     navigate("/user-dashboard/appointments");
   }
 
   if (loading) {
     return (
       <UserLayout pageTitle="Offers">
-        <LoadingOrb label="Loading offers…" className="h-96" />
+        <Skeleton className="h-96 rounded-3xl" />
       </UserLayout>
     );
   }
@@ -52,84 +139,90 @@ export default function UserOffersPage() {
     );
   }
 
-  return (
-    <UserLayout
-      pageTitle="Exclusive Offers"
-      actions={
-        <Button variant="destructive" onClick={() => void logout()}>
-          Sign out
-        </Button>
-      }
-    >
-      <div className="space-y-8">
-        {/* Hero Header */}
-        <div className="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/10 via-primary/5 to-transparent p-8 overflow-hidden relative">
-          <div className="absolute -right-20 -top-20 w-40 h-40 bg-accent/10 rounded-full blur-3xl" />
-          <div className="relative z-10">
-            <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-accent/20">
-                <Sparkles className="w-8 h-8 text-accent" />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
-                  Save more with our offers
-                </h2>
-                <p className="text-base text-muted-foreground leading-relaxed">
-                  Browse exclusive deals and apply combo offers to your next booking. Save up to 40% on your favorite services!
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+  const globalDiscount = offers?.globalDiscount ?? null;
+  const serviceOffers = offers?.serviceOffers ?? [];
+  const membershipOffers = offers?.membershipOffers ?? [];
+  const combos = offers?.combos ?? [];
+  const hasAny = Boolean(globalDiscount) || serviceOffers.length || membershipOffers.length || combos.length;
 
-        {/* Offers Panel or Empty State */}
-        {offersLoading ? (
-          <LoadingOrb label="Loading offers…" />
-        ) : !offers || offers.length === 0 ? (
-          <Card className="border-dashed border-2">
-            <CardContent className="pt-16 pb-16 text-center">
-              <Gift className="mx-auto w-16 h-16 text-muted-foreground/30 mb-4" />
-              <p className="text-xl font-semibold text-foreground mb-2">No active offers right now</p>
-              <p className="text-sm text-muted-foreground mb-8 max-w-sm mx-auto">
-                Check back soon for exclusive deals, seasonal offers, and special promotions for our valued customers!
-              </p>
-              <Button asChild size="lg">
+  return (
+    <UserLayout pageTitle="Offers">
+      {offersLoading && !offers ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          {Array.from({ length: 4 }, (_, i) => (
+            <Skeleton key={i} className="h-28 rounded-2xl" />
+          ))}
+        </div>
+      ) : !hasAny ? (
+        <EmptyState
+          icon={PackageOpen}
+          title="No offers right now"
+          description="New deals show up here."
+          action={
+            <Button asChild className="h-11 rounded-full px-6">
+              <Link to="/user-dashboard/appointments">Book a visit</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-8">
+          {globalDiscount ? (
+            <div className="flex items-center gap-4 rounded-3xl bg-primary p-5 text-primary-foreground sm:p-6">
+              <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary-foreground/15">
+                <Sparkles className="size-7" />
+              </span>
+              <div className="min-w-0">
+                <p className="font-display text-xl font-bold">{globalDiscount.label}</p>
+                {endsLabel(globalDiscount.endAt) ? <p className="text-sm opacity-80">{endsLabel(globalDiscount.endAt)}</p> : null}
+              </div>
+              <Button asChild className="ml-auto hidden rounded-full bg-card text-primary customer:hover:bg-card! sm:inline-flex">
                 <Link to="/user-dashboard/appointments">
-                  Book anyway
-                  <ArrowRight className="ml-2 w-4 h-4" />
+                  Book <ArrowRight />
                 </Link>
               </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div>
-            <h3 className="mb-4 text-xl font-semibold text-foreground">Available offers</h3>
-            <CustomerOffersPanel
-              offers={offers}
-              selectedComboId={bookingForm.comboId}
-              onApplyCombo={onApplyCombo}
-              onClearCombo={() => dispatch(clearCustomerComboOffer())}
-            />
-          </div>
-        )}
+            </div>
+          ) : null}
 
-        {/* CTA Section */}
-        {offers && offers.length > 0 && (
-          <Card className="bg-gradient-to-r from-primary/5 to-accent/5 border-primary/20">
-            <CardContent className="pt-8">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground font-medium mb-4">Ready to book?</p>
-                <Button asChild size="lg">
-                  <Link to="/user-dashboard/appointments">
-                    Apply an offer and book now
-                    <ArrowRight className="ml-2 w-4 h-4" />
-                  </Link>
-                </Button>
+          {combos.length ? (
+            <section>
+              <SectionTitle icon={Gift}>Combos</SectionTitle>
+              <div className="grid gap-3 md:grid-cols-2">
+                {combos.map((combo) => (
+                  <ComboCard
+                    key={combo.id}
+                    combo={combo}
+                    applied={bookingForm.comboId === combo.id}
+                    onApply={onApplyCombo}
+                    onClear={() => dispatch(clearCustomerComboOffer())}
+                  />
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </section>
+          ) : null}
+
+          {membershipOffers.length ? (
+            <section>
+              <SectionTitle icon={Crown}>Member deals</SectionTitle>
+              <div className="grid gap-3 md:grid-cols-2">
+                {membershipOffers.map((offer) => (
+                  <PriceOffer key={offer.id} offer={offer} member />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {serviceOffers.length ? (
+            <section>
+              <SectionTitle icon={Percent}>Service deals</SectionTitle>
+              <div className="grid gap-3 md:grid-cols-2">
+                {serviceOffers.map((offer) => (
+                  <PriceOffer key={offer.id} offer={offer} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      )}
     </UserLayout>
   );
 }
