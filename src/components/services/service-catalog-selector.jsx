@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { useMemo, useState } from "react";
 
 function offerSourceLabel(source) {
@@ -72,6 +73,9 @@ export function ServiceCatalogSelector({
   onSelectService,
   label,
   pricedServices,
+  variantSelections,
+  membershipSegment,
+  onSelectVariant,
 }) {
   const [searchText, setSearchText] = useState("");
   const [activeCategory, setActiveCategory] = useState("ALL");
@@ -144,6 +148,12 @@ export function ServiceCatalogSelector({
         <Button type="button" size="sm" variant={activeGender === "UNISEX" ? "default" : "outline"} onClick={() => setActiveGender("UNISEX")}>
           Unisex
         </Button>
+        <Button type="button" size="sm" variant={activeGender === "BOY" ? "default" : "outline"} onClick={() => setActiveGender("BOY")}>
+          Boy
+        </Button>
+        <Button type="button" size="sm" variant={activeGender === "GIRL" ? "default" : "outline"} onClick={() => setActiveGender("GIRL")}>
+          Girl
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 rounded-md border p-3 xl:grid-cols-2">
@@ -155,8 +165,11 @@ export function ServiceCatalogSelector({
           const checked = mode === "multi" ? (selectedServiceIds ?? []).includes(service.id) : selectedServiceId === service.id;
           const cardClass = `rounded-md border p-3 transition-colors ${checked ? "border-primary bg-primary/5" : ""}`;
           const priced = pricedById.get(service.id);
-          const originalPrice = Number(priced?.originalPrice ?? service.basePrice ?? 0);
-          const finalPrice = Number(priced?.finalPrice ?? service.basePrice ?? 0);
+          const variants = serviceVariants(service);
+          const resolved = resolveServicePrice(service, variantSelections?.[service.id], membershipSegment);
+          const originalPrice = resolved.price;
+          const percent = Number(priced?.appliedPercent ?? 0);
+          const finalPrice = Math.max(0, Math.round(originalPrice * (1 - percent / 100) * 100) / 100);
           const hasOffer = finalPrice < originalPrice;
 
           if (mode === "single") {
@@ -224,6 +237,23 @@ export function ServiceCatalogSelector({
                   </div>
                 </div>
               </label>
+              {variants.length ? (
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  Option
+                  <select
+                    className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm text-foreground"
+                    value={resolved.variant?.name ?? ""}
+                    onChange={(e) => onSelectVariant?.(service.id, e.target.value)}
+                    aria-label={`${service.name}: choose an option`}
+                  >
+                    {variants.map((item) => (
+                      <option key={item.name} value={item.name}>
+                        {item.name} - {formatRupees(resolveServicePrice({ ...service, variants: [item] }, item.name, membershipSegment).price)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
           );
         })}

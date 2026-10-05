@@ -25,8 +25,11 @@ import {
   fetchCustomerStylists,
   resetCustomerBookingForm,
   setCustomerBookingField,
+  setCustomerMembershipSegment,
+  setCustomerVariantSelection,
   setCustomerRecommendedStylists,
 } from "@/store/customer-bookings-slice";
+import { resolveServicePrice } from "@/lib/service-pricing";
 import { cn } from "@/lib/utils";
 import { describeCancellationWindows } from "@/lib/cancellation-policy";
 import {
@@ -330,9 +333,23 @@ export default function UserAppointmentsPage() {
     return stylists;
   }, [selectedSlot, recommendedStylists, stylists]);
   const selectedStylist = stylistOptions.find((item) => item.id === bookingForm.stylistId) ?? null;
+  // Each pick as the customer will be charged for it: chosen size/length in the name, member rate for
+  // member plans, and that option's own duration.
   const selectedServices = useMemo(
-    () => services.filter((service) => bookingForm.serviceIds.includes(service.id)),
-    [services, bookingForm.serviceIds]
+    () =>
+      services
+        .filter((service) => bookingForm.serviceIds.includes(service.id))
+        .map((service) => {
+          const { variant, price } = resolveServicePrice(service, bookingForm.variantSelections?.[service.id], appUser?.membershipSegment);
+          if (!variant) return { ...service, basePrice: price };
+          return {
+            ...service,
+            name: `${service.name} (${variant.name})`,
+            basePrice: price,
+            duration: Number(variant.duration) > 0 ? variant.duration : service.duration,
+          };
+        }),
+    [services, bookingForm.serviceIds, bookingForm.variantSelections, appUser?.membershipSegment]
   );
   const detailService = useMemo(
     () => (detailsServiceId ? services.find((service) => service.id === detailsServiceId) ?? null : null),
@@ -370,13 +387,30 @@ export default function UserAppointmentsPage() {
       dispatch(setCustomerRecommendedStylists([]));
       return;
     }
-    void dispatch(fetchRecommendedStylists({ serviceIds: bookingForm.serviceIds, startsAt: bookingForm.startsAt }));
-  }, [bookingForm.startsAt, bookingForm.serviceIds, dispatch]);
+    void dispatch(
+      fetchRecommendedStylists({
+        serviceIds: bookingForm.serviceIds,
+        startsAt: bookingForm.startsAt,
+        variantSelections: bookingForm.variantSelections,
+      })
+    );
+  }, [bookingForm.startsAt, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
 
   useEffect(() => {
     if (!bookingForm.serviceIds.length || !effectiveBookingDate) return;
-    void dispatch(fetchCustomerSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate }));
-  }, [effectiveBookingDate, bookingForm.serviceIds, dispatch]);
+    void dispatch(
+      fetchCustomerSlots({
+        serviceIds: bookingForm.serviceIds,
+        date: effectiveBookingDate,
+        variantSelections: bookingForm.variantSelections,
+      })
+    );
+  }, [effectiveBookingDate, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
+
+  // The member rate depends on the customer's plan; keep the store's price estimate in step with it.
+  useEffect(() => {
+    dispatch(setCustomerMembershipSegment(appUser?.membershipSegment ?? "FREE"));
+  }, [appUser?.membershipSegment, dispatch]);
 
   // Always keep a valid stylist once a time is chosen, so the form can never look complete yet stay blocked.
   useEffect(() => {
@@ -476,6 +510,7 @@ export default function UserAppointmentsPage() {
     };
     const payload = {
       serviceIds: bookingForm.serviceIds,
+      variantSelections: bookingForm.variantSelections,
       bookingDate: effectiveBookingDate,
       startsAt: bookingForm.startsAt,
       stylistId: bookingForm.stylistId,
@@ -607,7 +642,8 @@ export default function UserAppointmentsPage() {
 
   const unitPrice = (service) => {
     const priced = (offers?.pricedServices ?? []).find((item) => item.serviceId === service.id);
-    return Number(priced?.finalPrice ?? service.basePrice ?? 0);
+    const percent = Number(priced?.appliedPercent ?? 0);
+    return Math.max(0, Math.round((Number(service.basePrice ?? 0) * (1 - percent / 100)) * 100) / 100);
   };
   const nextLabel = step === 0 ? "Pick a time" : "Review";
 
@@ -681,6 +717,9 @@ export default function UserAppointmentsPage() {
                 loading={servicesLoading}
                 selectedIds={bookingForm.serviceIds}
                 pricedServices={offers?.pricedServices}
+                variantSelections={bookingForm.variantSelections}
+                membershipSegment={appUser?.membershipSegment}
+                onSelectVariant={(serviceId, variant) => dispatch(setCustomerVariantSelection({ serviceId, variant }))}
                 onToggle={toggleService}
                 onOpenDetails={openServiceDetails}
               />

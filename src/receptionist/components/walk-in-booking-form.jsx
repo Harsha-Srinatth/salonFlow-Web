@@ -81,9 +81,10 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
         serviceIds: bookingForm.serviceIds,
         date: effectiveBookingDate,
         customerGender: bookingForm.customerGender,
+        variantSelections: bookingForm.variantSelections,
       })
     );
-  }, [bookingForm.customerGender, bookingForm.serviceIds, dispatch, effectiveBookingDate]);
+  }, [bookingForm.customerGender, bookingForm.serviceIds, bookingForm.variantSelections, dispatch, effectiveBookingDate]);
 
   useEffect(() => {
     if (!selectedSlot?.stylists?.length) return;
@@ -144,6 +145,7 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
       customerPhone: bookingForm.customerPhone,
       customerGender: bookingForm.customerGender,
       serviceIds: bookingForm.serviceIds,
+      variantSelections: bookingForm.variantSelections,
       stylistId: bookingForm.stylistId,
       startsAt: bookingForm.startsAt,
       paymentMode: bookingForm.paymentMode,
@@ -310,6 +312,16 @@ export function WalkInBookingForm({ layout = "default", onCreated }) {
             selectedServiceIds={bookingForm.serviceIds ?? []}
             onToggleServiceId={toggleService}
             pricedServices={offers?.pricedServices}
+            variantSelections={bookingForm.variantSelections}
+            membershipSegment={membershipSegment}
+            onSelectVariant={(serviceId, variant) =>
+              dispatch(
+                setReceptionBookingFormField({
+                  field: "variantSelections",
+                  value: { ...(bookingForm.variantSelections ?? {}), [serviceId]: variant },
+                })
+              )
+            }
           />
         </div>
       </div>

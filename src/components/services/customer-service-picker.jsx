@@ -2,6 +2,7 @@
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { serviceImageUrl } from "@/lib/service-image";
+import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { cn } from "@/lib/utils";
 import {
   Brush,
@@ -22,12 +23,12 @@ import {
 import { memo, useDeferredValue, useMemo, useState } from "react";
 
 const CATEGORY_ICONS = [
-  [/hair|cut|style|colou?r/i, Scissors],
+  [/wax|thread|shave|beard|detan|bleach|groom/i, Droplets],
   [/skin|face|facial|clean/i, Sparkles],
   [/nail|mani|pedi/i, Hand],
-  [/spa|massage|body|relax/i, Flower2],
-  [/make|bridal/i, Brush],
-  [/wax|thread|shave|beard/i, Droplets],
+  [/spa|massage|body|relax|reflex/i, Flower2],
+  [/make|bridal|mehendi/i, Brush],
+  [/hair|cut|style|colou?r|kids/i, Scissors],
 ];
 export const iconForCategory = (category) => CATEGORY_ICONS.find(([re]) => re.test(category))?.[1] ?? Sparkles;
 
@@ -36,11 +37,33 @@ const GENDERS = [
   { value: "WOMEN", label: "Women" },
   { value: "MEN", label: "Men" },
   { value: "UNISEX", label: "Unisex" },
+  { value: "CHILDREN", label: "Children" },
 ];
+const CHILD_FILTERS = [
+  { value: "ALL", label: "All kids" },
+  { value: "BOY", label: "Boy" },
+  { value: "GIRL", label: "Girl" },
+];
+const KIDS_CATEGORY = "KIDS GROOMING";
 
 const normalize = (value, fallback) => `${value ?? fallback}`.trim().toUpperCase() || fallback;
-const titleCase = (value) => value.charAt(0) + value.slice(1).toLowerCase();
-const rupees = (value) => `₹${Math.round(Number(value) || 0)}`;
+const titleCase = (value) =>
+  value
+    .toLowerCase()
+    .replace(/(^|[\s&(/-])([a-z])/g, (_, lead, char) => `${lead}${char.toUpperCase()}`)
+    .replace(/'S\b/g, "'s");
+const rupees = (value) => formatRupees(value);
+
+/** Children = anything for a boy or girl, plus kids services that are for both (e.g. Kids Cut). */
+function matchesAudience(service, gender, child) {
+  const audience = normalize(service.gender, "UNISEX");
+  if (gender === "ALL") return true;
+  if (gender !== "CHILDREN") return audience === gender;
+  const forBothKids = normalize(service.category, "GENERAL") === KIDS_CATEGORY && audience === "UNISEX";
+  if (child === "BOY") return audience === "BOY" || forBothKids;
+  if (child === "GIRL") return audience === "GIRL" || forBothKids;
+  return audience === "BOY" || audience === "GIRL" || forBothKids;
+}
 
 function Chip({ active, onClick, icon: Icon, children }) {
   return (
@@ -59,97 +82,146 @@ function Chip({ active, onClick, icon: Icon, children }) {
   );
 }
 
-const ServiceCard = memo(function ServiceCard({ service, selected, priced, onToggle, onOpenDetails }) {
+const ServiceCard = memo(function ServiceCard({
+  service,
+  selected,
+  priced,
+  variant,
+  membershipSegment,
+  onToggle,
+  onSelectVariant,
+  onOpenDetails,
+}) {
   const Icon = iconForCategory(service.category ?? "");
-  const original = Number(priced?.originalPrice ?? service.basePrice ?? 0);
-  const final = Number(priced?.finalPrice ?? service.basePrice ?? 0);
+  const variants = serviceVariants(service);
+  const resolved = resolveServicePrice(service, variant, membershipSegment);
+  const original = resolved.price;
   const percent = Number(priced?.appliedPercent) > 0 ? Number(priced.appliedPercent) : 0;
+  const final = Math.max(0, Math.round(original * (1 - percent / 100) * 100) / 100);
   const hasOffer = final < original;
+  const duration = Number(resolved.variant?.duration) > 0 ? resolved.variant.duration : service.duration;
+  const showMemberHint = resolved.memberPrice != null && resolved.memberPrice < resolved.listPrice && resolved.price === resolved.listPrice;
   const photoCount = Array.isArray(service.images) ? service.images.length : service.image ? 1 : 0;
   return (
     <div
       className={cn(
-        "relative flex w-full items-stretch rounded-2xl [contain-intrinsic-size:auto_112px] [content-visibility:auto]",
+        "relative flex w-full flex-col rounded-2xl [contain-intrinsic-size:auto_112px] [content-visibility:auto]",
         selected ? "bg-primary/10 ring-2 ring-primary" : "bg-card ring-2 ring-transparent"
       )}
     >
-      {/* Opens the details only. Adding to the booking is the separate control on the right. */}
-      <button
-        type="button"
-        onClick={() => onOpenDetails(service.id)}
-        aria-label={`${service.name}: view details`}
-        className="flex min-w-0 flex-1 gap-3 rounded-2xl p-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <span className="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-primary">
-          {service.image ? (
-            <img
-              src={serviceImageUrl(service.image)}
-              alt=""
-              width={96}
-              height={96}
-              loading="lazy"
-              decoding="async"
-              className="size-full object-cover"
-            />
-          ) : (
-            <Icon className="size-8" />
-          )}
-          {photoCount > 1 ? (
-            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-              <Images className="size-3" /> {photoCount}
-            </span>
-          ) : null}
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
-          <span>
-            <span className="block truncate text-[15px] font-semibold">{service.name}</span>
-            {service.description ? (
-              <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">{service.description}</span>
+      <div className="flex items-stretch">
+        {/* Opens the details only. Adding to the booking is the separate control on the right. */}
+        <button
+          type="button"
+          onClick={() => onOpenDetails(service.id)}
+          aria-label={`${service.name}: view details`}
+          className="flex min-w-0 flex-1 gap-3 rounded-2xl p-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <span className="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-primary">
+            {service.image ? (
+              <img
+                src={serviceImageUrl(service.image)}
+                alt=""
+                width={96}
+                height={96}
+                loading="lazy"
+                decoding="async"
+                className="size-full object-cover"
+              />
+            ) : (
+              <Icon className="size-8" />
+            )}
+            {photoCount > 1 ? (
+              <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                <Images className="size-3" /> {photoCount}
+              </span>
             ) : null}
           </span>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="size-3.5" />
-              {service.duration} min
+          <span className="flex min-w-0 flex-1 flex-col justify-between py-0.5">
+            <span>
+              <span className="block truncate text-[15px] font-semibold">{service.name}</span>
+              {service.description ? (
+                <span className="mt-0.5 line-clamp-1 block text-xs text-muted-foreground">{service.description}</span>
+              ) : null}
             </span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-base font-bold text-primary">{rupees(final)}</span>
-              {hasOffer ? <span className="text-xs text-muted-foreground line-through">{rupees(original)}</span> : null}
-              {hasOffer && percent ? <span className="text-xs font-semibold text-success">{percent.toFixed(0)}% off</span> : null}
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="size-3.5" />
+                {duration} min
+              </span>
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-base font-bold text-primary">{rupees(final)}</span>
+                {hasOffer ? <span className="text-xs text-muted-foreground line-through">{rupees(original)}</span> : null}
+                {hasOffer && percent ? <span className="text-xs font-semibold text-success">{percent.toFixed(0)}% off</span> : null}
+              </span>
+              {showMemberHint ? <span className="text-xs font-medium text-success">Members {rupees(resolved.memberPrice)}</span> : null}
+            </span>
+            <span className="flex items-center gap-1 text-xs font-medium text-primary">
+              <Info className="size-3.5" /> Details
             </span>
           </span>
-          <span className="flex items-center gap-1 text-xs font-medium text-primary">
-            <Info className="size-3.5" /> Details
-          </span>
-        </span>
-      </button>
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={selected}
-        aria-label={selected ? `Remove ${service.name} from booking` : `Add ${service.name} to booking`}
-        onClick={() => onToggle(service.id, !selected)}
-        className="flex w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-r-2xl border-l border-border/60 text-[11px] font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <span
-          className={cn(
-            "grid size-7 place-items-center rounded-lg border-2 transition-colors",
-            selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-card text-transparent"
-          )}
+        </button>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selected}
+          aria-label={selected ? `Remove ${service.name} from booking` : `Add ${service.name} to booking`}
+          onClick={() => onToggle(service.id, !selected)}
+          className="flex w-16 shrink-0 flex-col items-center justify-center gap-1 rounded-r-2xl border-l border-border/60 text-[11px] font-semibold outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <Check className="size-4" strokeWidth={3} />
-        </span>
-        <span className={selected ? "text-primary" : "text-muted-foreground"}>{selected ? "Added" : "Add"}</span>
-      </button>
+          <span
+            className={cn(
+              "grid size-7 place-items-center rounded-lg border-2 transition-colors",
+              selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50 bg-card text-transparent"
+            )}
+          >
+            <Check className="size-4" strokeWidth={3} />
+          </span>
+          <span className={selected ? "text-primary" : "text-muted-foreground"}>{selected ? "Added" : "Add"}</span>
+        </button>
+      </div>
+      {variants.length ? (
+        <label className="flex items-center gap-2 px-3 pb-3 text-xs font-medium text-muted-foreground">
+          <span className="shrink-0">Choose</span>
+          <select
+            value={resolved.variant?.name ?? ""}
+            onChange={(e) => onSelectVariant(service.id, e.target.value)}
+            aria-label={`${service.name}: choose an option`}
+            className="h-9 min-w-0 flex-1 rounded-lg bg-secondary px-2 text-sm font-medium text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            {variants.map((item) => {
+              const price = resolveServicePrice({ ...service, variants: [item] }, item.name, membershipSegment).price;
+              return (
+                <option key={item.name} value={item.name}>
+                  {item.name} - {formatRupees(price)}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+      ) : null}
     </div>
   );
 });
 
 /** Customer-facing service chooser: image cards, icon chips, instant search. */
-export function CustomerServicePicker({ services, loading, selectedIds, pricedServices, onToggle, onOpenDetails }) {
+export function CustomerServicePicker({
+  services,
+  loading,
+  selectedIds,
+  pricedServices,
+  variantSelections,
+  membershipSegment,
+  onToggle,
+  onSelectVariant,
+  onOpenDetails,
+}) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
   const [gender, setGender] = useState("ALL");
+  const [child, setChild] = useState("ALL");
+  // Options picked on cards that are not in the booking yet; the booking's own choice wins once added.
+  const [localChoice, setLocalChoice] = useState({});
   const deferredQuery = useDeferredValue(query);
 
   const pricedById = useMemo(() => new Map((pricedServices ?? []).map((item) => [item.serviceId, item])), [pricedServices]);
@@ -168,10 +240,22 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
     const text = deferredQuery.trim().toLowerCase();
     return services.filter((service) => {
       if (category !== "ALL" && normalize(service.category, "GENERAL") !== category) return false;
-      if (gender !== "ALL" && normalize(service.gender, "UNISEX") !== gender) return false;
+      if (!matchesAudience(service, gender, child)) return false;
       return !text || `${service.name} ${service.category} ${service.description ?? ""}`.toLowerCase().includes(text);
     });
-  }, [category, deferredQuery, gender, services]);
+  }, [category, child, deferredQuery, gender, services]);
+
+  const variantFor = (service) => variantSelections?.[service.id] ?? localChoice[service.id] ?? "";
+  const handleSelectVariant = (serviceId, name) => {
+    setLocalChoice((current) => ({ ...current, [serviceId]: name }));
+    if (selected.has(serviceId)) onSelectVariant?.(serviceId, name);
+  };
+  const handleToggle = (serviceId, checked) => {
+    onToggle(serviceId, checked);
+    const service = services.find((item) => item.id === serviceId);
+    const chosen = localChoice[serviceId];
+    if (checked && chosen && service && chosen !== defaultVariantName(service)) onSelectVariant?.(serviceId, chosen);
+  };
 
   return (
     <div className="space-y-4">
@@ -208,12 +292,15 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
         ))}
       </div>
 
-      <div className="flex gap-1 rounded-full bg-card p-1 sm:w-fit" role="group" aria-label="Filter by gender">
+      <div className="flex gap-1 overflow-x-auto rounded-full bg-card p-1 sm:w-fit" role="group" aria-label="Filter by audience">
         {GENDERS.map((item) => (
           <button
             key={item.value}
             type="button"
-            onClick={() => setGender(item.value)}
+            onClick={() => {
+              setGender(item.value);
+              setChild("ALL");
+            }}
             aria-pressed={gender === item.value}
             className={cn(
               "h-9 flex-1 rounded-full px-4 text-sm font-medium sm:flex-none",
@@ -224,6 +311,25 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
           </button>
         ))}
       </div>
+
+      {gender === "CHILDREN" ? (
+        <div className="flex gap-1 rounded-full bg-card p-1 sm:w-fit" role="group" aria-label="Filter children's services">
+          {CHILD_FILTERS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setChild(item.value)}
+              aria-pressed={child === item.value}
+              className={cn(
+                "h-9 flex-1 rounded-full px-4 text-sm font-medium sm:flex-none",
+                child === item.value ? "bg-secondary text-foreground" : "text-muted-foreground"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {loading && !services.length ? (
         <div className="grid gap-3 xl:grid-cols-2">
@@ -239,7 +345,10 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
               service={service}
               selected={selected.has(service.id)}
               priced={pricedById.get(service.id)}
-              onToggle={onToggle}
+              variant={variantFor(service)}
+              membershipSegment={membershipSegment}
+              onSelectVariant={handleSelectVariant}
+              onToggle={handleToggle}
               onOpenDetails={onOpenDetails}
             />
           ))}
@@ -255,6 +364,7 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
               setQuery("");
               setCategory("ALL");
               setGender("ALL");
+              setChild("ALL");
             }}
           >
             Clear filters

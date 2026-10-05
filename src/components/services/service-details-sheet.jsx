@@ -10,7 +10,7 @@ import { Check, Clock, Plus, SearchX, Tag, Users, X } from "lucide-react";
 
 const rupees = (value) => `₹${(Math.round(Number(value) * 100) / 100).toLocaleString("en-IN")}`;
 const titleCase = (value) => `${value ?? ""}`.charAt(0) + `${value ?? ""}`.slice(1).toLowerCase();
-const GENDER_LABEL = { MEN: "Men", WOMEN: "Women", UNISEX: "Everyone" };
+const GENDER_LABEL = { MEN: "Men", WOMEN: "Women", UNISEX: "Everyone", BOY: "Boy", GIRL: "Girl" };
 
 function Section({ icon: Icon, label, text }) {
   return (
@@ -96,10 +96,14 @@ export function ServiceDetailsSheet({ open, state, service, selected, priced, fa
                     <DialogPrimitive.Title className="pr-8 font-display text-2xl font-bold leading-tight">{service.name}</DialogPrimitive.Title>
                     <div className="flex flex-wrap items-center gap-2 text-sm">
                       <span className="flex items-baseline gap-2 rounded-full bg-primary/10 px-3 py-1">
+                        {variants.length ? <span className="text-xs text-muted-foreground">from</span> : null}
                         <span className="text-lg font-bold text-primary">{rupees(final)}</span>
                         {hasOffer ? <span className="text-xs text-muted-foreground line-through">{rupees(original)}</span> : null}
                         {hasOffer && percent ? <span className="text-xs font-semibold text-success">{percent.toFixed(0)}% off</span> : null}
                       </span>
+                      {!variants.length && service.memberPrice != null ? (
+                        <span className="rounded-full bg-success/10 px-3 py-1.5 font-medium text-success">Members {rupees(service.memberPrice)}</span>
+                      ) : null}
                       <span className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 font-medium">
                         <Clock className="size-4" /> {service.duration} min
                       </span>
@@ -123,19 +127,22 @@ export function ServiceDetailsSheet({ open, state, service, selected, priced, fa
 
                   {variants.length ? (
                     <section className="space-y-2">
-                      <h3 className="font-display text-base font-semibold">Options</h3>
+                      <h3 className="font-display text-base font-semibold">Options and prices</h3>
                       <ul className="divide-y divide-border rounded-2xl bg-secondary">
                         {variants.map((variant, i) => (
                           <li key={`${variant.name}-${i}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
                             <span className="font-medium">{variant.name}</span>
-                            <span className="shrink-0 text-muted-foreground">
-                              {variant.duration ? `${variant.duration} min · ` : ""}
-                              {rupees(variant.price)}
+                            <span className="flex shrink-0 flex-col items-end text-muted-foreground">
+                              <span className="font-semibold text-foreground">{rupees(variant.price)}</span>
+                              {variant.memberPrice != null ? (
+                                <span className="text-xs text-success">Members {rupees(variant.memberPrice)}</span>
+                              ) : null}
+                              {variant.duration ? <span className="text-xs">{variant.duration} min</span> : null}
                             </span>
                           </li>
                         ))}
                       </ul>
-                      <p className="text-xs text-muted-foreground">Ask your stylist to choose an option at the salon.</p>
+                      <p className="text-xs text-muted-foreground">Pick your option on the services list when you add this to your booking.</p>
                     </section>
                   ) : null}
 

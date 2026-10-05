@@ -125,7 +125,9 @@ export default function AdminServicesPage() {
         const payload = {
             ...serviceDraft,
             basePrice: Number(serviceDraft.basePrice ?? 0),
-            duration: Number(serviceDraft.duration ?? 45),
+            memberPrice: serviceDraft.memberPrice === "" || serviceDraft.memberPrice == null ? null : Number(serviceDraft.memberPrice),
+            duration: Number(serviceDraft.duration || 30),
+            variants: Array.isArray(serviceDraft.variants) ? serviceDraft.variants : [],
         };
         const result = await dispatch(createAdminServiceAsync(payload));
         if (createAdminServiceAsync.rejected.match(result)) {
@@ -142,7 +144,8 @@ export default function AdminServicesPage() {
             category: service.category,
             gender: service.gender,
             basePrice: Number(service.basePrice ?? 0),
-            duration: Number(service.duration ?? 45),
+            memberPrice: service.memberPrice === "" || service.memberPrice == null ? null : Number(service.memberPrice),
+            duration: Number(service.duration || 30),
             description: service.description ?? "",
             image: service.image ?? "",
             variants: Array.isArray(service.variants) ? service.variants : [],
@@ -157,7 +160,7 @@ export default function AdminServicesPage() {
     }
 
     function addVariant(service) {
-        const next = [...(Array.isArray(service.variants) ? service.variants : []), { name: "", price: "", duration: "" }];
+        const next = [...(Array.isArray(service.variants) ? service.variants : []), { name: "", price: "", memberPrice: "", duration: "30" }];
         dispatch(setServiceField({ id: service.id, field: "variants", value: next }));
     }
 
@@ -226,7 +229,7 @@ export default function AdminServicesPage() {
                   <Input id="serviceCategory" value={serviceDraft.category} onChange={(e) => dispatch(setServiceDraftField({ field: "category", value: e.target.value }))}/>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="serviceGender">Gender</Label>
+                  <Label htmlFor="serviceGender">Audience</Label>
                   <Select value={serviceDraft.gender} onValueChange={(value) => dispatch(setServiceDraftField({ field: "gender", value }))}>
                     <SelectTrigger id="serviceGender" className="w-full">
                       <SelectValue placeholder="Select gender"/>
@@ -235,12 +238,18 @@ export default function AdminServicesPage() {
                       <SelectItem value="MEN">Men</SelectItem>
                       <SelectItem value="WOMEN">Women</SelectItem>
                       <SelectItem value="UNISEX">Unisex</SelectItem>
+                      <SelectItem value="BOY">Boy</SelectItem>
+                      <SelectItem value="GIRL">Girl</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="servicePrice">Base price</Label>
                   <Input id="servicePrice" type="number" min="1" value={serviceDraft.basePrice} onChange={(e) => dispatch(setServiceDraftField({ field: "basePrice", value: e.target.value }))}/>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="serviceMemberPrice">Member price (optional)</Label>
+                  <Input id="serviceMemberPrice" type="number" min="1" placeholder="Leave empty if no member rate" value={serviceDraft.memberPrice ?? ""} onChange={(e) => dispatch(setServiceDraftField({ field: "memberPrice", value: e.target.value }))}/>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="serviceDuration">Duration (minutes)</Label>
@@ -290,7 +299,7 @@ export default function AdminServicesPage() {
                     <Input value={service.category ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "category", value: e.target.value }))}/>
                   </div>
                   <div className="space-y-1">
-                    <Label>Gender</Label>
+                    <Label>Audience</Label>
                     <Select value={service.gender ?? "UNISEX"} onValueChange={(value) => dispatch(setServiceField({ id: service.id, field: "gender", value }))}>
                       <SelectTrigger className="w-full">
                         <SelectValue />
@@ -299,6 +308,8 @@ export default function AdminServicesPage() {
                         <SelectItem value="MEN">Men</SelectItem>
                         <SelectItem value="WOMEN">Women</SelectItem>
                         <SelectItem value="UNISEX">Unisex</SelectItem>
+                        <SelectItem value="BOY">Boy</SelectItem>
+                        <SelectItem value="GIRL">Girl</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -307,12 +318,16 @@ export default function AdminServicesPage() {
                     <Input type="number" min="1" value={service.basePrice} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "basePrice", value: e.target.value }))}/>
                   </div>
                   <div className="space-y-1">
+                    <Label className="flex items-center gap-1"><Tag className="size-3" /> Member price</Label>
+                    <Input type="number" min="1" placeholder="No member rate" value={service.memberPrice ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "memberPrice", value: e.target.value }))}/>
+                  </div>
+                  <div className="space-y-1">
                     <Label className="flex items-center gap-1"><Clock className="size-3" /> Duration (minutes)</Label>
-                    <Input type="number" min="10" value={service.duration ?? 45} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "duration", value: e.target.value }))}/>
+                    <Input type="number" min="10" value={service.duration ?? 30} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "duration", value: e.target.value }))}/>
                   </div>
                       <div className="space-y-1 md:col-span-2">
                     <Label>Description</Label>
-                    <Input value={service.description ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "description", value: e.target.value }))}/>
+                    <textarea rows={4} className="w-full rounded-md border bg-transparent px-3 py-2 text-sm" value={service.description ?? ""} onChange={(e) => dispatch(setServiceField({ id: service.id, field: "description", value: e.target.value }))}/>
                   </div>
                       <div className="space-y-1 md:col-span-2">
                     <Label className="flex items-center gap-1.5"><ImagePlus className="size-3.5" /> Service image</Label>
@@ -326,9 +341,10 @@ export default function AdminServicesPage() {
                     <p className="text-sm font-medium">Variants</p>
                     <Button type="button" size="sm" variant="outline" onClick={() => addVariant(service)}>Add variant</Button>
                   </div>
-                  {(Array.isArray(service.variants) ? service.variants : []).map((variant, index) => (<div key={`${service.id}-${index}`} className="grid gap-2 md:grid-cols-4">
+                  {(Array.isArray(service.variants) ? service.variants : []).map((variant, index) => (<div key={`${service.id}-${index}`} className="grid gap-2 md:grid-cols-5">
                       <Input placeholder="Variant name" value={variant?.name ?? ""} onChange={(e) => setVariantField(service, index, "name", e.target.value)}/>
-                      <Input type="number" min="1" placeholder="Price" value={variant?.price ?? ""} onChange={(e) => setVariantField(service, index, "price", e.target.value)}/>
+                      <Input type="number" min="1" placeholder="Regular price" value={variant?.price ?? ""} onChange={(e) => setVariantField(service, index, "price", e.target.value)}/>
+                      <Input type="number" min="1" placeholder="Member price" value={variant?.memberPrice ?? ""} onChange={(e) => setVariantField(service, index, "memberPrice", e.target.value)}/>
                       <Input type="number" min="10" placeholder="Duration" value={variant?.duration ?? ""} onChange={(e) => setVariantField(service, index, "duration", e.target.value)}/>
                       <Button type="button" variant="ghost" onClick={() => removeVariant(service, index)}>
                         <Trash2 className="size-3.5" />

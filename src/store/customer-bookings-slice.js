@@ -3,6 +3,7 @@ import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { connectCustomerBookingsSocket, disconnectCustomerBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { toApiUrl } from "@/lib/api-base";
 import { handleUnauthorizedStatus } from "@/lib/auth/session-manager";
+import { defaultVariantName, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 
 async function apiFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -20,7 +21,7 @@ async function apiFetch(path, init) {
   return response;
 }
 
-function computeCustomerPriceSummary({ serviceIds, comboId, services, offers }) {
+function computeCustomerPriceSummary({ serviceIds, comboId, services, offers, variantSelections, membershipSegment }) {
   if (!serviceIds?.length) {
     return { totalAmount: 0, discountAmount: 0, payableAmount: 0, offerLabel: null };
   }
@@ -48,9 +49,11 @@ function computeCustomerPriceSummary({ serviceIds, comboId, services, offers }) 
   let offerLabel = null;
 
   for (const service of selected) {
-    const originalPrice = Number(service.basePrice ?? 0);
+    // The chosen size/length and the member rate decide the price; offers then apply as a percent.
+    const originalPrice = resolveServicePrice(service, variantSelections?.[service.id], membershipSegment).price;
     const priced = pricedById.get(service.id);
-    const finalPrice = Number(priced?.finalPrice ?? originalPrice);
+    const percent = Number(priced?.appliedPercent ?? 0);
+    const finalPrice = Math.max(0, Math.round((originalPrice - (originalPrice * percent) / 100) * 100) / 100);
     totalAmount += originalPrice;
     payableAmount += finalPrice;
     if (priced?.source && priced.source !== "NONE" && !offerLabel) {
@@ -99,6 +102,34 @@ function readCart() {
     return [];
   }
 }
+const VARIANTS_KEY = "sahasra.customerVariants.v1";
+function readVariantSelections() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(VARIANTS_KEY) ?? "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+function writeVariantSelections(selections) {
+  try {
+    if (Object.keys(selections).length) sessionStorage.setItem(VARIANTS_KEY, JSON.stringify(selections));
+    else sessionStorage.removeItem(VARIANTS_KEY);
+  } catch {
+    /* storage can be blocked; selections then last for this page view */
+  }
+}
+/** Keeps a choice for every selected service that has variants (defaulting to the first) and drops the rest. */
+function reconcileVariantSelections(serviceIds, services, current) {
+  const next = {};
+  for (const id of serviceIds) {
+    const service = (services ?? []).find((item) => item.id === id);
+    if (!service || !serviceVariants(service).length) continue;
+    next[id] = serviceVariants(service).some((v) => v.name === current?.[id]) ? current[id] : defaultVariantName(service);
+  }
+  return next;
+}
+
 function writeCart(ids) {
   try {
     if (ids.length) sessionStorage.setItem(CART_KEY, JSON.stringify(ids));
@@ -154,13 +185,14 @@ export const fetchCustomerServices = createAsyncThunk("customerBookings/fetchSer
 
 export const fetchRecommendedStylists = createAsyncThunk(
   "customerBookings/fetchRecommendedStylists",
-  async ({ serviceIds, startsAt, durationMinutes }, { rejectWithValue }) => {
+  async ({ serviceIds, startsAt, durationMinutes, variantSelections }, { rejectWithValue }) => {
     try {
       const query = new URLSearchParams({
         serviceIds: (serviceIds ?? []).join(","),
         startsAt,
         durationMinutes: `${durationMinutes ?? 45}`,
       });
+      if (variantSelections && Object.keys(variantSelections).length) query.set("variantSelections", JSON.stringify(variantSelections));
       const res = await apiFetch(toApiUrl(`/api/customer/stylists/recommendations?${query.toString()}`));
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return rejectWithValue(data.error ?? "Could not load recommendations");
@@ -173,12 +205,13 @@ export const fetchRecommendedStylists = createAsyncThunk(
 
 export const fetchCustomerSlots = createAsyncThunk(
   "customerBookings/fetchSlots",
-  async ({ serviceIds, date }, { rejectWithValue }) => {
+  async ({ serviceIds, date, variantSelections }, { rejectWithValue }) => {
     try {
       const query = new URLSearchParams({
         serviceIds: (serviceIds ?? []).join(","),
         date,
       });
+      if (variantSelections && Object.keys(variantSelections).length) query.set("variantSelections", JSON.stringify(variantSelections));
       const res = await apiFetch(toApiUrl(`/api/customer/slots?${query.toString()}`));
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return rejectWithValue(data.error ?? "Could not load slots");
@@ -268,11 +301,12 @@ export const connectCustomerRealtime = createAsyncThunk(
           const serviceIds = state?.customerBookings?.bookingForm?.serviceIds ?? [];
           const bookingDate = state?.customerBookings?.bookingForm?.bookingDate;
           const startsAt = state?.customerBookings?.bookingForm?.startsAt;
+          const variantSelections = state?.customerBookings?.bookingForm?.variantSelections ?? {};
           if (serviceIds.length && bookingDate) {
-            void dispatch(fetchCustomerSlots({ serviceIds, date: bookingDate }));
+            void dispatch(fetchCustomerSlots({ serviceIds, date: bookingDate, variantSelections }));
           }
           if (serviceIds.length && startsAt) {
-            void dispatch(fetchRecommendedStylists({ serviceIds, startsAt }));
+            void dispatch(fetchRecommendedStylists({ serviceIds, startsAt, variantSelections }));
           }
         },
         onServiceCatalogUpdated: () => {
@@ -293,6 +327,7 @@ export const disconnectCustomerRealtime = createAsyncThunk("customerBookings/dis
 
 const initialCachedServices = readCachedServices();
 const initialCart = readCart();
+const initialVariants = reconcileVariantSelections(initialCart, initialCachedServices, readVariantSelections());
 
 const customerBookingsSlice = createSlice({
   name: "customerBookings",
@@ -309,11 +344,20 @@ const customerBookingsSlice = createSlice({
       bookingDate: "",
       startsAt: "",
       serviceIds: initialCart,
+      variantSelections: initialVariants,
       stylistId: "",
       comboId: "",
     },
+    membershipSegment: "FREE",
     slots: [],
-    priceSummary: computeCustomerPriceSummary({ serviceIds: initialCart, comboId: "", services: initialCachedServices, offers: null }),
+    priceSummary: computeCustomerPriceSummary({
+      serviceIds: initialCart,
+      comboId: "",
+      services: initialCachedServices,
+      offers: null,
+      variantSelections: initialVariants,
+      membershipSegment: "FREE",
+    }),
     loading: false,
     mutating: false,
     deletingBookingId: null,
@@ -331,6 +375,8 @@ const customerBookingsSlice = createSlice({
       state.bookingForm[field] = value;
       if (field === "serviceIds") {
         writeCart(value);
+        state.bookingForm.variantSelections = reconcileVariantSelections(value, state.services, state.bookingForm.variantSelections);
+        writeVariantSelections(state.bookingForm.variantSelections);
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
@@ -345,6 +391,8 @@ const customerBookingsSlice = createSlice({
           comboId: state.bookingForm.comboId,
           services: state.services,
           offers: state.offers,
+          variantSelections: state.bookingForm.variantSelections,
+          membershipSegment: state.membershipSegment,
         });
       }
       if (field === "bookingDate") {
@@ -356,12 +404,44 @@ const customerBookingsSlice = createSlice({
         state.bookingForm.stylistId = "";
       }
     },
+    setCustomerVariantSelection(state, action) {
+      const { serviceId, variant } = action.payload;
+      state.bookingForm.variantSelections = { ...state.bookingForm.variantSelections, [serviceId]: variant };
+      writeVariantSelections(state.bookingForm.variantSelections);
+      // A different size/length changes the price and possibly the duration, so the chosen slot is stale.
+      state.bookingForm.startsAt = "";
+      state.bookingForm.stylistId = "";
+      state.slots = [];
+      state.priceSummary = computeCustomerPriceSummary({
+        serviceIds: state.bookingForm.serviceIds,
+        comboId: state.bookingForm.comboId,
+        services: state.services,
+        offers: state.offers,
+        variantSelections: state.bookingForm.variantSelections,
+        membershipSegment: state.membershipSegment,
+      });
+    },
+    setCustomerMembershipSegment(state, action) {
+      const segment = `${action.payload ?? "FREE"}`.trim().toUpperCase() || "FREE";
+      if (segment === state.membershipSegment) return;
+      state.membershipSegment = segment;
+      state.priceSummary = computeCustomerPriceSummary({
+        serviceIds: state.bookingForm.serviceIds,
+        comboId: state.bookingForm.comboId,
+        services: state.services,
+        offers: state.offers,
+        variantSelections: state.bookingForm.variantSelections,
+        membershipSegment: segment,
+      });
+    },
     resetCustomerBookingForm(state) {
       writeCart([]);
+      writeVariantSelections({});
       state.bookingForm = {
         bookingDate: "",
         startsAt: "",
         serviceIds: [],
+        variantSelections: {},
         stylistId: "",
         comboId: "",
       };
@@ -387,6 +467,8 @@ const customerBookingsSlice = createSlice({
         comboId: combo.id,
         services: state.services,
         offers: state.offers,
+          variantSelections: state.bookingForm.variantSelections,
+          membershipSegment: state.membershipSegment,
       });
     },
     clearCustomerComboOffer(state) {
@@ -396,6 +478,8 @@ const customerBookingsSlice = createSlice({
         comboId: "",
         services: state.services,
         offers: state.offers,
+          variantSelections: state.bookingForm.variantSelections,
+          membershipSegment: state.membershipSegment,
       });
     },
     setCustomerRecommendedStylists(state, action) {
@@ -459,11 +543,19 @@ const customerBookingsSlice = createSlice({
           state.slots = [];
           writeCart(kept);
         }
+        state.bookingForm.variantSelections = reconcileVariantSelections(
+          state.bookingForm.serviceIds,
+          state.services,
+          state.bookingForm.variantSelections
+        );
+        writeVariantSelections(state.bookingForm.variantSelections);
         state.priceSummary = computeCustomerPriceSummary({
           serviceIds: state.bookingForm.serviceIds,
           comboId: state.bookingForm.comboId,
           services: state.services,
           offers: state.offers,
+          variantSelections: state.bookingForm.variantSelections,
+          membershipSegment: state.membershipSegment,
         });
       })
       .addCase(fetchCustomerOffers.pending, (state) => {
@@ -477,6 +569,8 @@ const customerBookingsSlice = createSlice({
           comboId: state.bookingForm.comboId,
           services: state.services,
           offers: state.offers,
+          variantSelections: state.bookingForm.variantSelections,
+          membershipSegment: state.membershipSegment,
         });
       })
       .addCase(fetchCustomerOffers.rejected, (state) => {
@@ -564,6 +658,8 @@ const customerBookingsSlice = createSlice({
 
 export const {
   setCustomerBookingField,
+  setCustomerVariantSelection,
+  setCustomerMembershipSegment,
   resetCustomerBookingForm,
   applyCustomerComboOffer,
   clearCustomerComboOffer,

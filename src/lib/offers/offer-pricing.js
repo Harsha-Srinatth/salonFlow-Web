@@ -1,4 +1,6 @@
-export function computeOfferPriceSummary({ serviceIds, comboId, services, offers }) {
+import { resolveServicePrice } from "@/lib/service-pricing";
+
+export function computeOfferPriceSummary({ serviceIds, comboId, services, offers, variantSelections, membershipSegment }) {
   if (!serviceIds?.length) {
     return { totalAmount: 0, discountAmount: 0, payableAmount: 0, offerLabel: null };
   }
@@ -26,9 +28,11 @@ export function computeOfferPriceSummary({ serviceIds, comboId, services, offers
   let offerLabel = null;
 
   for (const service of selected) {
-    const originalPrice = Number(service.basePrice ?? 0);
+    // Chosen size/length and the member rate set the price; offers then apply as a percent.
+    const originalPrice = resolveServicePrice(service, variantSelections?.[service.id], membershipSegment).price;
     const priced = pricedById.get(service.id);
-    const finalPrice = Number(priced?.finalPrice ?? originalPrice);
+    const percent = Number(priced?.appliedPercent ?? 0);
+    const finalPrice = Math.max(0, Math.round((originalPrice - (originalPrice * percent) / 100) * 100) / 100);
     totalAmount += originalPrice;
     payableAmount += finalPrice;
     if (priced?.source && priced.source !== "NONE" && !offerLabel) {

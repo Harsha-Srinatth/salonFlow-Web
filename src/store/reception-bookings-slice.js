@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import { connectReceptionBookingsSocket, disconnectReceptionBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { decryptPayloadEnvelope, encryptPayloadEnvelope, isPayloadEncryptionEnabled } from "@/lib/security/payload-envelope";
 import { computeOfferPriceSummary } from "@/lib/offers/offer-pricing";
+import { defaultVariantName, serviceVariants } from "@/lib/service-pricing";
 import { toApiUrl } from "@/lib/api-base";
 import { staffApiFetch } from "@/lib/staff-auth-client";
 
@@ -194,9 +195,10 @@ export const recordReceptionPaymentAsync = createAsyncThunk(
 
 export const fetchReceptionSlots = createAsyncThunk(
   "receptionBookings/fetchSlots",
-  async ({ serviceIds, date, customerGender }, { rejectWithValue }) => {
+  async ({ serviceIds, date, customerGender, variantSelections }, { rejectWithValue }) => {
     try {
       const query = new URLSearchParams({ serviceIds: (serviceIds ?? []).join(","), date });
+      if (variantSelections && Object.keys(variantSelections).length) query.set("variantSelections", JSON.stringify(variantSelections));
       // Without this the backend would fall back to the *receptionist's* gender
       // when picking which stylists can take the slot.
       if (customerGender) query.set("customerGender", customerGender);
@@ -261,6 +263,7 @@ const initialBookingForm = {
   customerGender: "",
   bookingDate: "",
   serviceIds: [],
+  variantSelections: {},
   stylistId: "",
   startsAt: "",
   paymentMode: "OFFLINE_CASH",
@@ -274,7 +277,20 @@ function recomputeReceptionPriceSummary(state) {
     comboId: state.bookingForm.comboId,
     services: state.services,
     offers: state.offers,
+    variantSelections: state.bookingForm.variantSelections,
+    membershipSegment: state.bookingForm.membershipSegment,
   });
+}
+
+/** Keeps a choice for every selected service that has variants (defaulting to the first) and drops the rest. */
+function reconcileVariantSelections(serviceIds, services, current) {
+  const next = {};
+  for (const id of serviceIds) {
+    const service = (services ?? []).find((item) => item.id === id);
+    if (!service || !serviceVariants(service).length) continue;
+    next[id] = serviceVariants(service).some((v) => v.name === current?.[id]) ? current[id] : defaultVariantName(service);
+  }
+  return next;
 }
 
 const receptionBookingsSlice = createSlice({
@@ -316,6 +332,7 @@ const receptionBookingsSlice = createSlice({
       if (field === "serviceIds") {
         const ids = Array.isArray(value) ? value : [];
         state.bookingForm.serviceIds = ids;
+        state.bookingForm.variantSelections = reconcileVariantSelections(ids, state.services, state.bookingForm.variantSelections);
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
@@ -330,6 +347,14 @@ const receptionBookingsSlice = createSlice({
       }
       // Gender decides which stylists may take the slot, so an already-picked
       // slot/stylist can stop being valid the moment it changes.
+      if (field === "variantSelections") {
+        // A different size/length changes price and possibly duration, so a picked slot is stale.
+        state.bookingForm.startsAt = "";
+        state.bookingForm.stylistId = "";
+        state.slots = [];
+        recomputeReceptionPriceSummary(state);
+        return;
+      }
       if (field === "bookingDate" || field === "customerGender") {
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
