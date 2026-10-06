@@ -53,3 +53,72 @@ export function salonHour(iso) {
   }
   return Number(hourFormatter.format(new Date(iso))) % 24;
 }
+
+/* ---- Additive helpers for the design kit (DateStrip, MonthExpander, formatting). ----
+   Everything works on salon-local "YYYY-MM-DD" strings and does arithmetic in UTC so the
+   device's own time zone can never shift a day. */
+
+/** The salon time zone in use (VITE_SALON_TIMEZONE, default Asia/Kolkata). */
+export const SALON_TIMEZONE = ZONE;
+
+const isoToUtc = (iso) => {
+  const [y, m, d] = `${iso}`.split("-").map(Number);
+  return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+};
+
+/** `iso` plus `days` (may be negative), as YYYY-MM-DD. */
+export function addDaysIso(iso, days) {
+  const date = isoToUtc(iso);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Whole days from `a` to `b` (b - a). */
+export function diffDaysIso(a, b) {
+  return Math.round((isoToUtc(b) - isoToUtc(a)) / 86400000);
+}
+
+/** 0 = Sunday … 6 = Saturday for a YYYY-MM-DD. */
+export function weekdayIndexIso(iso) {
+  return isoToUtc(iso).getUTCDay();
+}
+
+const partFormatters = new Map();
+/** Format a YYYY-MM-DD with Intl options, without any time-zone drift ("Mon", "6 Oct", "October 2026"). */
+export function formatIsoDate(iso, options = { day: "numeric", month: "short" }, locale = "en-IN") {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  if (!partFormatters.has(key)) partFormatters.set(key, new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }));
+  return partFormatters.get(key).format(isoToUtc(iso));
+}
+
+/** "Today", "Tomorrow", or "Mon, 6 Oct" relative to the salon's today. */
+export function salonRelativeDayLabel(iso, now = new Date()) {
+  const today = salonDateIso(0, now);
+  const diff = diffDaysIso(today, iso);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  return formatIsoDate(iso, { weekday: "short", day: "numeric", month: "short" });
+}
+
+/** Salon-local YYYY-MM-DD of an instant (ISO timestamp or Date). */
+export function salonDateOf(instant) {
+  return salonFormatter().format(new Date(instant));
+}
+
+/** "Mon, 6 Oct · 3:15 pm" in salon time for an ISO timestamp. */
+export function formatSalonDateTime(instant) {
+  return `${formatIsoDate(salonDateOf(instant), { weekday: "short", day: "numeric", month: "short" })} · ${salonTimeLabel(instant)}`;
+}
+
+/** First day (YYYY-MM-01) of the month containing `iso`, shifted by `offsetMonths`. */
+export function monthStartIso(iso, offsetMonths = 0) {
+  const date = isoToUtc(iso);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + offsetMonths, 1)).toISOString().slice(0, 10);
+}
+
+/** Number of days in the month containing `iso`. */
+export function daysInMonthIso(iso) {
+  const date = isoToUtc(iso);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+}
