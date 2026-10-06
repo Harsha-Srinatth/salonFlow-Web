@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom"
-import { motion } from "framer-motion"
+import { motion } from "motion/react"
 import { useEffect, useState } from "react"
 import { Clock, Gift, Home, Moon, Scissors, Sparkles, Sun } from "lucide-react"
 import { useAppThemeToggle } from "@/components/theme-provider"

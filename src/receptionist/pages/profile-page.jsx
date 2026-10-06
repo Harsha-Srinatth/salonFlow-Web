@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useReceptionSession } from "@/receptionist/hooks/use-reception-session";
 import { ReceptionLayout } from "@/receptionist/portal/reception-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LogOut, Mail, Shield, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LoadingOrb } from "@/components/shared/loading-orb";

@@ -9,7 +9,7 @@ import { useEmployeeSession } from "@/employee/hooks/use-employee-session";
 import { computeShiftMetrics } from "@/employee/lib/queue-utils";
 import { EmployeeLayout } from "@/employee/portal/employee-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";

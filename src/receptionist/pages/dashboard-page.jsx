@@ -11,7 +11,7 @@ import { useReceptionSession } from "@/receptionist/hooks/use-reception-session"
 import { computeOpsMetrics } from "@/receptionist/lib/booking-utils";
 import { ReceptionLayout } from "@/receptionist/portal/reception-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useSelector } from "react-redux";

@@ -1,1 +1,0 @@
-import{v as e}from"./index-9y5bbSWK.js";const c=[["path",{d:"M21.801 10A10 10 0 1 1 17 3.335",key:"yps3ct"}],["path",{d:"m9 11 3 3L22 4",key:"1pflzl"}]],s=e("circle-check-big",c),i={value:"4.9",reviews:"693",label:"4.9 on Google",sub:"693 reviews"};export{s as C,i as G};

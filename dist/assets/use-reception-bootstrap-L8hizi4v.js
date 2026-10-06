@@ -1,1 +1,0 @@
-import{u as i,r as s,S as c,U as a,V as n,W as p,X as r,Y as f}from"./index-9y5bbSWK.js";let t=0;function R({enabled:o=!0}={}){const e=i();s.useEffect(()=>{if(o)return t+=1,t===1&&(e(c()),e(a()),e(n()),e(p()),e(r())),()=>{t=Math.max(0,t-1),t===0&&e(f())}},[e,o])}export{R as u};
