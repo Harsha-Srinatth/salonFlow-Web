@@ -1,20 +1,23 @@
+"use client"
+import { AnimatePresence, LayoutGroup, motion } from "motion/react"
+import { BorderBeam } from "border-beam"
+import { CalendarClock, CalendarDays, Crown, Eye, Gift, Layers, Pencil, Percent, Plus, Search, Sparkles, Tag, Trash2, Users, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { toast } from "sonner"
 import { AdminLayout } from "../portal/admin-layout"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useConfirm } from "@/admin/components/confirm-dialog"
+import { EmptyState } from "@/admin/components/empty-state"
 import { ErrorBanner } from "@/admin/components/error-banner"
+import { emptyForm, formFromOffer, OfferEditor, payloadFromForm, SEGMENT_META, TYPE_META } from "@/admin/components/offer-editor"
+import { Switch } from "@/admin/components/service-editor-drawer"
 import { StatCard } from "@/admin/components/stat-card"
-import { StatusPill } from "@/admin/components/status-pill"
-import { useRevealOnReady } from "@/admin/lib/motion"
+import { SegmentedControl } from "@/components/fx/segmented-control"
+import { LoadingOrb } from "@/components/shared/loading-orb"
 import { getFirebaseIdToken } from "@/lib/auth/auth-client"
 import { toApiUrl } from "@/lib/api-base"
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket"
-import { BadgePercent, CalendarClock, Gift, Layers, Percent, Sparkles, Tags, Users } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
-import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 async function authFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null)
@@ -32,36 +35,161 @@ async function authFetch(path, init) {
   return data
 }
 
-export default function OfferCenterPage() {
-  const [center, setCenter] = useState({ services: [], serviceDiscounts: [], membershipDiscounts: [], combos: [], dashboard: {} })
-  const [calendarEvents, setCalendarEvents] = useState([])
-  const [preview, setPreview] = useState({ segment: "FREE", services: [], combos: [] })
-  const [loading, setLoading] = useState(false)
-  const [globalForm, setGlobalForm] = useState({ discountPercent: "20", startAt: "", endAt: "", isEnabled: true })
-  const [serviceForm, setServiceForm] = useState({ serviceId: "", discountPercent: "", startAt: "", endAt: "", isEnabled: true })
-  const [membershipForm, setMembershipForm] = useState({ serviceId: "", membershipSegment: "PREMIUM", discountPercent: "", startAt: "", endAt: "", isEnabled: true })
-  const [comboForm, setComboForm] = useState({ name: "", description: "", category: "MEN", offerPrice: "", serviceIds: [], visibleSegments: ["FREE", "BASIC", "PREMIUM"], startAt: "", endAt: "", isEnabled: true })
-  const [previewSourceFilter, setPreviewSourceFilter] = useState("ALL")
-  const [previewSearch, setPreviewSearch] = useState("")
-  const [previewOnlyDiscounted, setPreviewOnlyDiscounted] = useState(true)
-  const [calendarTypeFilter, setCalendarTypeFilter] = useState("ALL")
-  const [calendarOnlyActive, setCalendarOnlyActive] = useState(true)
-  const [editOffer, setEditOffer] = useState(null)
-  const [loadError, setLoadError] = useState("")
-  const previewSegmentRef = useRef("FREE")
-  const previewGridRef = useRevealOnReady([loading], { selector: ":scope > *" })
-  const calendarListRef = useRevealOnReady([loading], { selector: ":scope > *" })
+const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`
+const dayLabel = (iso) => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" })
 
-  async function reloadAll(segment = preview.segment || "FREE") {
-    setLoading(true)
+const STATUS = {
+  live: { label: "Live", dot: "bg-success", text: "text-success" },
+  scheduled: { label: "Soon", dot: "bg-chart-3", text: "text-chart-3" },
+  ended: { label: "Ended", dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
+  off: { label: "Off", dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
+}
+
+function statusOf(item, now) {
+  if (!item.isEnabled) return "off"
+  if (item.startAt && new Date(item.startAt).getTime() > now) return "scheduled"
+  if (item.endAt && new Date(item.endAt).getTime() < now) return "ended"
+  return "live"
+}
+
+function whenLabel(item, status) {
+  if (status === "ended") return `Ended ${dayLabel(item.endAt)}`
+  if (status === "scheduled") return `From ${dayLabel(item.startAt)}`
+  if (item.endAt) return `Until ${dayLabel(item.endAt)}`
+  return "Always on"
+}
+
+const TYPE_FILTERS = [
+  { value: "ALL", label: "All", icon: Layers },
+  ...Object.entries(TYPE_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon })),
+]
+const SEGMENT_OPTIONS = Object.entries(SEGMENT_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon }))
+
+const SOURCE_META = {
+  MEMBERSHIP_OFFER: { icon: Crown, title: "Member offer", tone: "bg-accent/15 text-accent" },
+  COMBO_OFFER: { icon: Gift, title: "Combo", tone: "bg-chart-4/15 text-chart-4" },
+  SERVICE_DISCOUNT: { icon: Tag, title: "Service offer", tone: "bg-chart-3/15 text-chart-3" },
+  GLOBAL_DISCOUNT: { icon: Percent, title: "Sitewide offer", tone: "bg-primary/10 text-primary" },
+}
+
+function OfferCard({ offer, index, busy, onToggle, onEdit, onDelete }) {
+  const meta = TYPE_META[offer.type]
+  const Icon = meta.icon
+  const st = STATUS[offer.status]
+  const seg = offer.type === "MEMBERSHIP" ? SEGMENT_META[offer.membershipSegment] : null
+  return (
+    <motion.article
+      layout
+      initial={{ opacity: 0, y: 14, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.03 }}
+      whileHover={{ y: -3 }}
+      className={cn("admin-shadow-sm flex flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4", (offer.status === "ended" || offer.status === "off") && "opacity-70")}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <span title={meta.label} className={cn("grid size-11 shrink-0 place-items-center rounded-xl", meta.tone)}>
+          <Icon className="size-5" />
+        </span>
+        <div className="text-right">
+          <p className="font-display text-3xl font-bold leading-none tracking-tight">{offer.type === "COMBO" ? inr(offer.offerPrice) : `${offer.discountPercent}%`}</p>
+          {offer.type === "COMBO" && offer.savings ? <p className="mt-1 text-xs font-semibold text-success">Saves {inr(offer.savings)}</p> : offer.type !== "COMBO" ? <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">off</p> : null}
+        </div>
+      </div>
+
+      <div className="min-w-0">
+        <h3 className="truncate font-display text-base font-semibold leading-tight">{offer.title}</h3>
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {seg ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
+              <seg.icon className="size-3" /> {seg.label}
+            </span>
+          ) : null}
+          {offer.type === "COMBO" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+              <Layers className="size-3" /> {offer.serviceCount}
+            </span>
+          ) : null}
+          {offer.type === "COMBO" ? (
+            <span className="inline-flex items-center gap-1">
+              {(offer.visibleSegments ?? []).map((s) => {
+                const SegIcon = SEGMENT_META[s]?.icon ?? Users
+                return <SegIcon key={s} title={SEGMENT_META[s]?.label} className="size-3.5 text-muted-foreground" />
+              })}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <div className="min-w-0 space-y-0.5">
+          <p className={cn("flex items-center gap-1.5 text-xs font-semibold", st.text)}>
+            <span className={cn("size-1.5 rounded-full", st.dot, offer.status === "live" && "admin-live-dot relative text-success")} /> {st.label}
+          </p>
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <CalendarDays className="size-3.5" /> {whenLabel(offer, offer.status)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Switch checked={offer.isEnabled} onChange={() => onToggle(offer)} label={offer.isEnabled ? "Turn off" : "Turn on"} />
+          <Button type="button" size="icon" variant="ghost" aria-label={`Edit ${offer.title}`} disabled={busy} onClick={() => onEdit(offer)}>
+            <Pencil className="size-4" />
+          </Button>
+          <Button type="button" size="icon" variant="ghost" aria-label={`Delete ${offer.title}`} disabled={busy} onClick={() => onDelete(offer)}>
+            <Trash2 className="size-4 text-destructive" />
+          </Button>
+        </div>
+      </div>
+    </motion.article>
+  )
+}
+
+function PreviewCard({ item, index }) {
+  const src = SOURCE_META[`${item.source ?? ""}`.toUpperCase()]
+  const Icon = src?.icon ?? Tag
+  const discounted = Number(item.finalPrice) < Number(item.originalPrice)
+  return (
+    <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(index, 10) * 0.02 }} className="admin-shadow-sm flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
+      <span title={src?.title ?? "No offer"} className={cn("grid size-10 shrink-0 place-items-center rounded-xl", src?.tone ?? "bg-muted text-muted-foreground")}>
+        <Icon className="size-[18px]" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{item.serviceName}</p>
+        <p className="flex items-baseline gap-2 text-sm">
+          <span className="font-bold tabular-nums">{inr(item.finalPrice)}</span>
+          {discounted ? <span className="text-xs text-muted-foreground line-through tabular-nums">{inr(item.originalPrice)}</span> : null}
+        </p>
+      </div>
+      {discounted ? <span className="shrink-0 rounded-full bg-success/10 px-2 py-1 text-xs font-bold text-success">-{Math.round(item.appliedPercent)}%</span> : null}
+    </motion.div>
+  )
+}
+
+export default function OfferCenterPage() {
+  const { confirm, confirmDialog } = useConfirm()
+  const [center, setCenter] = useState({ services: [], serviceDiscounts: [], membershipDiscounts: [], combos: [], dashboard: {}, globalDiscount: null })
+  const [preview, setPreview] = useState({ segment: "FREE", services: [], combos: [] })
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [tab, setTab] = useState("offers")
+  const [typeFilter, setTypeFilter] = useState("ALL")
+  const [showEnded, setShowEnded] = useState(false)
+  const [editor, setEditor] = useState({ open: false, form: null })
+  const [busy, setBusy] = useState(false)
+  const [previewSearch, setPreviewSearch] = useState("")
+  const [onlyDiscounted, setOnlyDiscounted] = useState(true)
+  const previewSegmentRef = useRef("FREE")
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const reloadAll = useCallback(async (segment = previewSegmentRef.current || "FREE") => {
     try {
-      const [centerData, calendarData, previewData] = await Promise.all([
-        authFetch("/api/admin/offers/center"),
-        authFetch("/api/admin/offers/calendar"),
-        authFetch(`/api/admin/offers/preview?membershipSegment=${segment}`),
-      ])
+      const [centerData, previewData] = await Promise.all([authFetch("/api/admin/offers/center"), authFetch(`/api/admin/offers/preview?membershipSegment=${segment}`)])
       setCenter(centerData)
-      setCalendarEvents(calendarData.events ?? [])
       setPreview(previewData)
       setLoadError("")
     } catch (error) {
@@ -71,7 +199,7 @@ export default function OfferCenterPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     previewSegmentRef.current = preview.segment || "FREE"
@@ -87,8 +215,7 @@ export default function OfferCenterPage() {
           onOfferUpdated: (payload) => {
             const segment = previewSegmentRef.current || "FREE"
             if (payload?.center) setCenter(payload.center)
-            if (Array.isArray(payload?.events)) setCalendarEvents(payload.events)
-            if (payload?.previews && payload.previews[segment]) {
+            if (payload?.previews?.[segment]) {
               setPreview(payload.previews[segment])
               return
             }
@@ -96,674 +223,246 @@ export default function OfferCenterPage() {
           },
         })
       )
-    return () => {
-      disconnectAdminBookingsSocket()
-    }
-  }, [])
+    return () => disconnectAdminBookingsSocket()
+  }, [reloadAll])
 
-  const servicesMap = useMemo(() => new Map((center.services ?? []).map((service) => [service.id, service])), [center.services])
-  const previewServices = preview.services ?? []
-  const activeCombos = useMemo(
-    () => (center.combos ?? []).filter((combo) => combo.isActiveNow),
-    [center.combos]
-  )
-  const enrichedCombos = useMemo(
-    () =>
-      activeCombos.map((combo) => {
-        const actualPrice = (combo.serviceIds ?? []).reduce(
-          (sum, serviceId) => sum + Number(servicesMap.get(serviceId)?.basePrice ?? 0),
-          0
-        )
-        const offerPrice = Number(combo.offerPrice ?? 0)
-        return {
-          ...combo,
-          actualPrice,
-          savings: Math.max(0, actualPrice - offerPrice),
-        }
-      }),
-    [activeCombos, servicesMap]
-  )
-  const previewSummary = useMemo(() => {
-    const counts = { MEMBERSHIP_OFFER: 0, COMBO_OFFER: 0, SERVICE_DISCOUNT: 0, GLOBAL_DISCOUNT: 0, NONE: 0 }
-    for (const item of previewServices) {
-      const source = `${item.source ?? "NONE"}`.toUpperCase()
-      counts[source] = (counts[source] ?? 0) + 1
-    }
-    counts.COMBO_OFFER = enrichedCombos.length
-    return counts
-  }, [enrichedCombos.length, previewServices])
-  const filteredPreviewServices = useMemo(() => {
-    const query = previewSearch.trim().toLowerCase()
-    return previewServices.filter((item) => {
-      const source = `${item.source ?? "NONE"}`.toUpperCase()
-      if (previewSourceFilter === "COMBO_OFFER") return false
-      if (previewOnlyDiscounted && source === "NONE") return false
-      if (previewSourceFilter !== "ALL" && source !== previewSourceFilter) return false
-      if (query && !`${item.serviceName ?? ""}`.toLowerCase().includes(query)) return false
-      return true
-    })
-  }, [previewOnlyDiscounted, previewSearch, previewServices, previewSourceFilter])
-  const previewSegmentLabels = [
-    { value: "FREE", label: "Free Customer" },
-    { value: "BASIC", label: "Basic Member" },
-    { value: "PREMIUM", label: "Premium Member" },
-  ]
-  const combosByPreviewSegment = useMemo(() => {
-    const query = previewSearch.trim().toLowerCase()
-    if (previewSourceFilter !== "ALL" && previewSourceFilter !== "COMBO_OFFER") {
-      return Object.fromEntries(previewSegmentLabels.map(({ value }) => [value, []]))
-    }
-    return Object.fromEntries(
-      previewSegmentLabels.map(({ value }) => [
-        value,
-        enrichedCombos.filter((combo) => {
-          if (!(combo.visibleSegments ?? []).includes(value)) return false
-          if (query && !`${combo.name ?? ""}`.toLowerCase().includes(query)) return false
-          return true
-        }),
-      ])
-    )
-  }, [enrichedCombos, previewSearch, previewSourceFilter])
-  const calendarGroups = useMemo(() => {
-    const now = Date.now()
-    const map = { GLOBAL: [], SERVICE: [], MEMBERSHIP: [], COMBO: [], OTHER: [] }
-    for (const event of calendarEvents ?? []) {
-      const type = `${event?.type ?? "OTHER"}`.toUpperCase()
-      const startMs = event?.startAt ? new Date(event.startAt).getTime() : null
-      const endMs = event?.endAt ? new Date(event.endAt).getTime() : null
-      const isActive = (startMs === null || now >= startMs) && (endMs === null || now <= endMs)
-      if (calendarOnlyActive && !isActive) continue
-      if (calendarTypeFilter !== "ALL" && type !== calendarTypeFilter) continue
-      const bucket = map[type] ? type : "OTHER"
-      map[bucket].push({ ...event, isActive })
-    }
-    return map
-  }, [calendarEvents, calendarOnlyActive, calendarTypeFilter])
+  const servicesById = useMemo(() => new Map((center.services ?? []).map((s) => [s.id, s])), [center.services])
 
-  function formatOfferSource(source) {
-    const value = `${source ?? "NONE"}`.toUpperCase()
-    if (value === "MEMBERSHIP_OFFER") return "Membership Offer"
-    if (value === "COMBO_OFFER") return "Combo Offer"
-    if (value === "SERVICE_DISCOUNT") return "Service Discount"
-    if (value === "GLOBAL_DISCOUNT") return "Global Discount"
-    return "No Offer"
-  }
+  const offers = useMemo(() => {
+    const out = []
+    const g = center.globalDiscount
+    if (g) out.push({ ...g, type: "GLOBAL", title: "All services" })
+    for (const d of center.serviceDiscounts ?? []) out.push({ ...d, type: "SERVICE", title: servicesById.get(d.serviceId)?.name ?? "Service" })
+    for (const d of center.membershipDiscounts ?? []) out.push({ ...d, type: "MEMBERSHIP", title: servicesById.get(d.serviceId)?.name ?? "Service" })
+    for (const c of center.combos ?? []) {
+      const actual = (c.serviceIds ?? []).reduce((sum, id) => sum + Number(servicesById.get(id)?.basePrice ?? 0), 0)
+      out.push({ ...c, type: "COMBO", title: c.name, serviceCount: (c.serviceIds ?? []).length, savings: Math.max(0, actual - Number(c.offerPrice ?? 0)) })
+    }
+    return out.map((o) => ({ ...o, status: statusOf(o, now) }))
+  }, [center, servicesById, now])
 
-  function formatCalendarType(type) {
-    const value = `${type ?? ""}`.toUpperCase()
-    if (value === "GLOBAL") return "Global Offers"
-    if (value === "SERVICE") return "Service Offers"
-    if (value === "MEMBERSHIP") return "Membership Offers"
-    if (value === "COMBO") return "Combo Offers"
-    return "Other Offers"
-  }
+  const visibleOffers = useMemo(() => {
+    const rank = { live: 0, scheduled: 1, off: 2, ended: 3 }
+    return offers
+      .filter((o) => (typeFilter === "ALL" || o.type === typeFilter) && (showEnded || (o.status !== "ended" && o.status !== "off")))
+      .sort((a, b) => rank[a.status] - rank[b.status])
+  }, [offers, typeFilter, showEnded])
 
-  async function submitGlobal() {
-    try {
-      const data = await authFetch("/api/admin/offers/global", { method: "POST", body: JSON.stringify({ ...globalForm, discountPercent: Number(globalForm.discountPercent ?? 0) }) })
-      if (data.warning) toast.warning(data.warning)
-      setCenter(data.center ?? center)
-      toast.success("Global discount updated")
-    } catch (error) {
-      toast.error(error.message ?? "Could not save global discount")
-    }
-  }
+  const hiddenCount = offers.filter((o) => (typeFilter === "ALL" || o.type === typeFilter) && (o.status === "ended" || o.status === "off")).length
 
-  async function submitServiceDiscount() {
-    if (!serviceForm.serviceId) {
-      toast.error("Please select a service")
-      return
-    }
-    try {
-      const data = await authFetch("/api/admin/offers/service", { method: "POST", body: JSON.stringify({ ...serviceForm, discountPercent: Number(serviceForm.discountPercent ?? 0) }) })
-      setCenter(data.center ?? center)
-      setServiceForm({ serviceId: "", discountPercent: "", startAt: "", endAt: "", isEnabled: true })
-      toast.success("Service discount added")
-    } catch (error) {
-      toast.error(error.message ?? "Could not save service discount")
-    }
-  }
-
-  async function submitMembershipDiscount() {
-    try {
-      const data = await authFetch("/api/admin/offers/membership", { method: "POST", body: JSON.stringify({ ...membershipForm, discountPercent: Number(membershipForm.discountPercent ?? 0) }) })
-      setCenter(data.center ?? center)
-      toast.success("Membership discount added")
-    } catch (error) {
-      toast.error(error.message ?? "Could not save membership discount")
-    }
-  }
-
-  async function submitCombo() {
-    try {
-      const data = await authFetch("/api/admin/offers/combos", { method: "POST", body: JSON.stringify({ ...comboForm, offerPrice: Number(comboForm.offerPrice ?? 0) }) })
-      setCenter(data.center ?? center)
-      toast.success("Combo offer added")
-    } catch (error) {
-      toast.error(error.message ?? "Could not save combo offer")
-    }
-  }
-
-  async function loadPreview(segment) {
-    const next = await authFetch(`/api/admin/offers/preview?membershipSegment=${segment}`)
-    setPreview(next)
-  }
-
-  async function deleteOffer(event) {
-    const type = `${event?.type ?? ""}`.trim().toUpperCase()
-    const id = `${event?.id ?? ""}`.trim()
-    if (!type || !id) return
-    try {
-      await authFetch(`/api/admin/offers/${type}/${id}`, { method: "DELETE" })
-      toast.success("Offer deleted")
-    } catch (error) {
-      toast.error(error.message ?? "Could not delete offer")
-    }
-  }
-
-  function startEditOffer(event) {
-    const type = `${event?.type ?? ""}`.toUpperCase()
-    if (type === "GLOBAL") {
-      const global = center.globalDiscount
-      if (!global?.id) return
-      setEditOffer({
-        type: "GLOBAL",
-        id: global.id,
-        discountPercent: `${global.discountPercent ?? 0}`,
-        startAt: global.startAt ? new Date(global.startAt).toISOString().slice(0, 16) : "",
-        endAt: global.endAt ? new Date(global.endAt).toISOString().slice(0, 16) : "",
-        isEnabled: Boolean(global.isEnabled),
-      })
-      return
-    }
-    if (type === "SERVICE") {
-      const item = (center.serviceDiscounts ?? []).find((row) => row.id === event.id)
-      if (!item) return
-      setEditOffer({
-        type: "SERVICE",
-        id: item.id,
-        serviceId: item.serviceId,
-        discountPercent: `${item.discountPercent ?? 0}`,
-        startAt: item.startAt ? new Date(item.startAt).toISOString().slice(0, 16) : "",
-        endAt: item.endAt ? new Date(item.endAt).toISOString().slice(0, 16) : "",
-        isEnabled: Boolean(item.isEnabled),
-      })
-      return
-    }
-    if (type === "MEMBERSHIP") {
-      const item = (center.membershipDiscounts ?? []).find((row) => row.id === event.id)
-      if (!item) return
-      setEditOffer({
-        type: "MEMBERSHIP",
-        id: item.id,
-        serviceId: item.serviceId,
-        membershipSegment: item.membershipSegment,
-        discountPercent: `${item.discountPercent ?? 0}`,
-        startAt: item.startAt ? new Date(item.startAt).toISOString().slice(0, 16) : "",
-        endAt: item.endAt ? new Date(item.endAt).toISOString().slice(0, 16) : "",
-        isEnabled: Boolean(item.isEnabled),
-      })
-      return
-    }
-    if (type === "COMBO") {
-      const item = (center.combos ?? []).find((row) => row.id === event.id)
-      if (!item) return
-      setEditOffer({
-        type: "COMBO",
-        id: item.id,
-        name: item.name ?? "",
-        description: item.description ?? "",
-        category: item.category ?? "MEN",
-        offerPrice: `${item.offerPrice ?? 0}`,
-        serviceIds: Array.isArray(item.serviceIds) ? item.serviceIds : [],
-        visibleSegments: Array.isArray(item.visibleSegments) ? item.visibleSegments : ["FREE", "BASIC", "PREMIUM"],
-        startAt: item.startAt ? new Date(item.startAt).toISOString().slice(0, 16) : "",
-        endAt: item.endAt ? new Date(item.endAt).toISOString().slice(0, 16) : "",
-        isEnabled: Boolean(item.isEnabled),
-      })
-    }
-  }
-
-  async function saveEditedOffer() {
-    if (!editOffer?.type || !editOffer?.id) return
-    if (editOffer.type === "COMBO" && !(editOffer.visibleSegments ?? []).length) {
-      toast.error("Select at least one membership plan for combo visibility")
-      return
-    }
-    try {
-      const payload = { ...editOffer }
-      delete payload.type
-      delete payload.id
-      if (payload.discountPercent !== undefined) payload.discountPercent = Number(payload.discountPercent ?? 0)
-      if (payload.offerPrice !== undefined) payload.offerPrice = Number(payload.offerPrice ?? 0)
-      await authFetch(`/api/admin/offers/${editOffer.type}/${editOffer.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      })
+  /* ---- actions ---- */
+  async function saveOffer(form) {
+    const payload = payloadFromForm(form)
+    if (form.id) {
+      await authFetch(`/api/admin/offers/${form.type}/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) })
       toast.success("Offer updated")
-      setEditOffer(null)
+    } else {
+      const path = { GLOBAL: "global", SERVICE: "service", MEMBERSHIP: "membership", COMBO: "combos" }[form.type]
+      const data = await authFetch(`/api/admin/offers/${path}`, { method: "POST", body: JSON.stringify(payload) })
+      if (data.warning) toast.message(data.warning)
+      toast.success("Offer created")
+    }
+    await reloadAll()
+  }
+
+  async function toggleOffer(offer) {
+    setBusy(true)
+    try {
+      const form = { ...formFromOffer(offer.type, offer), isEnabled: !offer.isEnabled }
+      await authFetch(`/api/admin/offers/${offer.type}/${offer.id}`, { method: "PATCH", body: JSON.stringify(payloadFromForm(form)) })
+      toast.success(form.isEnabled ? "Offer is live" : "Offer turned off")
+      await reloadAll()
     } catch (error) {
       toast.error(error.message ?? "Could not update offer")
+    } finally {
+      setBusy(false)
     }
   }
 
+  async function deleteOffer(offer) {
+    const ok = await confirm({ title: `Delete "${offer.title}"?`, description: "Customers stop seeing it right away.", confirmLabel: "Delete", hold: true })
+    if (!ok) return
+    setBusy(true)
+    try {
+      await authFetch(`/api/admin/offers/${offer.type}/${offer.id}`, { method: "DELETE" })
+      toast.success("Offer deleted")
+      await reloadAll()
+    } catch (error) {
+      toast.error(error.message ?? "Could not delete offer")
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openNew = (type) => setEditor({ open: true, form: type ? emptyForm(type) : null })
+  const openEdit = (offer) => setEditor({ open: true, form: formFromOffer(offer.type, offer) })
+
+  async function changeSegment(segment) {
+    try {
+      setPreview(await authFetch(`/api/admin/offers/preview?membershipSegment=${segment}`))
+    } catch (error) {
+      toast.error(error.message ?? "Could not load preview")
+    }
+  }
+
+  /* ---- preview data ---- */
+  const previewServices = useMemo(() => {
+    const q = previewSearch.trim().toLowerCase()
+    return (preview.services ?? []).filter((s) => (!onlyDiscounted || Number(s.finalPrice) < Number(s.originalPrice)) && (!q || `${s.serviceName ?? ""}`.toLowerCase().includes(q)))
+  }, [preview.services, previewSearch, onlyDiscounted])
+  const previewCombos = useMemo(
+    () =>
+      (center.combos ?? [])
+        .filter((c) => c.isActiveNow && (c.visibleSegments ?? []).includes(preview.segment))
+        .map((c) => {
+          const actual = (c.serviceIds ?? []).reduce((sum, id) => sum + Number(servicesById.get(id)?.basePrice ?? 0), 0)
+          return { ...c, actual, savings: Math.max(0, actual - Number(c.offerPrice ?? 0)) }
+        }),
+    [center.combos, preview.segment, servicesById]
+  )
+
+  const d = center.dashboard ?? {}
+
   return (
-    <AdminLayout pageTitle="Offer Center" description="Discounts, combos, and membership pricing in one place.">
-      <div className="space-y-4">
+    <AdminLayout
+      pageTitle="Offer Center"
+      description="Discounts, combos and member pricing."
+      actions={
+        <BorderBeam size="sm">
+          <Button type="button" onClick={() => openNew(null)}>
+            <Plus className="size-4" /> New offer
+          </Button>
+        </BorderBeam>
+      }
+    >
+      <div className="space-y-5">
         <ErrorBanner message={loadError} onRetry={() => void reloadAll()} />
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <StatCard icon={BadgePercent} label="Active Discounts" value={center.dashboard?.activeDiscounts ?? 0} tone="primary" />
-          <StatCard icon={Layers} label="Active Combos" value={center.dashboard?.activeCombos ?? 0} tone="accent" delay={40} />
-          <StatCard icon={CalendarClock} label="Expiring Soon" value={center.dashboard?.expiringSoon ?? 0} tone="destructive" delay={80} />
-          <StatCard icon={Sparkles} label="Premium Offers" value={center.dashboard?.premiumOffers ?? 0} tone="accent" delay={120} />
-          <StatCard icon={Tags} label="Basic Offers" value={center.dashboard?.basicOffers ?? 0} tone="primary" delay={160} />
-          <StatCard icon={Users} label="Free Offers" value={center.dashboard?.freeOffers ?? 0} tone="neutral" delay={200} />
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+          <StatCard icon={Percent} label="Live discounts" value={d.activeDiscounts ?? 0} tone="primary" />
+          <StatCard icon={Gift} label="Live combos" value={d.activeCombos ?? 0} tone="accent" delay={40} />
+          <StatCard icon={Crown} label="Member offers" value={(d.premiumOffers ?? 0) + (d.basicOffers ?? 0) + (d.freeOffers ?? 0)} tone="success" delay={80} />
+          <StatCard icon={CalendarClock} label="Ending in 3 days" value={d.expiringSoon ?? 0} tone={d.expiringSoon ? "destructive" : "neutral"} delay={120} />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card className="admin-shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><Percent className="size-4 text-primary" />Global Service Discount</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Label>Discount %</Label>
-              <Input type="number" min="0" max="100" value={globalForm.discountPercent} onChange={(e) => setGlobalForm((v) => ({ ...v, discountPercent: e.target.value }))} />
-              <Label>Effective Date</Label>
-              <Input type="datetime-local" value={globalForm.startAt} onChange={(e) => setGlobalForm((v) => ({ ...v, startAt: e.target.value }))} />
-              <Label>Expiry Date</Label>
-              <Input type="datetime-local" value={globalForm.endAt} onChange={(e) => setGlobalForm((v) => ({ ...v, endAt: e.target.value }))} />
-              <Button onClick={() => void submitGlobal()} disabled={loading}>Save Global Discount</Button>
-              <p className="text-xs text-muted-foreground">Affected services: {(center.services ?? []).map((service) => service.name).join(", ")}</p>
-            </CardContent>
-          </Card>
+        <SegmentedControl
+          label="View"
+          options={[
+            { value: "offers", label: "Offers", icon: Sparkles },
+            { value: "preview", label: "Customer view", icon: Eye },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
 
-          <Card className="admin-shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><Tags className="size-4 text-primary" />Individual Service Discount</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Label>Service</Label>
-              <Select value={serviceForm.serviceId} onValueChange={(value) => setServiceForm((v) => ({ ...v, serviceId: value }))}>
-                <SelectTrigger><SelectValue placeholder="Select service" /></SelectTrigger>
-                <SelectContent>{(center.services ?? []).map((service) => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)}</SelectContent>
-              </Select>
-              <Label>Discount %</Label>
-              <Input type="number" min="0" max="100" value={serviceForm.discountPercent} onChange={(e) => setServiceForm((v) => ({ ...v, discountPercent: e.target.value }))} />
-              <Label>Start</Label>
-              <Input type="datetime-local" value={serviceForm.startAt} onChange={(e) => setServiceForm((v) => ({ ...v, startAt: e.target.value }))} />
-              <Label>End</Label>
-              <Input type="datetime-local" value={serviceForm.endAt} onChange={(e) => setServiceForm((v) => ({ ...v, endAt: e.target.value }))} />
-              {serviceForm.serviceId ? (
-                <div className="text-xs text-muted-foreground">
-                  Original: Rs {Number(servicesMap.get(serviceForm.serviceId)?.basePrice ?? 0).toFixed(2)} | Discounted: Rs{" "}
-                  {Math.max(0, Number(servicesMap.get(serviceForm.serviceId)?.basePrice ?? 0) * (1 - Number(serviceForm.discountPercent || 0) / 100)).toFixed(2)}
-                </div>
-              ) : null}
-              <Button onClick={() => void submitServiceDiscount()} disabled={loading}>Add Service Discount</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card className="admin-shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><Users className="size-4 text-primary" />Membership-Specific Discount</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Label>Service</Label>
-              <Select value={membershipForm.serviceId} onValueChange={(value) => setMembershipForm((v) => ({ ...v, serviceId: value }))}>
-                <SelectTrigger><SelectValue placeholder="Select service" /></SelectTrigger>
-                <SelectContent>{(center.services ?? []).map((service) => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)}</SelectContent>
-              </Select>
-              <Label>Membership Type</Label>
-              <Select value={membershipForm.membershipSegment} onValueChange={(value) => setMembershipForm((v) => ({ ...v, membershipSegment: value }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FREE">Free</SelectItem>
-                  <SelectItem value="BASIC">Basic</SelectItem>
-                  <SelectItem value="PREMIUM">Premium</SelectItem>
-                </SelectContent>
-              </Select>
-              <Label>Discount %</Label>
-              <Input type="number" min="0" max="100" value={membershipForm.discountPercent} onChange={(e) => setMembershipForm((v) => ({ ...v, discountPercent: e.target.value }))} />
-              <Label>Start</Label>
-              <Input type="datetime-local" value={membershipForm.startAt} onChange={(e) => setMembershipForm((v) => ({ ...v, startAt: e.target.value }))} />
-              <Label>End</Label>
-              <Input type="datetime-local" value={membershipForm.endAt} onChange={(e) => setMembershipForm((v) => ({ ...v, endAt: e.target.value }))} />
-              <Button onClick={() => void submitMembershipDiscount()} disabled={loading}>Add Membership Discount</Button>
-            </CardContent>
-          </Card>
-
-          <Card className="admin-shadow-sm">
-            <CardHeader><CardTitle className="flex items-center gap-2"><Gift className="size-4 text-primary" />Combo Offer Builder</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Label>Combo Name</Label>
-              <Input value={comboForm.name} onChange={(e) => setComboForm((v) => ({ ...v, name: e.target.value }))} />
-              <Label>Description</Label>
-              <Input value={comboForm.description} onChange={(e) => setComboForm((v) => ({ ...v, description: e.target.value }))} />
-              <Label>Category</Label>
-              <Select value={comboForm.category} onValueChange={(value) => setComboForm((v) => ({ ...v, category: value }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="MEN">Men</SelectItem>
-                  <SelectItem value="WOMEN">Women</SelectItem>
-                  <SelectItem value="CHILDREN">Children</SelectItem>
-                </SelectContent>
-              </Select>
-              <Label>Offer Price</Label>
-              <Input type="number" value={comboForm.offerPrice} onChange={(e) => setComboForm((v) => ({ ...v, offerPrice: e.target.value }))} />
-              <Label>Start</Label>
-              <Input type="datetime-local" value={comboForm.startAt} onChange={(e) => setComboForm((v) => ({ ...v, startAt: e.target.value }))} />
-              <Label>End</Label>
-              <Input type="datetime-local" value={comboForm.endAt} onChange={(e) => setComboForm((v) => ({ ...v, endAt: e.target.value }))} />
-              <Label>Services (click to toggle)</Label>
-              <div className="flex flex-wrap gap-2">
-                {(center.services ?? []).map((service) => {
-                  const selected = comboForm.serviceIds.includes(service.id)
-                  return (
-                    <Button
-                      key={service.id}
-                      type="button"
-                      size="sm"
-                      variant={selected ? "default" : "outline"}
-                      onClick={() =>
-                        setComboForm((v) => ({
-                          ...v,
-                          serviceIds: selected ? v.serviceIds.filter((id) => id !== service.id) : [...v.serviceIds, service.id],
-                        }))
-                      }
-                    >
-                      {service.name}
-                    </Button>
-                  )
-                })}
-              </div>
-              <Label>Visible to Membership</Label>
-              <div className="flex gap-2">
-                {["FREE", "BASIC", "PREMIUM"].map((segment) => (
-                  <Button
-                    key={segment}
-                    type="button"
-                    size="sm"
-                    variant={comboForm.visibleSegments.includes(segment) ? "default" : "outline"}
-                    onClick={() =>
-                      setComboForm((v) => ({
-                        ...v,
-                        visibleSegments: v.visibleSegments.includes(segment)
-                          ? v.visibleSegments.filter((item) => item !== segment)
-                          : [...v.visibleSegments, segment],
-                      }))
-                    }
-                  >
-                    {segment}
-                  </Button>
-                ))}
-              </div>
-              <Button onClick={() => void submitCombo()} disabled={loading}>Create Combo</Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card className="admin-shadow-sm">
-          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2"><CardTitle className="flex items-center gap-2"><Sparkles className="size-4 text-primary" />Offer Preview & Priority</CardTitle>
-            <Select value={preview.segment} onValueChange={(value) => void loadPreview(value)}>
-              <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FREE">Free Customer</SelectItem>
-                <SelectItem value="BASIC">Basic Member</SelectItem>
-                <SelectItem value="PREMIUM">Premium Member</SelectItem>
-              </SelectContent>
-            </Select>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <p className="text-xs text-muted-foreground">Priority: Membership Offer → Combo Offer → Service Discount → Global Discount</p>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="outline">Membership: {previewSummary.MEMBERSHIP_OFFER}</Badge>
-              <Badge variant="outline">Combo: {previewSummary.COMBO_OFFER}</Badge>
-              <Badge variant="outline">Service: {previewSummary.SERVICE_DISCOUNT}</Badge>
-              <Badge variant="outline">Global: {previewSummary.GLOBAL_DISCOUNT}</Badge>
-            </div>
-            <div className="grid gap-2 md:grid-cols-3">
-              <Input
-                placeholder="Search service name"
-                value={previewSearch}
-                onChange={(e) => setPreviewSearch(e.target.value)}
-              />
-              <Select value={previewSourceFilter} onValueChange={setPreviewSourceFilter}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Offer Types</SelectItem>
-                  <SelectItem value="MEMBERSHIP_OFFER">Membership Offer</SelectItem>
-                  <SelectItem value="COMBO_OFFER">Combo Offer</SelectItem>
-                  <SelectItem value="SERVICE_DISCOUNT">Service Discount</SelectItem>
-                  <SelectItem value="GLOBAL_DISCOUNT">Global Discount</SelectItem>
-                  <SelectItem value="NONE">No Offer</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant={previewOnlyDiscounted ? "default" : "outline"}
-                onClick={() => setPreviewOnlyDiscounted((value) => !value)}
-                disabled={previewSourceFilter === "COMBO_OFFER"}
-              >
-                {previewOnlyDiscounted ? "Showing Discounted Only" : "Showing All Services"}
-              </Button>
-            </div>
-            <div ref={previewGridRef} className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {filteredPreviewServices.map((service) => (
-                <div key={service.serviceId} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium">{service.serviceName}</p>
-                    <Badge variant="secondary">{formatOfferSource(service.source)}</Badge>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4">
+            {tab === "offers" ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="max-w-full overflow-x-auto pb-1">
+                    <SegmentedControl label="Offer type" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Original: Rs {service.originalPrice.toFixed(2)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Final: Rs {service.finalPrice.toFixed(2)} ({service.appliedPercent}% OFF)
-                  </p>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Switch checked={showEnded} onChange={setShowEnded} label="Show ended and off" />
+                    Ended{hiddenCount ? <span className="rounded-full bg-muted px-1.5 text-xs font-semibold">{hiddenCount}</span> : null}
+                  </label>
                 </div>
-              ))}
-            </div>
-            {!filteredPreviewServices.length ? (
-              <p className="text-xs text-muted-foreground">No services match current preview filters.</p>
-            ) : null}
-            <div className="pt-2 space-y-4">
-              <p className="text-sm font-semibold">Combo offers by customer plan</p>
-              <p className="text-xs text-muted-foreground">
-                All active combos grouped by who can see them. Service pricing above still follows the selected customer type.
-              </p>
-              {previewSegmentLabels.map(({ value, label }) => {
-                const segmentCombos = combosByPreviewSegment[value] ?? []
-                return (
-                  <div key={value} className="space-y-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">{label}</p>
-                      <Badge variant="outline">{segmentCombos.length} combo(s)</Badge>
-                    </div>
-                    {segmentCombos.length ? (
-                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                        {segmentCombos.map((combo) => (
-                          <div key={`${value}-${combo.id}`} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="font-medium">{combo.name}</p>
-                              <Badge variant="secondary">Combo Offer</Badge>
-                            </div>
-                            <p className="mt-1 text-[10px] uppercase text-muted-foreground">
-                              Visible to: {(combo.visibleSegments ?? []).join(", ") || "—"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{combo.category}</p>
-                            <p className="text-xs text-muted-foreground">Actual: Rs {Number(combo.actualPrice ?? 0).toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">Offer: Rs {Number(combo.offerPrice ?? 0).toFixed(2)}</p>
-                            <p className="text-xs text-muted-foreground">Savings: Rs {Number(combo.savings ?? 0).toFixed(2)}</p>
-                            <p className="text-xs">Start: {combo.startAt ? new Date(combo.startAt).toLocaleString() : "N/A"}</p>
-                            <p className="text-xs">End: {combo.endAt ? new Date(combo.endAt).toLocaleString() : "N/A"}</p>
-                          </div>
+
+                {loading && !offers.length ? (
+                  <LoadingOrb compact label="Loading offers…" />
+                ) : !visibleOffers.length ? (
+                  <EmptyState icon={Percent} title="No offers here" description={offers.length ? "Try another type, or show ended offers." : "Create your first discount or combo."} actionLabel="New offer" onAction={() => openNew(null)} />
+                ) : (
+                  <LayoutGroup>
+                    <motion.div layout className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <AnimatePresence mode="popLayout">
+                        {visibleOffers.map((offer, index) => (
+                          <OfferCard key={`${offer.type}-${offer.id}`} offer={offer} index={index} busy={busy} onToggle={toggleOffer} onEdit={openEdit} onDelete={deleteOffer} />
                         ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No combos visible for this plan.</p>
-                    )}
+                      </AnimatePresence>
+                    </motion.div>
+                  </LayoutGroup>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <SegmentedControl label="Customer type" options={SEGMENT_OPTIONS} value={preview.segment} onChange={(v) => void changeSegment(v)} />
+                  <div className="relative min-w-0 flex-1 sm:max-w-xs">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input value={previewSearch} onChange={(e) => setPreviewSearch(e.target.value)} placeholder="Search" aria-label="Search services" className="h-10 w-full rounded-xl border bg-card pl-9 pr-8 text-sm outline-none" />
+                    {previewSearch ? (
+                      <button type="button" aria-label="Clear" onClick={() => setPreviewSearch("")} className="absolute right-2.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-muted">
+                        <X className="size-3" />
+                      </button>
+                    ) : null}
                   </div>
-                )
-              })}
-              {!enrichedCombos.length ? (
-                <p className="text-xs text-muted-foreground">No active combo offers in the calendar.</p>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Switch checked={onlyDiscounted} onChange={setOnlyDiscounted} label="Only discounted" />
+                    <Percent className="size-4" />
+                  </label>
+                </div>
 
-        <Card className="admin-shadow-sm">
-          <CardHeader className="space-y-3">
-            <CardTitle className="flex items-center gap-2"><CalendarClock className="size-4 text-primary" />Offer Calendar</CardTitle>
-            <div className="grid gap-2 md:grid-cols-3">
-              <Select value={calendarTypeFilter} onValueChange={setCalendarTypeFilter}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Types</SelectItem>
-                  <SelectItem value="GLOBAL">Global</SelectItem>
-                  <SelectItem value="SERVICE">Service</SelectItem>
-                  <SelectItem value="MEMBERSHIP">Membership</SelectItem>
-                  <SelectItem value="COMBO">Combo</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant={calendarOnlyActive ? "default" : "outline"}
-                onClick={() => setCalendarOnlyActive((value) => !value)}
-              >
-                {calendarOnlyActive ? "Active Offers Only" : "Showing Active + Past"}
-              </Button>
-              <div className="text-xs text-muted-foreground flex items-center">
-                Total shown: {Object.values(calendarGroups).reduce((sum, list) => sum + list.length, 0)}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {editOffer ? (
-              <div className="rounded-lg border p-3 space-y-3">
-                <p className="text-sm font-semibold">Edit {editOffer.type} Offer</p>
-                {editOffer.type === "COMBO" ? (
-                  <>
-                    <Input placeholder="Combo name" value={editOffer.name ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, name: e.target.value }))} />
-                    <Input placeholder="Description" value={editOffer.description ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, description: e.target.value }))} />
-                    <Select value={editOffer.category ?? "MEN"} onValueChange={(value) => setEditOffer((v) => ({ ...v, category: value }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="MEN">Men</SelectItem>
-                        <SelectItem value="WOMEN">Women</SelectItem>
-                        <SelectItem value="CHILDREN">Children</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input type="number" placeholder="Offer price" value={editOffer.offerPrice ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, offerPrice: e.target.value }))} />
-                    <div className="flex flex-wrap gap-2">
-                      {(center.services ?? []).map((service) => {
-                        const selected = (editOffer.serviceIds ?? []).includes(service.id)
-                        return (
-                          <Button
-                            key={service.id}
-                            type="button"
-                            size="sm"
-                            variant={selected ? "default" : "outline"}
-                            onClick={() =>
-                              setEditOffer((v) => ({
-                                ...v,
-                                serviceIds: selected ? v.serviceIds.filter((id) => id !== service.id) : [...(v.serviceIds ?? []), service.id],
-                              }))
-                            }
-                          >
-                            {service.name}
-                          </Button>
-                        )
-                      })}
-                    </div>
-                    <Label>Visible to Membership</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {["FREE", "BASIC", "PREMIUM"].map((segment) => (
-                        <Button
-                          key={segment}
-                          type="button"
-                          size="sm"
-                          variant={(editOffer.visibleSegments ?? []).includes(segment) ? "default" : "outline"}
-                          onClick={() =>
-                            setEditOffer((v) => ({
-                              ...v,
-                              visibleSegments: (v.visibleSegments ?? []).includes(segment)
-                                ? (v.visibleSegments ?? []).filter((item) => item !== segment)
-                                : [...(v.visibleSegments ?? []), segment],
-                            }))
-                          }
-                        >
-                          {segment}
-                        </Button>
-                      ))}
-                    </div>
-                  </>
-                ) : null}
-                {editOffer.type === "SERVICE" || editOffer.type === "MEMBERSHIP" ? (
-                  <Select value={editOffer.serviceId ?? ""} onValueChange={(value) => setEditOffer((v) => ({ ...v, serviceId: value }))}>
-                    <SelectTrigger><SelectValue placeholder="Select service" /></SelectTrigger>
-                    <SelectContent>{(center.services ?? []).map((service) => <SelectItem key={service.id} value={service.id}>{service.name}</SelectItem>)}</SelectContent>
-                  </Select>
-                ) : null}
-                {editOffer.type === "MEMBERSHIP" ? (
-                  <Select value={editOffer.membershipSegment ?? "FREE"} onValueChange={(value) => setEditOffer((v) => ({ ...v, membershipSegment: value }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FREE">Free</SelectItem>
-                      <SelectItem value="BASIC">Basic</SelectItem>
-                      <SelectItem value="PREMIUM">Premium</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                {editOffer.type !== "COMBO" ? (
-                  <Input type="number" placeholder="Discount %" value={editOffer.discountPercent ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, discountPercent: e.target.value }))} />
-                ) : null}
-                <div className="grid gap-2 md:grid-cols-2">
-                  <Input type="datetime-local" value={editOffer.startAt ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, startAt: e.target.value }))} />
-                  <Input type="datetime-local" value={editOffer.endAt ?? ""} onChange={(e) => setEditOffer((v) => ({ ...v, endAt: e.target.value }))} />
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Priority order">
+                  <span className="font-semibold uppercase tracking-wide">Applied first →</span>
+                  {Object.entries(SOURCE_META).map(([key, m], i) => (
+                    <span key={key} className="flex items-center gap-1.5">
+                      <span className={cn("grid size-5 place-items-center rounded-md", m.tone)}>
+                        <m.icon className="size-3" />
+                      </span>
+                      {m.title}
+                      {i < 3 ? <span aria-hidden>›</span> : null}
+                    </span>
+                  ))}
                 </div>
-                <Button type="button" variant={editOffer.isEnabled ? "default" : "outline"} onClick={() => setEditOffer((v) => ({ ...v, isEnabled: !v.isEnabled }))}>
-                  {editOffer.isEnabled ? "Enabled" : "Disabled"}
-                </Button>
-                <div className="flex gap-2">
-                  <Button type="button" onClick={() => void saveEditedOffer()} disabled={loading}>Save Changes</Button>
-                  <Button type="button" variant="outline" onClick={() => setEditOffer(null)} disabled={loading}>Cancel</Button>
-                </div>
-              </div>
-            ) : null}
-            <div ref={calendarListRef} className="space-y-4">
-            {Object.entries(calendarGroups).map(([type, items]) => {
-              if (!items.length) return null
-              return (
-                <div key={type} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold">{formatCalendarType(type)}</p>
-                    <Badge variant="outline">{items.length}</Badge>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    {items.map((event) => (
-                      <div key={`${event.type}-${event.id}`} className="admin-card-hover admin-shadow-sm rounded-lg border border-border/70 bg-card p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="font-medium">{event.title}</p>
-                          <StatusPill status={event.isActive ? "Active" : "Expired"} />
+
+                {previewCombos.length ? (
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {previewCombos.map((c) => (
+                      <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="admin-shadow-sm rounded-2xl border border-chart-4/30 bg-chart-4/5 p-4">
+                        <div className="flex items-center gap-2">
+                          <span className="grid size-9 place-items-center rounded-xl bg-chart-4/15 text-chart-4">
+                            <Gift className="size-[18px]" />
+                          </span>
+                          <p className="truncate font-display font-semibold">{c.name}</p>
                         </div>
-                        <p className="text-xs text-muted-foreground">{event.type}</p>
-                        <p className="text-xs">Start: {event.startAt ? new Date(event.startAt).toLocaleString() : "N/A"}</p>
-                        <p className="text-xs">End: {event.endAt ? new Date(event.endAt).toLocaleString() : "N/A"}</p>
-                        <div className="mt-2 flex gap-2">
-                          <Button type="button" size="sm" variant="outline" onClick={() => startEditOffer(event)} disabled={loading}>Edit</Button>
-                          <Button type="button" size="sm" variant="destructive" onClick={() => void deleteOffer(event)} disabled={loading}>Delete</Button>
-                        </div>
-                      </div>
+                        <p className="mt-3 flex items-baseline gap-2">
+                          <span className="font-display text-2xl font-bold tabular-nums">{inr(c.offerPrice)}</span>
+                          <span className="text-sm text-muted-foreground line-through tabular-nums">{inr(c.actual)}</span>
+                          {c.savings ? <span className="ml-auto rounded-full bg-success/10 px-2 py-0.5 text-xs font-bold text-success">-{inr(c.savings)}</span> : null}
+                        </p>
+                      </motion.div>
                     ))}
                   </div>
-                </div>
-              )
-            })}
-            </div>
-            {!Object.values(calendarGroups).some((list) => list.length) ? (
-              <p className="text-xs text-muted-foreground">No offers found for current calendar filters.</p>
-            ) : null}
-          </CardContent>
-        </Card>
+                ) : null}
+
+                {!previewServices.length && !previewCombos.length ? (
+                  <EmptyState icon={Eye} compact title="Nothing to show" description="No services match." />
+                ) : (
+                  <motion.div layout className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                    <AnimatePresence mode="popLayout">
+                      {previewServices.map((item, i) => (
+                        <PreviewCard key={item.serviceId} item={item} index={i} />
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </>
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
+
+      <OfferEditor
+        open={editor.open}
+        onOpenChange={(open) => setEditor((e) => ({ ...e, open }))}
+        services={center.services ?? []}
+        initial={editor.form}
+        existingGlobal={center.globalDiscount}
+        onSubmit={saveOffer}
+      />
+      {confirmDialog}
     </AdminLayout>
   )
 }

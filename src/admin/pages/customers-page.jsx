@@ -49,7 +49,7 @@ export default function AdminCustomersPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-center">{customer.visits}</TableCell>
-                        <TableCell className="text-right">${customer.totalSpent}</TableCell>
+                        <TableCell className="text-right">Rs {customer.totalSpent}</TableCell>
                         <TableCell className="text-right">
                           <StatusPill status={customer.status === "vip" ? "VIP" : customer.status} tone={customer.status === "vip" ? "accent" : "neutral"} />
                         </TableCell>
@@ -71,7 +71,7 @@ export default function AdminCustomersPage() {
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
                       <span>{customer.visits} visits</span>
-                      <span className="font-medium text-foreground">${customer.totalSpent}</span>
+                      <span className="font-medium text-foreground">Rs {customer.totalSpent}</span>
                     </div>
                   </div>
                 ))}

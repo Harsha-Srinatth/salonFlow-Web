@@ -1,5 +1,6 @@
 "use client";
 
+import { PixelImage } from "@/components/fx/pixel-image";
 import { Skeleton } from "@/components/ui/skeleton";
 import { serviceImageUrl } from "@/lib/service-image";
 import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
@@ -119,15 +120,7 @@ const ServiceCard = memo(function ServiceCard({
         >
           <span className="relative grid size-24 shrink-0 place-items-center overflow-hidden rounded-xl bg-secondary text-primary">
             {service.image ? (
-              <img
-                src={serviceImageUrl(service.image)}
-                alt=""
-                width={96}
-                height={96}
-                loading="lazy"
-                decoding="async"
-                className="size-full object-cover"
-              />
+              <PixelImage src={serviceImageUrl(service.image)} alt="" className="size-full" />
             ) : (
               <Icon className="size-8" />
             )}

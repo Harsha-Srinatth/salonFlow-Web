@@ -1,7 +1,10 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { BorderBeam } from "border-beam";
+import { SlideOver } from "@/admin/components/slide-over";
+import { cn } from "@/lib/utils";
 import { CancelBookingDialog } from "@/components/shared/cancel-booking-dialog";
 import { Input } from "@/components/ui/input";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
@@ -9,7 +12,6 @@ import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
 import { SkeletonRows } from "@/admin/components/skeleton";
 import { StatusPill } from "@/admin/components/status-pill";
-import { useRevealOnReady } from "@/admin/lib/motion";
 import { Calendar, ChevronLeft, ChevronRight, Clock, Mail, Phone, RotateCw, Scissors, User } from "lucide-react";
 import {
     fetchAdminBookings,
@@ -84,7 +86,6 @@ export default function AdminAppointmentsPage() {
         const result = await dispatch(updateAdminBookingStatus({ bookingId, status: "CANCELLED", refundPercent }));
         return updateAdminBookingStatus.rejected.match(result) ? { ok: false, error: result.payload } : { ok: true };
     }, [dispatch]);
-    const listRef = useRevealOnReady([appointmentsLoading, appointments.length], { selector: ":scope > *" });
 
     async function markNoShow(booking) {
         if (!booking) return;
@@ -192,11 +193,23 @@ export default function AdminAppointmentsPage() {
                 {realtimeConnected ? "🟢 Live updates" : "⚪ Offline"} · {appointmentsPagination.total} total
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {STATUS_TABS.map((status) => (<Button key={status} type="button" size="sm" variant={appointmentsFilter.status === status ? "default" : "outline"} onClick={() => dispatch(setAppointmentsStatusFilter(status))}>
-                  {status}
-                </Button>))}
-            </div>
+            <LayoutGroup id="booking-status">
+              <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Booking status">
+                {STATUS_TABS.map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    role="tab"
+                    aria-selected={appointmentsFilter.status === status}
+                    onClick={() => dispatch(setAppointmentsStatusFilter(status))}
+                    className={cn("relative rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors", appointmentsFilter.status === status ? "text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                  >
+                    {appointmentsFilter.status === status ? <motion.span layoutId="booking-status-pill" className="absolute inset-0 rounded-full bg-primary" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
+                    <span className="relative">{status}</span>
+                  </button>
+                ))}
+              </div>
+            </LayoutGroup>
             <p className="hidden text-xs text-muted-foreground sm:block">
               Realtime: {realtimeConnected ? "Connected — list updates automatically" : "Disconnected"} | Total: {appointmentsPagination.total}
             </p>
@@ -205,7 +218,7 @@ export default function AdminAppointmentsPage() {
               appointments are auto-marked as no-show once their slot passes, or open a booking to mark one manually.
             </p>
             <div className="grid gap-2 md:grid-cols-3">
-              <Input placeholder="Search customer/service" value={searchText} onChange={(e) => setSearchText(e.target.value)}/>
+              <BorderBeam radius="0.5rem"><Input placeholder="Search customer/service" value={searchText} onChange={(e) => setSearchText(e.target.value)}/></BorderBeam>
               <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)}/>
               <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)}/>
             </div>
@@ -221,9 +234,18 @@ export default function AdminAppointmentsPage() {
             {!appointmentsLoading && appointments.length === 0 ? (
               <EmptyState icon={Calendar} title="No bookings yet" description="Bookings will appear here as customers schedule appointments." />
             ) : null}
-            <div ref={listRef} className="space-y-2.5">
-              {appointments.map(item => (
-                <div key={item.id} className="admin-card-hover admin-shadow-sm flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+            <motion.div layout className="space-y-2.5">
+              <AnimatePresence initial={false} mode="popLayout">
+              {appointments.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  layout
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -24 }}
+                  transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.025 }}
+                  whileHover={{ y: -2 }}
+                  className="admin-shadow-sm flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex min-w-0 items-start gap-3">
                     <AvatarBadge name={item.customer} />
                     <div className="min-w-0">
@@ -260,9 +282,10 @@ export default function AdminAppointmentsPage() {
                       </Button>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+              </AnimatePresence>
+            </motion.div>
             <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 Showing {appointmentsPagination.offset + 1}-
@@ -283,17 +306,15 @@ export default function AdminAppointmentsPage() {
           </CardContent>
         </Card>
       </div>
-      <Dialog open={Boolean(selectedBooking)} onOpenChange={(open) => {
-            if (!open)
-                setSelectedBooking(null);
-        }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Booking details</DialogTitle>
-            <DialogDescription>
-              Service start/completion is performed by the assigned stylist only. No-show can be marked here.
-            </DialogDescription>
-          </DialogHeader>
+      <SlideOver
+        open={Boolean(selectedBooking)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBooking(null);
+        }}
+        title="Booking details"
+        description="Service start/completion is performed by the assigned stylist only. No-show can be marked here."
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {selectedBooking ? (<div className="space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -357,8 +378,8 @@ export default function AdminAppointmentsPage() {
                 </div>
               )}
             </div>) : null}
-        </DialogContent>
-      </Dialog>
+        </div>
+      </SlideOver>
       <CancelBookingDialog
         bookingId={cancelTargetId}
         open={Boolean(cancelTargetId)}

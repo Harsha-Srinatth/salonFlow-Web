@@ -343,3 +343,67 @@
     animation: none;
   }
 }
+
+/* ---------- Bklit charts: map their colour tokens onto the site palette (our tokens are bare HSL channels) ---------- */
+.bklit-chart {
+  --foreground: hsl(150 28% 10%);
+  --muted-foreground: hsl(150 12% 48%);
+  --chart-1: hsl(152 38% 32%);
+  --chart-2: hsl(38 68% 52%);
+  --chart-3: hsl(204 62% 46%);
+  --chart-4: hsl(280 45% 58%);
+  --chart-5: hsl(350 65% 55%);
+  --chart-line-primary: hsl(152 38% 32%);
+  --chart-line-secondary: hsl(38 68% 52%);
+  --chart-grid: hsl(120 14% 87%);
+  --chart-foreground: hsl(150 28% 10%);
+  --chart-foreground-muted: hsl(150 12% 48%);
+  --chart-label: hsl(150 12% 40%);
+  --chart-background: hsl(0 0% 100%);
+  --chart-crosshair: hsl(38 68% 52%);
+  --chart-tooltip-background: hsl(0 0% 100%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(150 28% 10%);
+}
+.dark .bklit-chart {
+  --foreground: hsl(45 18% 90%);
+  --muted-foreground: hsl(0 0% 60%);
+  --chart-1: hsl(43 74% 55%);
+  --chart-2: hsl(152 45% 45%);
+  --chart-3: hsl(204 70% 58%);
+  --chart-4: hsl(280 55% 68%);
+  --chart-5: hsl(350 70% 62%);
+  --chart-line-primary: hsl(43 74% 55%);
+  --chart-line-secondary: hsl(152 45% 45%);
+  --chart-grid: hsl(0 0% 20%);
+  --chart-foreground: hsl(45 18% 90%);
+  --chart-foreground-muted: hsl(0 0% 60%);
+  --chart-label: hsl(0 0% 65%);
+  --chart-background: hsl(0 0% 11%);
+  --chart-crosshair: hsl(43 74% 55%);
+  --chart-tooltip-background: hsl(0 0% 13%);
+  --popover: hsl(0 0% 13%);
+  --popover-foreground: hsl(45 18% 90%);
+}
+
+/* ---------- Glide pill (admin/components/glide-nav.jsx), ported from atom-v3 GlideNav ---------- */
+.glide-group__pill {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  border-radius: 0.75rem;
+  background: hsl(var(--sidebar-accent));
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 220ms cubic-bezier(0.23, 1, 0.32, 1), width 220ms cubic-bezier(0.23, 1, 0.32, 1), height 220ms cubic-bezier(0.23, 1, 0.32, 1), opacity 150ms ease;
+}
+.glide-group [data-glide-row]:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .glide-group__pill {
+    transition: opacity 150ms ease;
+  }
+}

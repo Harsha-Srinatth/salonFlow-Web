@@ -1,29 +1,27 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
+import { BorderBeam } from "border-beam";
+import { Check, Coins, Gift, Loader2, Pencil, Plus, Save, Settings2, ShieldAlert, Sparkles, Trash2, Undo2, Users, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
+import { useConfirm } from "@/admin/components/confirm-dialog";
 import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
-import { SkeletonRows } from "@/admin/components/skeleton";
+import { SlideOver } from "@/admin/components/slide-over";
+import { Switch } from "@/admin/components/service-editor-drawer";
 import { StatCard } from "@/admin/components/stat-card";
 import { StatusPill } from "@/admin/components/status-pill";
-import { useRevealOnReady } from "@/admin/lib/motion";
+import { Stepper } from "@/admin/components/stepper";
+import { SegmentedControl } from "@/components/fx/segmented-control";
+import { LoadingOrb } from "@/components/shared/loading-orb";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
-import { Coins, Gift, Pencil, Plus, Save, ShieldAlert, Sparkles, Trash2, Users } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const GENDER_BADGE = {
   MEN: "bg-blue-100 text-blue-900 dark:bg-blue-900/20 dark:text-blue-300",
@@ -32,6 +30,20 @@ const GENDER_BADGE = {
 };
 
 const EMPTY_CARD_FORM = { serviceId: "", rank: "1", probabilityPercent: "10", isActive: true };
+const DEFAULT_SETTINGS = {
+  referrerRewardPoints: "150",
+  referredWelcomePoints: "75",
+  firstBookingDiscountPercent: "10",
+  coolingHours: "24",
+  autoApproveMaxRisk: "29",
+  autoRejectMinRisk: "70",
+};
+const REFERRAL_FILTERS = [
+  { value: "ALL", label: "All" },
+  { value: "REWARDED", label: "Rewarded" },
+  { value: "PENDING", label: "Pending" },
+  { value: "REJECTED", label: "Rejected" },
+];
 
 async function authFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -49,55 +61,70 @@ async function authFetch(path, init) {
   return data;
 }
 
+const inr = (n) => `Rs ${Number(n || 0).toLocaleString("en-IN")}`;
+const dateLabel = (value) => new Date(value).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+
+/** Risk score 0-100 split into the three zones the thresholds create. */
+function RiskZones({ approveMax, rejectMin }) {
+  const a = Math.min(100, Math.max(0, Number(approveMax) || 0));
+  const r = Math.min(100, Math.max(a, Number(rejectMin) || 100));
+  return (
+    <div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-muted" role="img" aria-label={`Auto-approve up to ${a}, review ${a + 1} to ${r - 1}, auto-reject from ${r}`}>
+        <motion.div animate={{ width: `${a}%` }} transition={{ type: "spring", stiffness: 120, damping: 20 }} className="bg-success" />
+        <motion.div animate={{ width: `${Math.max(0, r - a)}%` }} transition={{ type: "spring", stiffness: 120, damping: 20 }} className="bg-warning" />
+        <motion.div animate={{ width: `${Math.max(0, 100 - r)}%` }} transition={{ type: "spring", stiffness: 120, damping: 20 }} className="bg-destructive" />
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+        <span><span className="mr-1 inline-block size-2 rounded-full bg-success" />Paid out automatically: 0–{a}</span>
+        <span className="text-center"><span className="mr-1 inline-block size-2 rounded-full bg-warning" />Held for review: {a + 1}–{Math.max(a + 1, r - 1)}</span>
+        <span className="text-right"><span className="mr-1 inline-block size-2 rounded-full bg-destructive" />Rejected: {r}+</span>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLoyaltyPage() {
+  const { confirm, confirmDialog } = useConfirm();
+  const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [referrals, setReferrals] = useState([]);
   const [reviewQueue, setReviewQueue] = useState([]);
   const [decidingId, setDecidingId] = useState(null);
-  const [summary, setSummary] = useState({
-    totalReferrals: 0,
-    rewardedReferrals: 0,
-    pendingReferrals: 0,
-    coolingReferrals: 0,
-    rejectedReferrals: 0,
-    needsReviewCount: 0,
-    totalPointsIssued: 0,
-    walletLiability: 0,
-    pendingLiability: 0,
-  });
-  const [settingsForm, setSettingsForm] = useState({
-    referrerRewardPoints: "150",
-    referredWelcomePoints: "75",
-    firstBookingDiscountPercent: "10",
-    coolingHours: "24",
-    autoApproveMaxRisk: "29",
-    autoRejectMinRisk: "70",
-  });
+  const [rejecting, setRejecting] = useState(null);
+  const [rejectReason, setRejectReason] = useState("Failed manual verification");
+  const [referralFilter, setReferralFilter] = useState("ALL");
+  const [summary, setSummary] = useState({ totalReferrals: 0, rewardedReferrals: 0, pendingReferrals: 0, coolingReferrals: 0, rejectedReferrals: 0, needsReviewCount: 0, totalPointsIssued: 0, walletLiability: 0, pendingLiability: 0 });
+  const [settingsForm, setSettingsForm] = useState(DEFAULT_SETTINGS);
+  const [savedSettings, setSavedSettings] = useState(DEFAULT_SETTINGS);
   const [services, setServices] = useState([]);
   const [cards, setCards] = useState([]);
   const [cardForm, setCardForm] = useState(EMPTY_CARD_FORM);
+  const [cardOpen, setCardOpen] = useState(false);
   const [editingCardId, setEditingCardId] = useState(null);
   const [savingCard, setSavingCard] = useState(false);
-  const listRef = useRevealOnReady([loading, referrals.length], { selector: ":scope > *" });
-  const cardsListRef = useRevealOnReady([cards.length], { selector: ":scope > *" });
 
-  async function loadOverview() {
+  const settingsDirty = JSON.stringify(settingsForm) !== JSON.stringify(savedSettings);
+
+  const loadOverview = useCallback(async () => {
     setLoading(true);
     try {
       const data = await authFetch("/api/admin/loyalty");
       setReferrals(data.referrals ?? []);
       setReviewQueue(data.reviewQueue ?? []);
-      setSummary(data.summary ?? summary);
-      setSettingsForm({
+      if (data.summary) setSummary(data.summary);
+      const next = {
         referrerRewardPoints: String(data.settings?.referrerRewardPoints ?? 150),
         referredWelcomePoints: String(data.settings?.referredWelcomePoints ?? 75),
         firstBookingDiscountPercent: String(data.settings?.firstBookingDiscountPercent ?? 10),
         coolingHours: String(data.settings?.coolingHours ?? 24),
         autoApproveMaxRisk: String(data.settings?.autoApproveMaxRisk ?? 29),
         autoRejectMinRisk: String(data.settings?.autoRejectMinRisk ?? 70),
-      });
+      };
+      setSettingsForm(next);
+      setSavedSettings(next);
       setLoadError("");
     } catch (error) {
       const message = error.message ?? "Could not load loyalty overview";
@@ -106,46 +133,42 @@ export default function AdminLoyaltyPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function loadCards() {
+  const loadCards = useCallback(async () => {
     try {
       const data = await authFetch("/api/admin/loyalty/cards");
       setCards(data.cards ?? []);
     } catch (error) {
       toast.error(error.message ?? "Could not load reward cards");
     }
-  }
+  }, []);
 
-  async function loadServices() {
+  const loadServices = useCallback(async () => {
     try {
       const data = await authFetch("/api/admin/services");
       setServices((data.services ?? []).filter((service) => service.isActive !== false));
     } catch {
-      // Non-critical for the rest of the page — the card form just won't have options yet.
+      // Non-critical for the rest of the page: the card form just won't have options yet.
     }
-  }
+  }, []);
 
   useEffect(() => {
     void loadOverview();
     void loadCards();
     void loadServices();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadOverview, loadCards, loadServices]);
+
+  function openNewCard() {
+    setEditingCardId(null);
+    setCardForm(EMPTY_CARD_FORM);
+    setCardOpen(true);
+  }
 
   function editCard(card) {
     setEditingCardId(card.id);
-    setCardForm({
-      serviceId: card.serviceId,
-      rank: String(card.rank),
-      probabilityPercent: String(card.probabilityPercent),
-      isActive: card.isActive,
-    });
-  }
-
-  function cancelEditCard() {
-    setEditingCardId(null);
-    setCardForm(EMPTY_CARD_FORM);
+    setCardForm({ serviceId: card.serviceId, rank: String(card.rank), probabilityPercent: String(card.probabilityPercent), isActive: card.isActive });
+    setCardOpen(true);
   }
 
   async function saveCard() {
@@ -158,15 +181,10 @@ export default function AdminLoyaltyPage() {
       const path = editingCardId ? `/api/admin/loyalty/cards/${editingCardId}` : "/api/admin/loyalty/cards";
       await authFetch(path, {
         method: editingCardId ? "PATCH" : "POST",
-        body: JSON.stringify({
-          serviceId: cardForm.serviceId,
-          rank: Number(cardForm.rank),
-          probabilityPercent: Number(cardForm.probabilityPercent),
-          isActive: cardForm.isActive,
-        }),
+        body: JSON.stringify({ serviceId: cardForm.serviceId, rank: Number(cardForm.rank), probabilityPercent: Number(cardForm.probabilityPercent), isActive: cardForm.isActive }),
       });
       toast.success(editingCardId ? "Reward card updated" : "Reward card added");
-      cancelEditCard();
+      setCardOpen(false);
       await loadCards();
     } catch (error) {
       toast.error(error.message ?? "Could not save reward card");
@@ -176,7 +194,7 @@ export default function AdminLoyaltyPage() {
   }
 
   async function deleteCard(id) {
-    if (!window.confirm("Remove this reward card?")) return;
+    if (!(await confirm({ title: "Remove this reward card?", description: "Customers will no longer be able to earn it.", confirmLabel: "Remove", hold: true }))) return;
     try {
       await authFetch(`/api/admin/loyalty/cards/${id}`, { method: "DELETE" });
       toast.success("Reward card removed");
@@ -209,21 +227,11 @@ export default function AdminLoyaltyPage() {
     }
   }
 
-  async function decideReferral(referralId, decision) {
+  async function approveReferral(referralId) {
     setDecidingId(referralId);
     try {
-      if (decision === "reject") {
-        const reason = window.prompt("Why is this referral being rejected?", "Failed manual verification");
-        if (reason === null) return;
-        await authFetch(`/api/admin/loyalty/referrals/${referralId}/reject`, {
-          method: "POST",
-          body: JSON.stringify({ reason }),
-        });
-        toast.success("Referral rejected and credit reversed");
-      } else {
-        await authFetch(`/api/admin/loyalty/referrals/${referralId}/approve`, { method: "POST" });
-        toast.success("Referral approved and credited");
-      }
+      await authFetch(`/api/admin/loyalty/referrals/${referralId}/approve`, { method: "POST" });
+      toast.success("Referral approved and credited");
       await loadOverview();
     } catch (error) {
       toast.error(error.message ?? "Could not update referral");
@@ -232,354 +240,344 @@ export default function AdminLoyaltyPage() {
     }
   }
 
+  async function confirmReject() {
+    if (!rejecting) return;
+    setDecidingId(rejecting.id);
+    try {
+      await authFetch(`/api/admin/loyalty/referrals/${rejecting.id}/reject`, { method: "POST", body: JSON.stringify({ reason: rejectReason }) });
+      toast.success("Referral rejected and credit reversed");
+      setRejecting(null);
+      await loadOverview();
+    } catch (error) {
+      toast.error(error.message ?? "Could not update referral");
+    } finally {
+      setDecidingId(null);
+    }
+  }
+
+  const setting = (key) => (value) => setSettingsForm((current) => ({ ...current, [key]: value }));
+  const shownReferrals = useMemo(() => referrals.filter((r) => referralFilter === "ALL" || (referralFilter === "PENDING" ? r.status !== "REWARDED" && r.status !== "REJECTED" : r.status === referralFilter)), [referrals, referralFilter]);
+  const totalOdds = cards.filter((c) => c.isActive).reduce((sum, c) => sum + Number(c.probabilityPercent || 0), 0);
+
+  const tabs = [
+    { value: "overview", label: reviewQueue.length ? `Overview · ${reviewQueue.length} to review` : "Overview", icon: Sparkles },
+    { value: "rules", label: "Rewards & rules", icon: Settings2 },
+    { value: "vault", label: "Reward vault", icon: Gift },
+    { value: "referrals", label: "Referrals", icon: Users },
+  ];
+
   return (
-    <AdminLayout
-      pageTitle="Loyalty & Referrals"
-      description="Referral codes, wallet rewards, and configurable payout amounts."
-    >
-      <div className="space-y-4">
-        <ErrorBanner message={loadError} onRetry={loadOverview} />
+    <AdminLayout pageTitle="Loyalty & Referrals" description="Referral codes, wallet rewards, and configurable payout amounts.">
+      <div className="space-y-5 pb-20">
+        <ErrorBanner message={loadError} onRetry={() => void loadOverview()} />
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard icon={Users} label="Total referrals" value={summary.totalReferrals} tone="primary" />
           <StatCard icon={Sparkles} label="Rewarded" value={summary.rewardedReferrals} tone="success" delay={60} />
           <StatCard icon={Gift} label="Needs review" value={summary.needsReviewCount} tone="warning" delay={120} />
-          <StatCard
-            icon={Coins}
-            label="Wallet liability"
-            value={summary.walletLiability}
-            display={`Rs ${summary.walletLiability.toLocaleString()}${
-              summary.pendingLiability ? ` (+${summary.pendingLiability.toLocaleString()} held)` : ""
-            }`}
-            tone="accent"
-            delay={180}
-          />
+          <StatCard icon={Coins} label="Wallet liability" value={0} display={`${inr(summary.walletLiability)}${summary.pendingLiability ? ` (+${Number(summary.pendingLiability).toLocaleString("en-IN")} held)` : ""}`} tone="accent" delay={180} />
         </div>
 
-        {reviewQueue.length ? (
-          <Card className="admin-shadow-sm border-warning/40">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ShieldAlert className="size-4 text-warning" />
-                Referrals held for review ({reviewQueue.length})
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                These cleared their cooling period but tripped enough risk signals to need a person. Nothing is
-                credited until you decide.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2.5">
-              {reviewQueue.map((referral) => (
-                <div
-                  key={referral.id}
-                  className="admin-shadow-sm space-y-3 rounded-xl border border-border/70 bg-card p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <AvatarBadge name={referral.referrerName} />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {referral.referrerName} → {referral.referredName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Rs {referral.rewardPoints + referral.welcomePoints} at stake · risk score{" "}
-                          {referral.riskScore}
-                        </p>
+        <div className="max-w-full overflow-x-auto pb-1">
+          <SegmentedControl label="Loyalty sections" options={tabs} value={tab} onChange={setTab} />
+        </div>
+
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-5">
+            {tab === "overview" ? (
+              loading && !referrals.length ? (
+                <LoadingOrb compact label="Loading loyalty overview…" />
+              ) : (
+                <>
+                  {reviewQueue.length ? (
+                    <section className="admin-shadow-sm overflow-hidden rounded-2xl border border-warning/40 bg-card">
+                      <header className="flex items-start gap-3 border-b border-warning/30 bg-warning/5 px-5 py-4">
+                        <ShieldAlert className="mt-0.5 size-5 text-warning" />
+                        <div>
+                          <h2 className="font-display text-base font-semibold">Referrals held for review ({reviewQueue.length})</h2>
+                          <p className="text-xs text-muted-foreground">These cleared their cooling period but tripped enough risk signals to need a person. Nothing is credited until you decide.</p>
+                        </div>
+                      </header>
+                      <ul className="space-y-3 p-4">
+                        <AnimatePresence initial={false}>
+                          {reviewQueue.map((referral) => (
+                            <motion.li key={referral.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 24 }} className="space-y-3 rounded-xl border border-border/70 p-4">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <AvatarBadge name={referral.referrerName} />
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium">
+                                      {referral.referrerName} → {referral.referredName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">{inr(referral.rewardPoints + referral.welcomePoints)} at stake</p>
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-3">
+                                  <div className="text-right">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Risk</p>
+                                    <p className={cn("text-lg font-bold tabular-nums", referral.riskScore >= 50 ? "text-destructive" : "text-warning")}>{referral.riskScore}</p>
+                                  </div>
+                                  <Button size="sm" variant="outline" disabled={decidingId === referral.id} onClick={() => { setRejectReason("Failed manual verification"); setRejecting(referral); }}>
+                                    Reject
+                                  </Button>
+                                  <Button size="sm" disabled={decidingId === referral.id} onClick={() => void approveReferral(referral.id)}>
+                                    {decidingId === referral.id ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Approve &amp; pay
+                                  </Button>
+                                </div>
+                              </div>
+                              <ul className="flex flex-wrap gap-1.5">
+                                {(referral.riskSignals ?? []).map((signal) => (
+                                  <li key={signal.key} className="rounded-full bg-warning/10 px-2.5 py-1 text-[11px] font-medium text-warning">
+                                    {signal.label}
+                                  </li>
+                                ))}
+                              </ul>
+                            </motion.li>
+                          ))}
+                        </AnimatePresence>
+                      </ul>
+                    </section>
+                  ) : (
+                    <EmptyState icon={ShieldAlert} compact title="Nothing waiting for review" description="Referrals that need a person to decide will appear here." />
+                  )}
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {[
+                      ["Cooling period", summary.coolingReferrals, "Waiting before payout"],
+                      ["Pending", summary.pendingReferrals, "Not converted yet"],
+                      ["Rejected", summary.rejectedReferrals, "Blocked or reversed"],
+                    ].map(([label, value, hint]) => (
+                      <div key={label} className="admin-shadow-sm rounded-2xl border border-border/70 bg-card px-4 py-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+                        <p className="mt-1 text-2xl font-bold tabular-nums">{value}</p>
+                        <p className="text-xs text-muted-foreground">{hint}</p>
                       </div>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={decidingId === referral.id}
-                        onClick={() => void decideReferral(referral.id, "reject")}
-                      >
-                        Reject
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={decidingId === referral.id}
-                        onClick={() => void decideReferral(referral.id, "approve")}
-                      >
-                        Approve &amp; pay
-                      </Button>
-                    </div>
-                  </div>
-                  <ul className="flex flex-wrap gap-1.5">
-                    {(referral.riskSignals ?? []).map((signal) => (
-                      <li
-                        key={signal.key}
-                        className="rounded-full bg-warning/10 px-2.5 py-1 text-[11px] font-medium text-warning"
-                      >
-                        {signal.label}
-                      </li>
                     ))}
-                  </ul>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="admin-shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Save className="size-4 text-primary" />
-              Reward amounts
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              A referral reward is earned when the referred customer completes their first booking, then held for
-              the cooling period below while it is checked for abuse — both sides can see it, but it is not
-              spendable until it clears. The first-booking discount is separate and applies instantly at checkout
-              for anyone who has never booked before.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Referrer reward (Rs)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={settingsForm.referrerRewardPoints}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, referrerRewardPoints: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">Credited to the person who shared their code</p>
-              </div>
-              <div className="space-y-1">
-                <Label>Welcome bonus (Rs)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  value={settingsForm.referredWelcomePoints}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, referredWelcomePoints: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">Credited to the new customer who signed up via referral</p>
-              </div>
-            </div>
-            <div className="border-t border-border/60 pt-4">
-              <div className="max-w-xs space-y-1">
-                <Label>First booking discount (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={settingsForm.firstBookingDiscountPercent}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, firstBookingDiscountPercent: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Extra discount applied automatically on any brand-new customer's very first booking — on top of
-                  any running offers.
-                </p>
-              </div>
-            </div>
-            <div className="border-t border-border/60 pt-4">
-              <p className="mb-3 text-sm font-medium">Referral verification</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="space-y-1">
-                  <Label>Cooling period (hours)</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="720"
-                    value={settingsForm.coolingHours}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, coolingHours: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Reward is shown but held before it becomes spendable. 0 pays out immediately.
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <Label>Auto-approve up to</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    value={settingsForm.autoApproveMaxRisk}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, autoApproveMaxRisk: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">Risk score paid out with no review</p>
-                </div>
-                <div className="space-y-1">
-                  <Label>Auto-reject from</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    value={settingsForm.autoRejectMinRisk}
-                    onChange={(e) => setSettingsForm({ ...settingsForm, autoRejectMinRisk: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Anything between the two lands in the review queue above
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div>
-              <Button type="button" onClick={() => void saveSettings()} disabled={saving}>
-                <Save className="size-4" />
-                {saving ? "Saving..." : "Save reward amounts"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="admin-shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Gift className="size-4 text-accent" />
-              Reward vault cards
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Each time a referral converts, the referrer draws one of these cards and wins that service free.
-              Which cards a customer can win is automatically filtered by that service's own gender setting (Men /
-              Women / Unisex) — add a mix of services to build separate pools for each.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 rounded-xl border border-dashed border-border p-4 sm:grid-cols-[2fr_1fr_1fr_auto]">
-              <div className="space-y-1">
-                <Label>Service</Label>
-                <Select value={cardForm.serviceId} onValueChange={(value) => setCardForm({ ...cardForm, serviceId: value })}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Choose a service" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {services.map((service) => (
-                      <SelectItem key={service.id} value={service.id}>
-                        {service.name} · Rs {Number(service.basePrice ?? 0).toFixed(0)} · {service.gender ?? "UNISEX"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Rank</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={cardForm.rank}
-                  onChange={(e) => setCardForm({ ...cardForm, rank: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Probability (%)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={cardForm.probabilityPercent}
-                  onChange={(e) => setCardForm({ ...cardForm, probabilityPercent: e.target.value })}
-                />
-              </div>
-              <div className="flex items-end gap-2">
-                <Button type="button" onClick={() => void saveCard()} disabled={savingCard}>
-                  {editingCardId ? <Save className="size-4" /> : <Plus className="size-4" />}
-                  {editingCardId ? "Save" : "Add"}
-                </Button>
-                {editingCardId ? (
-                  <Button type="button" variant="outline" onClick={cancelEditCard}>
-                    Cancel
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-
-            {!cards.length ? (
-              <EmptyState
-                icon={Gift}
-                title="No reward cards yet"
-                description="Add services above to build the reward vault your referrers draw from."
-                compact
-              />
-            ) : (
-              <div ref={cardsListRef} className="space-y-2">
-                {cards.map((card) => (
-                  <div
-                    key={card.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card p-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="flex size-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                        #{card.rank}
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium">{card.serviceName}</p>
-                        <p className="text-xs text-muted-foreground">Rs {card.serviceBasePrice.toFixed(0)} value</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${GENDER_BADGE[card.serviceTargetGender] ?? GENDER_BADGE.UNISEX}`}>
-                        {card.serviceTargetGender}
-                      </span>
-                      <span className="rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent">
-                        {card.probabilityPercent}% odds
-                      </span>
-                      {!card.isActive ? <StatusPill status="INACTIVE" /> : null}
-                      <Button type="button" size="icon" variant="ghost" onClick={() => editCard(card)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      <Button type="button" size="icon" variant="ghost" onClick={() => void deleteCard(card.id)}>
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="admin-shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Users className="size-4 text-primary" />
-              Referrals
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loading ? <SkeletonRows count={4} /> : null}
-            {!loading && !referrals.length ? (
-              <EmptyState
-                icon={Gift}
-                title="No referrals yet"
-                description="Once customers start sharing their referral link, activity will show up here."
-              />
+                </>
+              )
             ) : null}
-            <div ref={listRef} className="space-y-2.5">
-              {referrals.map((referral) => (
-                <div
-                  key={referral.id}
-                  className="admin-card-hover admin-shadow-sm flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <AvatarBadge name={referral.referrerName} />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {referral.referrerName} <span className="text-muted-foreground">invited</span> {referral.referredName}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(referral.createdAt).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
-                        {referral.status === "REWARDED"
-                          ? ` · Rs ${referral.rewardPoints} + Rs ${referral.welcomePoints} issued`
-                          : ""}
-                        {referral.status === "REJECTED" && referral.rejectedReason
-                          ? ` · ${referral.rejectedReason}`
-                          : ""}
-                        {referral.riskScore ? ` · risk ${referral.riskScore}` : ""}
-                      </p>
-                    </div>
+
+            {tab === "rules" ? (
+              <section className="admin-shadow-sm overflow-hidden rounded-2xl border border-border/70 bg-card">
+                <header className="border-b border-border/60 bg-muted/20 px-5 py-4">
+                  <h2 className="font-display text-base font-semibold">Reward amounts</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">A referral reward is earned when the referred customer completes their first booking, then held for the cooling period while it is checked for abuse. Both sides can see it, but it is not spendable until it clears.</p>
+                </header>
+                <div className="space-y-6 p-5">
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <Stepper id="referrer" label="Referrer reward" hint="Credited to the person who shared their code." value={settingsForm.referrerRewardPoints} onChange={setting("referrerRewardPoints")} min={0} step={10} prefix="Rs" />
+                    <Stepper id="welcome" label="Welcome bonus" hint="Credited to the new customer who signed up via referral." value={settingsForm.referredWelcomePoints} onChange={setting("referredWelcomePoints")} min={0} step={10} prefix="Rs" />
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <StatusPill status={referral.needsReview ? "NEEDS REVIEW" : referral.status} />
+                  <div className="grid gap-5 border-t border-border/60 pt-5 sm:grid-cols-2">
+                    <Stepper id="firstBooking" label="First booking discount" hint="Applied automatically on a brand-new customer's very first booking, on top of any running offers." value={settingsForm.firstBookingDiscountPercent} onChange={setting("firstBookingDiscountPercent")} min={0} max={100} step={0.5} suffix="%" />
+                    <Stepper id="cooling" label="Cooling period" hint="Reward is shown but held before it becomes spendable. 0 pays out immediately." value={settingsForm.coolingHours} onChange={setting("coolingHours")} min={0} max={720} step={6} suffix="hours" />
+                  </div>
+                  <div className="space-y-4 border-t border-border/60 pt-5">
+                    <div>
+                      <p className="text-sm font-semibold">Referral verification</p>
+                      <p className="text-xs text-muted-foreground">Every referral gets a risk score. The two limits decide what happens to it.</p>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <Stepper id="approve" label="Auto-approve up to" hint="Risk score paid out with no review." value={settingsForm.autoApproveMaxRisk} onChange={setting("autoApproveMaxRisk")} min={0} max={100} step={1} />
+                      <Stepper id="reject" label="Auto-reject from" hint="Anything between the two lands in the review queue." value={settingsForm.autoRejectMinRisk} onChange={setting("autoRejectMinRisk")} min={1} max={100} step={1} />
+                    </div>
+                    <RiskZones approveMax={settingsForm.autoApproveMaxRisk} rejectMin={settingsForm.autoRejectMinRisk} />
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </section>
+            ) : null}
+
+            {tab === "vault" ? (
+              <section className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="max-w-2xl text-sm text-muted-foreground">Each time a referral converts, the referrer draws one of these cards and wins that service free. Cards a customer can win are filtered by the service's own audience (Men / Women / Unisex), so add a mix to build separate pools.</p>
+                  <BorderBeam size="sm">
+                    <Button type="button" onClick={openNewCard}>
+                      <Plus className="size-4" /> Add reward card
+                    </Button>
+                  </BorderBeam>
+                </div>
+                {cards.length ? <p className="text-xs text-muted-foreground">Active cards add up to <span className="font-semibold text-foreground">{totalOdds.toFixed(1)}%</span> odds.</p> : null}
+                {!cards.length ? (
+                  <EmptyState icon={Gift} title="No reward cards yet" description="Add services to build the reward vault your referrers draw from." actionLabel="Add reward card" onAction={openNewCard} />
+                ) : (
+                  <motion.div layout className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <AnimatePresence mode="popLayout">
+                      {cards.map((card, index) => (
+                        <motion.div key={card.id} layout initial={{ opacity: 0, y: 14, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.03 }} whileHover={{ y: -3 }} className={cn("admin-shadow-sm rounded-2xl border border-border/70 bg-card p-4", !card.isActive && "opacity-70")}>
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-xs font-bold text-primary">#{card.rank}</span>
+                            <div className="flex gap-1">
+                              <Button type="button" size="icon" variant="ghost" aria-label={`Edit ${card.serviceName}`} onClick={() => editCard(card)}>
+                                <Pencil className="size-4" />
+                              </Button>
+                              <Button type="button" size="icon" variant="ghost" aria-label={`Remove ${card.serviceName}`} onClick={() => void deleteCard(card.id)}>
+                                <Trash2 className="size-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="mt-3 font-display text-base font-semibold leading-tight">{card.serviceName}</p>
+                          <p className="text-xs text-muted-foreground">{inr(card.serviceBasePrice)} value</p>
+                          <div className="mt-3">
+                            <div className="mb-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Odds</span>
+                              <span className="font-semibold text-foreground">{card.probabilityPercent}%</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                              <motion.div className="h-full rounded-full bg-accent" initial={{ width: 0 }} animate={{ width: `${Math.min(100, card.probabilityPercent)}%` }} transition={{ type: "spring", stiffness: 110, damping: 20 }} />
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center gap-2">
+                            <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", GENDER_BADGE[card.serviceTargetGender] ?? GENDER_BADGE.UNISEX)}>{card.serviceTargetGender}</span>
+                            {!card.isActive ? <StatusPill status="INACTIVE" /> : null}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </section>
+            ) : null}
+
+            {tab === "referrals" ? (
+              <section className="space-y-4">
+                <div className="max-w-full overflow-x-auto pb-1">
+                  <SegmentedControl label="Referral status" options={REFERRAL_FILTERS} value={referralFilter} onChange={setReferralFilter} />
+                </div>
+                {loading && !referrals.length ? <LoadingOrb compact label="Loading referrals…" /> : null}
+                {!loading && !shownReferrals.length ? <EmptyState icon={Gift} title="No referrals here" description={referrals.length ? "Try a different filter." : "Once customers start sharing their referral link, activity will show up here."} /> : null}
+                <motion.div layout className="space-y-2.5">
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {shownReferrals.map((referral, index) => (
+                      <motion.div key={referral.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.02 }} className="admin-shadow-sm flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <AvatarBadge name={referral.referrerName} />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {referral.referrerName} <span className="text-muted-foreground">invited</span> {referral.referredName}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {dateLabel(referral.createdAt)}
+                              {referral.status === "REWARDED" ? ` · ${inr(referral.rewardPoints)} + ${inr(referral.welcomePoints)} issued` : ""}
+                              {referral.status === "REJECTED" && referral.rejectedReason ? ` · ${referral.rejectedReason}` : ""}
+                              {referral.riskScore ? ` · risk ${referral.riskScore}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                        <StatusPill status={referral.needsReview ? "NEEDS REVIEW" : referral.status} />
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              </section>
+            ) : null}
+          </motion.div>
+        </AnimatePresence>
       </div>
+
+      {/* Settings save bar */}
+      <AnimatePresence>
+        {settingsDirty ? (
+          <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }} transition={{ type: "spring", stiffness: 380, damping: 34 }} className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur">
+            <span className="flex items-center gap-2 pl-1 text-sm font-medium">
+              <span className="size-2 rounded-full bg-warning" /> Unsaved reward settings
+            </span>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" onClick={() => setSettingsForm(savedSettings)} disabled={saving}>
+                <Undo2 className="size-4" /> Discard
+              </Button>
+              <BorderBeam size="sm" active={!saving}>
+                <Button type="button" onClick={() => void saveSettings()} disabled={saving}>
+                  {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  {saving ? "Saving…" : "Save reward amounts"}
+                </Button>
+              </BorderBeam>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {/* Reward card editor */}
+      <SlideOver
+        open={cardOpen}
+        onOpenChange={setCardOpen}
+        title={editingCardId ? "Edit reward card" : "Add reward card"}
+        description="The service a referrer can win for free."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setCardOpen(false)} disabled={savingCard}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void saveCard()} disabled={savingCard}>
+              {savingCard ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+              {savingCard ? "Saving…" : editingCardId ? "Save card" : "Add card"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          <div className="space-y-1.5">
+            <p className="text-sm font-medium">Service</p>
+            <Select value={cardForm.serviceId} onValueChange={(value) => setCardForm({ ...cardForm, serviceId: value })}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Choose a service" />
+              </SelectTrigger>
+              <SelectContent>
+                {services.map((service) => (
+                  <SelectItem key={service.id} value={service.id}>
+                    {service.name} · Rs {Number(service.basePrice ?? 0).toFixed(0)} · {service.gender ?? "UNISEX"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Stepper id="card-rank" label="Rank" hint="1 is the top prize." value={cardForm.rank} onChange={(value) => setCardForm({ ...cardForm, rank: value })} min={1} max={5} />
+            <Stepper id="card-odds" label="Probability" hint="Chance of drawing this card." value={cardForm.probabilityPercent} onChange={(value) => setCardForm({ ...cardForm, probabilityPercent: value })} min={0} max={100} step={0.5} suffix="%" />
+          </div>
+          <div className="flex items-center justify-between rounded-xl border p-3">
+            <div>
+              <p className="text-sm font-medium">Active</p>
+              <p className="text-xs text-muted-foreground">Inactive cards cannot be drawn.</p>
+            </div>
+            <Switch checked={cardForm.isActive} onChange={(isActive) => setCardForm({ ...cardForm, isActive })} label="Card active" />
+          </div>
+        </div>
+      </SlideOver>
+
+      {/* Reject reason (replaces the browser prompt) */}
+      <SlideOver
+        open={Boolean(rejecting)}
+        onOpenChange={(open) => !open && setRejecting(null)}
+        title="Reject referral"
+        description={rejecting ? `${rejecting.referrerName} → ${rejecting.referredName}. Any credit is reversed.` : ""}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setRejecting(null)} disabled={Boolean(decidingId)}>
+              <X className="size-4" /> Cancel
+            </Button>
+            <Button type="button" variant="destructive" disabled={Boolean(decidingId) || !rejectReason.trim()} onClick={() => void confirmReject()}>
+              {decidingId ? <Loader2 className="size-4 animate-spin" /> : null} Reject referral
+            </Button>
+          </div>
+        }
+      >
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-5 py-5">
+          <label htmlFor="reject-reason" className="text-sm font-medium">
+            Reason
+          </label>
+          <textarea id="reject-reason" rows={4} maxLength={300} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
+          <div className="flex flex-wrap gap-1.5">
+            {["Failed manual verification", "Duplicate account", "Self-referral", "Suspicious activity"].map((reason) => (
+              <button key={reason} type="button" onClick={() => setRejectReason(reason)} className="rounded-full border px-2.5 py-1 text-xs hover:bg-muted">
+                {reason}
+              </button>
+            ))}
+          </div>
+        </div>
+      </SlideOver>
+      {confirmDialog}
     </AdminLayout>
   );
 }

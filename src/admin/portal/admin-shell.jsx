@@ -20,16 +20,17 @@ import {
     Moon,
     PanelLeftClose,
     PanelLeftOpen,
-    Search,
     Settings,
     Sparkles,
     Sun,
     User,
     X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { GlideGroup } from "@/admin/components/glide-nav";
 import { adminNavGroups } from "./nav-config";
 
 function useLiveClock() {
@@ -69,17 +70,19 @@ function NavItem({ item, isActive, collapsed, onNavigate }) {
         <Link
             to={item.href}
             onClick={onNavigate}
+            data-glide-row
+            aria-current={isActive ? "page" : undefined}
             title={collapsed ? item.label : undefined}
             className={cn(
-                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
+                "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 active:scale-[0.98]",
                 collapsed && "justify-center px-2",
                 isActive
                     ? "bg-sidebar-active/12 text-sidebar-active shadow-[inset_0_0_0_1px] shadow-sidebar-active/20"
-                    : "text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    : "text-sidebar-muted hover:text-sidebar-foreground"
             )}
         >
             {isActive ? (
-                <span className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-sidebar-active" />
+                <motion.span layoutId="admin-nav-bar" transition={{ type: "spring", stiffness: 500, damping: 36 }} className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-full bg-sidebar-active" />
             ) : null}
             <Icon className={cn("size-[18px] shrink-0 transition-transform duration-200", isActive && "scale-110")} />
             {!collapsed ? (
@@ -96,8 +99,13 @@ function NavItem({ item, isActive, collapsed, onNavigate }) {
 
 function SidebarContent({ collapsed, activeHref, onNavigate }) {
     const navRef = useRevealOnReady([], { distance: 10, selector: ":scope [data-nav-item]" });
+    // On first load bring the active entry into view; after that the sidebar is never remounted, so its scroll position sticks.
+    useEffect(() => {
+        navRef.current?.querySelector("[aria-current=page]")?.scrollIntoView({ block: "nearest" });
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
     return (
-        <nav ref={navRef} className="admin-scrollbar flex-1 space-y-5 overflow-y-auto px-3 pb-6">
+        <nav ref={navRef} className="admin-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-6">
+            <GlideGroup className="space-y-5">
             {adminNavGroups.map((group) => (
                 <div key={group.label} data-nav-item className="space-y-1.5">
                     {!collapsed ? (
@@ -118,6 +126,7 @@ function SidebarContent({ collapsed, activeHref, onNavigate }) {
                     ))}
                 </div>
             ))}
+            </GlideGroup>
         </nav>
     );
 }
@@ -138,7 +147,7 @@ function BrandMark({ collapsed }) {
     );
 }
 
-export function AdminShell({ pageTitle, description, actions, children }) {
+export function AdminShell({ pageTitle, description, actions, slotRefs, children }) {
     const { pathname } = useLocation();
     const navigate = useNavigate();
     const { appUser, logout } = useAuth();
@@ -148,9 +157,11 @@ export function AdminShell({ pageTitle, description, actions, children }) {
     const activeHref = useActiveHref(pathname);
     const clock = useLiveClock();
     const headerRef = useEntrance({ distance: 8 });
+    const mainRef = useRef(null);
 
     useEffect(() => {
         setMobileOpen(false);
+        mainRef.current?.scrollTo({ top: 0 });
     }, [pathname]);
 
     const activeNavLabel = useMemo(() => {
@@ -171,7 +182,7 @@ export function AdminShell({ pageTitle, description, actions, children }) {
     const dateLabel = clock.toLocaleDateString([], { weekday: "short", day: "2-digit", month: "short" });
 
     return (
-        <div className="h-screen overflow-hidden bg-background text-foreground">
+        <div className="h-dvh overflow-hidden bg-background text-foreground">
             <div className="flex h-full">
                 {/* Desktop sidebar */}
                 <aside
@@ -183,7 +194,7 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                     <div className="flex items-center justify-between">
                         <BrandMark collapsed={collapsed} />
                     </div>
-                    <SidebarContent collapsed={collapsed} activeHref={activeHref} onNavigate={() => {}} />
+                    <LayoutGroup id="nav-desktop"><SidebarContent collapsed={collapsed} activeHref={activeHref} onNavigate={() => {}} /></LayoutGroup>
                     <div className="border-t border-sidebar-border p-3">
                         <button
                             type="button"
@@ -197,23 +208,34 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                 </aside>
 
                 {/* Mobile drawer */}
-                {mobileOpen ? (
-                    <div className="fixed inset-0 z-40 lg:hidden">
-                        <div
-                            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                            onClick={() => setMobileOpen(false)}
-                        />
-                        <aside className="admin-sidebar-surface relative flex h-full w-[280px] flex-col border-r border-sidebar-border text-sidebar-foreground shadow-2xl">
-                            <div className="flex items-center justify-between pr-3">
-                                <BrandMark collapsed={false} />
-                                <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} aria-label="Close menu">
-                                    <X className="size-5" />
-                                </Button>
-                            </div>
-                            <SidebarContent collapsed={false} activeHref={activeHref} onNavigate={() => setMobileOpen(false)} />
-                        </aside>
-                    </div>
-                ) : null}
+                <AnimatePresence>
+                    {mobileOpen ? (
+                        <div className="fixed inset-0 z-40 lg:hidden">
+                            <motion.div
+                                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                onClick={() => setMobileOpen(false)}
+                            />
+                            <motion.aside
+                                initial={{ x: "-100%" }}
+                                animate={{ x: 0 }}
+                                exit={{ x: "-100%" }}
+                                transition={{ type: "spring", stiffness: 380, damping: 40 }}
+                                className="admin-sidebar-surface relative flex h-full w-[min(300px,85vw)] flex-col border-r border-sidebar-border pb-[env(safe-area-inset-bottom)] text-sidebar-foreground shadow-2xl"
+                            >
+                                <div className="flex items-center justify-between pr-3">
+                                    <BrandMark collapsed={false} />
+                                    <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} aria-label="Close menu">
+                                        <X className="size-5" />
+                                    </Button>
+                                </div>
+                                <LayoutGroup id="nav-mobile"><SidebarContent collapsed={false} activeHref={activeHref} onNavigate={() => setMobileOpen(false)} /></LayoutGroup>
+                            </motion.aside>
+                        </div>
+                    ) : null}
+                </AnimatePresence>
 
                 <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                     <header
@@ -232,7 +254,7 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                                     <Menu className="size-5" />
                                 </Button>
                                 <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                                    <div className="hidden items-center gap-1.5 text-[11px] font-medium text-muted-foreground sm:flex">
                                         <span>Admin</span>
                                         <ChevronRight className="size-3" />
                                         <span className="text-foreground/80">{activeNavLabel ?? pageTitle}</span>
@@ -245,15 +267,6 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                             </div>
 
                             <div className="flex items-center gap-1.5 sm:gap-2">
-                                <div className="relative hidden md:block">
-                                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                                    <input
-                                        type="search"
-                                        placeholder="Quick search…"
-                                        className="h-9 w-48 rounded-lg border border-input bg-background/60 pl-8 pr-3 text-sm shadow-xs outline-none transition-all focus-visible:w-64 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:w-56"
-                                    />
-                                </div>
-
                                 <div className="hidden items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:flex">
                                     <span className="admin-live-dot relative inline-flex size-1.5 rounded-full bg-emerald-500 text-emerald-500" />
                                     <span className="tabular-nums">{timeLabel}</span>
@@ -261,13 +274,13 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                                     <span>{dateLabel}</span>
                                 </div>
 
-                                <NotificationBell portal="admin" className="hidden sm:block" />
+                                <NotificationBell portal="admin" />
 
                                 <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={toggleTheme}>
                                     {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
                                 </Button>
 
-                                {actions ? <div className="hidden items-center gap-2 sm:flex">{actions}</div> : null}
+                                {slotRefs ? <div ref={slotRefs.desktop} className="hidden items-center gap-2 empty:hidden sm:flex" /> : actions ? <div className="hidden items-center gap-2 sm:flex">{actions}</div> : null}
 
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -308,15 +321,17 @@ export function AdminShell({ pageTitle, description, actions, children }) {
                             </div>
                         </div>
 
-                        {actions ? (
+                        {slotRefs ? (
+                            <div ref={slotRefs.mobile} className="flex items-center gap-2 border-t border-border/60 px-4 py-2 empty:hidden sm:hidden" />
+                        ) : actions ? (
                             <div className="flex items-center gap-2 border-t border-border/60 px-4 py-2 sm:hidden">{actions}</div>
                         ) : null}
                     </header>
 
-                    <main className="admin-scrollbar flex-1 overflow-y-auto p-4 md:p-6">
-                        <div key={pathname} className="mx-auto max-w-[1600px] animate-in fade-in slide-in-from-bottom-1 duration-300">
+                    <main ref={mainRef} className="admin-scrollbar flex-1 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 md:p-6">
+                        <motion.div key={pathname} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: "easeOut" }} className="mx-auto max-w-[1600px]">
                             {children}
-                        </div>
+                        </motion.div>
                     </main>
                 </div>
             </div>

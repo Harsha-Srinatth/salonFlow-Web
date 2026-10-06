@@ -1,368 +1,250 @@
 "use client";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EmptyState } from "@/admin/components/empty-state";
-import { ErrorBanner } from "@/admin/components/error-banner";
-import { SkeletonRows } from "@/admin/components/skeleton";
-import { StatCard } from "@/admin/components/stat-card";
-import { useRevealOnReady } from "@/admin/lib/motion";
-import { fetchAdminRevenueReport, setReportsFilter } from "@/store/admin-portal-slice";
-import { BarChart3, ChevronLeft, ChevronRight, DollarSign, Receipt, RotateCw, TrendingUp, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowDownLeft, ArrowUpRight, Banknote, BarChart3, Calendar, CalendarRange, ChevronLeft, ChevronRight, Crown, CreditCard, Layers, Receipt, RotateCcw, Smartphone, TrendingUp, UserRound, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import { AdminLayout } from "../portal/admin-layout";
+import { Button } from "@/components/ui/button";
+import { BrushChart } from "@/admin/components/brush-chart";
+import { dayEndIso, dayStartIso, DateRangePicker } from "@/admin/components/date-range-picker";
+import { EmptyState } from "@/admin/components/empty-state";
+import { ErrorBanner } from "@/admin/components/error-banner";
+import { StatCard } from "@/admin/components/stat-card";
+import { SegmentedControl } from "@/components/fx/segmented-control";
 import { LoadingOrb } from "@/components/shared/loading-orb";
+import { cn } from "@/lib/utils";
+import { fetchAdminRevenueReport, setReportsFilter } from "@/store/admin-portal-slice";
 
-const reportIconMap = {
-    DollarSign,
-    TrendingUp,
-    BarChart3,
-    Users,
+const MODES = [
+  { value: "ALL", label: "All", icon: Layers },
+  { value: "ONLINE", label: "Online", icon: CreditCard },
+  { value: "OFFLINE_UPI", label: "UPI", icon: Smartphone },
+  { value: "OFFLINE_CASH", label: "Cash", icon: Banknote },
+];
+const MODE_ICON = { ONLINE: CreditCard, OFFLINE_UPI: Smartphone, OFFLINE_CASH: Banknote };
+const MODE_LABEL = { ONLINE: "Online", OFFLINE_UPI: "UPI", OFFLINE_CASH: "Cash" };
+
+// Short card titles: the long ones came from the API.
+const CARD_VIEW = {
+  "Today Net Income": { label: "Today", icon: Calendar },
+  "This Week Net": { label: "This week", icon: CalendarRange },
+  "This Month Net": { label: "This month", icon: BarChart3 },
+  "This Year Net": { label: "This year", icon: TrendingUp },
+  "Previous Week Net": { label: "Last week", icon: RotateCcw },
 };
 
-const PAYMENT_MODE_OPTIONS = [
-    { value: "ALL", label: "All modes" },
-    { value: "ONLINE", label: "Online" },
-    { value: "OFFLINE_UPI", label: "UPI" },
-    { value: "OFFLINE_CASH", label: "Hand cash" },
-];
+const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
+const when = (value) => {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+};
 
-function formatPaymentMode(mode) {
-    if (mode === "ONLINE") return "Online";
-    if (mode === "OFFLINE_UPI") return "UPI";
-    if (mode === "OFFLINE_CASH") return "Hand cash";
-    return mode ?? "—";
+function paymentKind(payment) {
+  if (payment.isRefund || payment.sourceType === "REFUND") return { icon: ArrowUpRight, tone: "bg-destructive/10 text-destructive", title: "Refund" };
+  if (payment.sourceType === "MEMBERSHIP") return { icon: Crown, tone: "bg-accent/15 text-accent", title: "Membership" };
+  if (payment.sourceType === "WALKIN") return { icon: UserRound, tone: "bg-primary/10 text-primary", title: "Walk-in" };
+  return { icon: ArrowDownLeft, tone: "bg-success/10 text-success", title: "Booking" };
 }
 
-function formatDateTime(value) {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleString([], {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-    });
-}
-
-function formatPaymentType(payment) {
-    if (payment.transactionLabel) return payment.transactionLabel;
-    if (payment.isRefund || payment.sourceType === "REFUND") return "Refund (Repay to customer)";
-    if (payment.sourceType === "WALKIN") return "Walk-in collection";
-    return "Booking collection";
-}
-
-function formatSignedAmount(payment) {
-    const signed = Number(payment.signedAmount ?? payment.amount ?? 0);
-    const prefix = signed < 0 ? "- " : "+ ";
-    return `${prefix}Rs ${Math.abs(signed).toFixed(2)}`;
+function PaymentRow({ payment, index }) {
+  const kind = paymentKind(payment);
+  const Icon = kind.icon;
+  const ModeIcon = MODE_ICON[payment.paymentMode] ?? Wallet;
+  const signed = Number(payment.signedAmount ?? payment.amount ?? 0);
+  const note = payment.bookingStatus === "CANCELLED" ? "Cancelled" : payment.bookingStatus === "NO-SHOW" ? "No-show" : "";
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 10) * 0.015 }}
+      className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4"
+    >
+      <span title={kind.title} className={cn("grid size-9 shrink-0 place-items-center rounded-full", kind.tone)}>
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">
+          {payment.customerName}
+          {note ? <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{note}</span> : null}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">{payment.services ?? kind.title}</p>
+      </div>
+      <span title={MODE_LABEL[payment.paymentMode] ?? payment.paymentMode} className="hidden size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground sm:grid">
+        <ModeIcon className="size-4" />
+      </span>
+      <div className="shrink-0 text-right">
+        <p className={cn("text-sm font-semibold tabular-nums", signed < 0 ? "text-destructive" : "text-success")}>
+          {signed < 0 ? "-" : "+"} {inr(Math.abs(signed))}
+        </p>
+        <p className="text-[11px] text-muted-foreground">{when(payment.collectedAt)}</p>
+      </div>
+    </motion.li>
+  );
 }
 
 export default function AdminReportsPage() {
-    const dispatch = useDispatch();
-    const reportCards = useSelector((state) => state.adminPortal.reportCards);
-    const latestPayments = useSelector((state) => state.adminPortal.latestPayments);
-    const reportSummary = useSelector((state) => state.adminPortal.reportSummary);
-    const paymentsPagination = useSelector((state) => state.adminPortal.paymentsPagination);
-    const reportsFilter = useSelector((state) => state.adminPortal.reportsFilter);
-    const reportsLoading = useSelector((state) => state.adminPortal.reportsLoading);
-    const realtimeConnected = useSelector((state) => state.adminPortal.realtimeConnected);
-    const [reportsError, setReportsError] = useState("");
-    const cardsRef = useRevealOnReady([reportCards.length], { selector: ":scope > *" });
+  const dispatch = useDispatch();
+  const reportCards = useSelector((state) => state.adminPortal.reportCards);
+  const latestPayments = useSelector((state) => state.adminPortal.latestPayments);
+  const reportSummary = useSelector((state) => state.adminPortal.reportSummary);
+  const paymentsPagination = useSelector((state) => state.adminPortal.paymentsPagination);
+  const reportsFilter = useSelector((state) => state.adminPortal.reportsFilter);
+  const reportsLoading = useSelector((state) => state.adminPortal.reportsLoading);
+  const [reportsError, setReportsError] = useState("");
 
-    const { month, paymentMode, from, to } = reportsFilter;
+  const { month, paymentMode, from, to } = reportsFilter;
+  const filtered = Boolean(from || to) || paymentMode !== "ALL";
 
-    const todayIncomeLabel = useMemo(
-        () => `Rs ${Number(reportSummary.dayTotal ?? 0).toFixed(2)}`,
-        [reportSummary.dayTotal]
-    );
+  const params = useCallback(
+    (offset) => ({ month, paymentMode, from: dayStartIso(from), to: dayEndIso(to), limit: paymentsPagination.limit, offset }),
+    [month, paymentMode, from, to, paymentsPagination.limit]
+  );
 
-    async function runReportFetch(params) {
-        const result = await dispatch(fetchAdminRevenueReport(params));
-        if (fetchAdminRevenueReport.rejected.match(result)) {
-            const message = result.payload ?? "Could not load revenue report";
-            if (!params.silent) toast.error(message);
-            setReportsError(message);
-            return;
-        }
-        setReportsError("");
+  const runReportFetch = useCallback(
+    async (p) => {
+      const result = await dispatch(fetchAdminRevenueReport(p));
+      if (fetchAdminRevenueReport.rejected.match(result)) {
+        const message = result.payload ?? "Could not load revenue report";
+        toast.error(message);
+        setReportsError(message);
+        return;
+      }
+      setReportsError("");
+    },
+    [dispatch]
+  );
+
+  useEffect(() => {
+    void runReportFetch(params(0));
+  }, [runReportFetch, params]);
+
+  // Per calendar day: money collected (bars) and net after refunds (line), oldest first.
+  const revenueSeries = useMemo(() => {
+    const byDay = new Map();
+    for (const payment of latestPayments) {
+      const at = new Date(payment.collectedAt);
+      if (Number.isNaN(at.getTime())) continue;
+      const day = new Date(at.getFullYear(), at.getMonth(), at.getDate());
+      const signed = Number(payment.signedAmount ?? payment.amount ?? 0);
+      const entry = byDay.get(day.getTime()) ?? { date: day, collected: 0, net: 0 };
+      if (signed > 0) entry.collected += signed;
+      entry.net += signed;
+      byDay.set(day.getTime(), entry);
     }
+    return [...byDay.values()].sort((a, b) => a.date - b.date).map((d) => ({ ...d, net: Math.max(0, d.net) }));
+  }, [latestPayments]);
 
-    useEffect(() => {
-        void runReportFetch({
-            month,
-            paymentMode,
-            from: from ? `${from}T00:00:00.000Z` : undefined,
-            to: to ? `${to}T23:59:59.999Z` : undefined,
-            limit: paymentsPagination.limit,
-            offset: 0,
-        });
-    }, [dispatch, month, paymentMode, from, to, paymentsPagination.limit]);
+  const weekTrend = reportSummary.prevWeekTotal > 0 ? Math.round(((reportSummary.weekTotal - reportSummary.prevWeekTotal) / reportSummary.prevWeekTotal) * 100) : undefined;
+  const { offset, limit, total } = paymentsPagination;
 
-    function resetFilters() {
-        dispatch(setReportsFilter({
-            paymentMode: "ALL",
-            from: "",
-            to: "",
-        }));
-    }
+  return (
+    <AdminLayout
+      pageTitle="Reports"
+      description="Revenue, collections and refunds."
+      actions={
+        <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary" title="Today's net income">
+          <span className="admin-live-dot relative inline-flex size-1.5 rounded-full bg-primary text-primary" />
+          {inr(reportSummary.dayTotal)}
+        </span>
+      }
+    >
+      <div className="space-y-5">
+        <ErrorBanner message={reportsError} onRetry={() => void runReportFetch(params(offset))} />
 
-    function retryLoad() {
-        void runReportFetch({
-            month,
-            paymentMode,
-            from: from ? `${from}T00:00:00.000Z` : undefined,
-            to: to ? `${to}T23:59:59.999Z` : undefined,
-            limit: paymentsPagination.limit,
-            offset: paymentsPagination.offset,
-        });
-    }
-
-    function onPrevPage() {
-        if (paymentsPagination.offset <= 0) return;
-        void runReportFetch({
-            month,
-            paymentMode,
-            from: from ? `${from}T00:00:00.000Z` : undefined,
-            to: to ? `${to}T23:59:59.999Z` : undefined,
-            limit: paymentsPagination.limit,
-            offset: Math.max(paymentsPagination.offset - paymentsPagination.limit, 0),
-        });
-    }
-
-    function onNextPage() {
-        const nextOffset = paymentsPagination.offset + paymentsPagination.limit;
-        if (nextOffset >= paymentsPagination.total) return;
-        void runReportFetch({
-            month,
-            paymentMode,
-            from: from ? `${from}T00:00:00.000Z` : undefined,
-            to: to ? `${to}T23:59:59.999Z` : undefined,
-            limit: paymentsPagination.limit,
-            offset: nextOffset,
-        });
-    }
-
-    return (
-      <AdminLayout
-        pageTitle="Reports"
-        description="Revenue, collections, and refunds across the salon."
-        actions={
-          <>
-            <div className="hidden rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-right sm:block">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Today&apos;s net income (live)</p>
-              <p className="text-base font-bold text-primary">{todayIncomeLabel}</p>
-            </div>
-          </>
-        }
-      >
-        <div className="space-y-4">
-        <div className="admin-hero-surface admin-shadow-md rounded-2xl p-4 text-primary-foreground sm:hidden">
-          <p className="text-xs font-medium uppercase tracking-wide text-primary-foreground/80">Today&apos;s net income (live)</p>
-          <p className="text-2xl font-bold">{todayIncomeLabel}</p>
+        {/* Filters: one row, no labels to read */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <DateRangePicker
+            value={{ from, to }}
+            anyLabel="This month"
+            onChange={({ from: f, to: t }) => dispatch(setReportsFilter({ from: f, to: t, ...(f ? { month: f.slice(0, 7) } : {}) }))}
+          />
+          <div className="max-w-full overflow-x-auto pb-1 sm:pb-0">
+            <SegmentedControl label="Payment mode" options={MODES} value={paymentMode} onChange={(value) => dispatch(setReportsFilter({ paymentMode: value }))} />
+          </div>
+          <AnimatePresence initial={false}>
+            {filtered ? (
+              <motion.button
+                key="reset"
+                type="button"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                onClick={() => dispatch(setReportsFilter({ paymentMode: "ALL", from: "", to: "", month: new Date().toISOString().slice(0, 7) }))}
+                aria-label="Reset filters"
+                title="Reset filters"
+                className="grid size-10 place-items-center rounded-xl border bg-card text-muted-foreground hover:text-foreground"
+              >
+                <RotateCcw className="size-4" />
+              </motion.button>
+            ) : null}
+          </AnimatePresence>
         </div>
 
-        <ErrorBanner message={reportsError} onRetry={retryLoad} />
-
-        <Card className="admin-shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Revenue filters</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Realtime: {realtimeConnected ? "Connected — updates automatically" : "Disconnected — refresh page if needed"}
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground" htmlFor="report-month">Month</label>
-              <input
-                id="report-month"
-                type="month"
-                value={month}
-                onChange={(event) => dispatch(setReportsFilter({ month: event.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground" htmlFor="payment-mode">Payment mode</label>
-              <select
-                id="payment-mode"
-                value={paymentMode}
-                onChange={(event) => dispatch(setReportsFilter({ paymentMode: event.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              >
-                {PAYMENT_MODE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground" htmlFor="from-date">From date</label>
-              <input
-                id="from-date"
-                type="date"
-                value={from}
-                onChange={(event) => dispatch(setReportsFilter({ from: event.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-muted-foreground" htmlFor="to-date">To date</label>
-              <input
-                id="to-date"
-                type="date"
-                value={to}
-                onChange={(event) => dispatch(setReportsFilter({ to: event.target.value }))}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="flex items-end gap-2 md:col-span-2 lg:col-span-4">
-              <Button type="button" size="sm" variant="outline" onClick={resetFilters}>
-                <RotateCw className="size-3.5" />
-                Reset filters
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div ref={cardsRef} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {reportCards.map((card) => {
-            const Icon = reportIconMap[card.icon] ?? BarChart3;
-            return (
-              <StatCard
-                key={card.title}
-                icon={Icon}
-                label={card.title}
-                display={card.value}
-                trendLabel={card.change}
-                tone="primary"
-              />
-            );
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
+          {reportCards.map((card, i) => {
+            const view = CARD_VIEW[card.title] ?? { label: card.title, icon: BarChart3 };
+            return <StatCard key={card.title} icon={view.icon} label={view.label} display={card.value.replace(/^Rs\s*/, "Rs ").replace(/\.00$/, "")} trend={view.label === "This week" ? weekTrend : undefined} tone={view.label === "Today" ? "success" : "primary"} delay={i * 40} className={i === 0 ? "col-span-2 lg:col-span-1" : undefined} />;
           })}
         </div>
 
-        <Card className="admin-shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2"><Receipt className="size-4 text-primary" />Payment history</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {paymentsPagination.total} record(s) — collections add income; refunds show debt repaid to customers
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {reportsLoading && !latestPayments.length ? <SkeletonRows count={4} /> : null}
-            {latestPayments.length ? (
-              <>
-                {/* Table — sm and up */}
-                <div className="hidden overflow-x-auto rounded-lg border sm:block">
-                  <table className="w-full min-w-[860px] text-left text-sm">
-                    <thead className="border-b bg-muted/40 text-xs uppercase text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">Customer</th>
-                        <th className="px-3 py-2 font-medium">Phone</th>
-                        <th className="px-3 py-2 font-medium">Services</th>
-                        <th className="px-3 py-2 font-medium">Type</th>
-                        <th className="px-3 py-2 font-medium">Mode</th>
-                        <th className="px-3 py-2 font-medium">Date & time</th>
-                        <th className="px-3 py-2 text-right font-medium">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {latestPayments.map((payment) => {
-                        const isRefund = payment.isRefund || payment.sourceType === "REFUND";
-                        return (
-                        <tr key={payment.id} className="border-b transition-colors last:border-0 hover:bg-muted/30">
-                          <td className="px-3 py-3 font-medium">{payment.customerName}</td>
-                          <td className="px-3 py-3 text-muted-foreground">{payment.customerPhone || "—"}</td>
-                          <td className="px-3 py-3 text-muted-foreground">{payment.services ?? "—"}</td>
-                          <td className="px-3 py-3">
-                            <Badge variant={isRefund ? "destructive" : "secondary"} className="font-normal">
-                              {formatPaymentType(payment)}
-                            </Badge>
-                            {payment.bookingStatus === "CANCELLED" ? (
-                              <p className="mt-1 text-[10px] uppercase text-muted-foreground">Cancelled booking</p>
-                            ) : null}
-                            {payment.bookingStatus === "NO-SHOW" ? (
-                              <p className="mt-1 text-[10px] uppercase text-muted-foreground">Client did not visit</p>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-3">
-                            <Badge variant="outline">{formatPaymentMode(payment.paymentMode)}</Badge>
-                          </td>
-                          <td className="px-3 py-3 text-muted-foreground">{formatDateTime(payment.collectedAt)}</td>
-                          <td className={`px-3 py-3 text-right font-medium ${isRefund ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"}`}>
-                            {formatSignedAmount(payment)}
-                          </td>
-                        </tr>
-                      )})}
-                    </tbody>
-                  </table>
-                </div>
+        {revenueSeries.length > 1 ? (
+          <motion.section initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-shadow-sm rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
+            <h2 className="mb-3 flex items-center gap-2 font-display text-base font-semibold">
+              <TrendingUp className="size-4 text-primary" /> Revenue
+            </h2>
+            <BrushChart data={revenueSeries} />
+          </motion.section>
+        ) : null}
 
-                {/* Card list — mobile */}
-                <div className="space-y-2.5 sm:hidden">
-                  {latestPayments.map((payment) => {
-                    const isRefund = payment.isRefund || payment.sourceType === "REFUND";
-                    return (
-                      <div key={payment.id} className="admin-shadow-sm rounded-xl border border-border/70 bg-card p-3.5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold">{payment.customerName}</p>
-                            <p className="text-xs text-muted-foreground">{payment.customerPhone || "—"}</p>
-                          </div>
-                          <p className={`shrink-0 text-sm font-semibold ${isRefund ? "text-destructive" : "text-emerald-700 dark:text-emerald-400"}`}>
-                            {formatSignedAmount(payment)}
-                          </p>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <Badge variant={isRefund ? "destructive" : "secondary"} className="font-normal">
-                            {formatPaymentType(payment)}
-                          </Badge>
-                          <Badge variant="outline">{formatPaymentMode(payment.paymentMode)}</Badge>
-                          {payment.bookingStatus === "CANCELLED" ? (
-                            <span className="text-[10px] uppercase text-muted-foreground">Cancelled booking</span>
-                          ) : null}
-                          {payment.bookingStatus === "NO-SHOW" ? (
-                            <span className="text-[10px] uppercase text-muted-foreground">Client did not visit</span>
-                          ) : null}
-                        </div>
-                        <p className="mt-2 text-xs text-muted-foreground">{payment.services ?? "—"}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(payment.collectedAt)}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : !reportsLoading ? (
-              <EmptyState icon={Receipt} title="No payments recorded" description="No payments match the selected filters yet." />
-            ) : null}
-            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs text-muted-foreground">
-                Showing {paymentsPagination.offset + 1}-
-                {Math.min(paymentsPagination.offset + latestPayments.length, paymentsPagination.total)} of {paymentsPagination.total}
+        <section className="admin-shadow-sm overflow-hidden rounded-2xl border border-border/70 bg-card">
+          <header className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5 sm:px-5">
+            <h2 className="flex items-center gap-2 font-display text-base font-semibold">
+              <Receipt className="size-4 text-primary" /> Payments
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">{total}</span>
+            </h2>
+            <div className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex">
+              <span className="flex items-center gap-1"><ArrowDownLeft className="size-3 text-success" /> In</span>
+              <span className="flex items-center gap-1"><ArrowUpRight className="size-3 text-destructive" /> Refund</span>
+              <span className="flex items-center gap-1"><Crown className="size-3 text-accent" /> Plan</span>
+            </div>
+          </header>
+
+          {reportsLoading && !latestPayments.length ? (
+            <LoadingOrb compact label="Loading payments…" />
+          ) : !latestPayments.length ? (
+            <div className="p-4">
+              <EmptyState icon={Receipt} compact title="No payments" description="Nothing in this period." />
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              <AnimatePresence initial={false}>
+                {latestPayments.map((payment, index) => (
+                  <PaymentRow key={payment.id} payment={payment} index={index} />
+                ))}
+              </AnimatePresence>
+            </ul>
+          )}
+
+          {total > limit ? (
+            <footer className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {offset + 1}–{Math.min(offset + latestPayments.length, total)} of {total}
               </p>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant="outline" className="flex-1 sm:flex-none" onClick={onPrevPage} disabled={paymentsPagination.offset <= 0}>
+              <div className="flex gap-1.5">
+                <Button type="button" size="icon" variant="outline" aria-label="Previous page" disabled={offset <= 0} onClick={() => void runReportFetch(params(Math.max(offset - limit, 0)))}>
                   <ChevronLeft className="size-4" />
-                  Previous
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 sm:flex-none"
-                  onClick={onNextPage}
-                  disabled={paymentsPagination.offset + paymentsPagination.limit >= paymentsPagination.total}
-                >
-                  Next
+                <Button type="button" size="icon" variant="outline" aria-label="Next page" disabled={offset + limit >= total} onClick={() => void runReportFetch(params(offset + limit))}>
                   <ChevronRight className="size-4" />
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        </div>
-      </AdminLayout>
-    );
+            </footer>
+          ) : null}
+        </section>
+      </div>
+    </AdminLayout>
+  );
 }

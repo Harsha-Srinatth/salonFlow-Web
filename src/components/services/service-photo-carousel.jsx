@@ -1,5 +1,7 @@
 "use client";
 
+import { PixelImage } from "@/components/fx/pixel-image";
+import { ServicePhotoViewer } from "@/components/services/service-photo-viewer";
 import { serviceImageUrl } from "@/lib/service-image";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, ImageOff } from "lucide-react";
@@ -8,13 +10,33 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /**
  * Swipeable photo carousel. Uses native horizontal scroll with CSS scroll-snap, so touch swipe,
  * trackpad and momentum all work without a gesture library; arrows and dots drive the same
- * scroll position. Images are lazy except the first.
+ * scroll position. Images are lazy except the first. Tapping a photo opens the full-screen viewer.
  */
 export function ServicePhotoCarousel({ images, alt, fallbackIcon: FallbackIcon, className }) {
   const trackRef = useRef(null);
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState(() => new Set());
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerStart, setViewerStart] = useState(0);
+  const lastViewedRef = useRef(0);
   const count = images.length;
+
+  const onViewerIndex = useCallback((next) => {
+    lastViewedRef.current = next;
+  }, []);
+
+  // Leave the carousel on the photo the viewer was closed on.
+  function closeViewer() {
+    setViewerOpen(false);
+    const track = trackRef.current;
+    if (track) track.scrollTo({ left: lastViewedRef.current * track.clientWidth, behavior: "instant" });
+  }
+
+  function openViewer(at) {
+    lastViewedRef.current = at;
+    setViewerStart(at);
+    setViewerOpen(true);
+  }
 
   // Keep the active dot in sync with whatever moved the track (swipe, arrows, keyboard).
   useEffect(() => {
@@ -82,15 +104,17 @@ export function ServicePhotoCarousel({ images, alt, fallbackIcon: FallbackIcon, 
                 <ImageOff className="size-10" />
               </div>
             ) : (
-              <img
-                src={serviceImageUrl(url, 1200, 900)}
-                alt={i === 0 ? alt : `${alt}, photo ${i + 1}`}
-                loading={i === 0 ? "eager" : "lazy"}
-                decoding="async"
-                draggable={false}
-                onError={() => setFailed((prev) => new Set(prev).add(url))}
-                className="h-full w-full select-none object-cover"
-              />
+              <button type="button" aria-label={`View photo ${i + 1} full screen`} onClick={() => openViewer(i)} className="block h-full w-full cursor-zoom-in">
+                <PixelImage
+                  src={serviceImageUrl(url, 1200, 900)}
+                  alt={i === 0 ? alt : `${alt}, photo ${i + 1}`}
+                  loading={i === 0 ? "eager" : "lazy"}
+                  draggable={false}
+                  className="h-full w-full"
+                  imgClassName="select-none"
+                  fallback={<div className="grid h-full w-full place-items-center text-muted-foreground"><ImageOff className="size-10" /></div>}
+                />
+              </button>
             )}
           </div>
         ))}
@@ -126,11 +150,21 @@ export function ServicePhotoCarousel({ images, alt, fallbackIcon: FallbackIcon, 
               />
             ))}
           </div>
-          <span className="absolute right-3 top-3 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white">
+          {/* Top-left: the details sheet's close button sits top-right. */}
+          <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-2 py-0.5 text-xs font-semibold text-white">
             {index + 1}/{count}
           </span>
         </>
       ) : null}
+
+      <ServicePhotoViewer
+        open={viewerOpen}
+        images={images}
+        alt={alt}
+        startIndex={viewerStart}
+        onIndexChange={onViewerIndex}
+        onClose={closeViewer}
+      />
     </div>
   );
 }

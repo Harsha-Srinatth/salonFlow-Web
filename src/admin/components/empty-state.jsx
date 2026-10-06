@@ -1,10 +1,14 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { motion } from "motion/react";
 
 export function EmptyState({ icon: Icon, title, description, actionLabel, onAction, className, compact = false }) {
     return (
-        <div
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
             className={cn(
                 "flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 text-center",
                 compact ? "gap-1.5 p-6" : "gap-2 p-10",
@@ -23,6 +27,6 @@ export function EmptyState({ icon: Icon, title, description, actionLabel, onActi
                     {actionLabel}
                 </Button>
             ) : null}
-        </div>
+        </motion.div>
     );
 }

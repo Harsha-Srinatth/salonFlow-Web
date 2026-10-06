@@ -11,3 +11,13 @@ export function serviceImageUrl(url, size = 192, height = size) {
   const head = url.slice(0, at + marker.length);
   return `${head}f_auto,q_auto,w_${size},h_${height},c_fill,g_auto/${url.slice(at + marker.length)}`;
 }
+
+/** Whole photo, never cropped, scaled down only when wider than `width` (full-screen viewer). */
+export function serviceImageFullUrl(url, width = 1600) {
+  if (!url || typeof url !== "string") return "";
+  const marker = "/image/upload/";
+  const at = url.indexOf(marker);
+  if (at === -1 || url.includes(`${marker}f_auto`)) return url;
+  const head = url.slice(0, at + marker.length);
+  return `${head}f_auto,q_auto,w_${width},c_limit/${url.slice(at + marker.length)}`;
+}

@@ -29,6 +29,7 @@ export const adminNavGroups = [
     {
         label: "Workforce",
         items: [
+            { label: "Team", href: "/admin-dashboard/staff", icon: Users, description: "Staff & receptionists" },
             { label: "Create Staff", href: "/admin-dashboard/staff/new", icon: UserPlus, description: "Onboard a teammate" },
             { label: "Staff Permissions", href: "/admin-dashboard/staff/permissions", icon: KeyRound, description: "Service access" },
             { label: "Stylist Payroll", href: "/admin-dashboard/staff/payroll", icon: Wallet, description: "Deductions" },
@@ -40,7 +41,7 @@ export const adminNavGroups = [
             { label: "Revenue Reports", href: "/admin-dashboard/reports", icon: BarChart3, description: "Income & trends" },
             { label: "Feedback & Reviews", href: "/admin-dashboard/feedback", icon: MessageSquareHeart, description: "Ratings & complaints" },
             { label: "Customers", href: "/admin-dashboard/customers", icon: Users, description: "Client roster" },
-            { label: "Settings", href: "/admin-dashboard/settings", icon: Settings, description: "Salon profile" },
+            { label: "Settings", href: "/admin-dashboard/settings", icon: Settings, description: "Profile & salons" },
         ],
     },
 ];

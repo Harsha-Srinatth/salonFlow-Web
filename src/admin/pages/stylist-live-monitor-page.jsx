@@ -6,7 +6,7 @@ import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
 import { StatCard } from "@/admin/components/stat-card";
 import { StatusPill } from "@/admin/components/status-pill";
-import { useRevealOnReady } from "@/admin/lib/motion";
+import { AnimatePresence, motion } from "motion/react";
 import { fetchAdminBookings, selectAdminAppointments } from "@/store/admin-portal-slice";
 import { Activity, AlertTriangle, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -26,7 +26,6 @@ export default function AdminStylistLiveMonitorPage() {
   const [nowMs, setNowMs] = useState(Date.now());
   const appointments = useSelector(selectAdminAppointments);
   const { realtimeConnected, appointmentsError } = useSelector((state) => state.adminPortal);
-  const listRef = useRevealOnReady([appointments.length], { selector: ":scope > *" });
 
   useEffect(() => {
     void dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
@@ -51,7 +50,8 @@ export default function AdminStylistLiveMonitorPage() {
         const remainingMs = durationMs - Math.max(0, nowMs - startedAt);
         const inRedZone = remainingMs <= 0 && remainingMs >= -(10 * 60 * 1000);
         const critical = remainingMs < -(10 * 60 * 1000);
-        return { booking, remainingMs, inRedZone, critical };
+        const progress = durationMs > 0 ? Math.min(1, Math.max(0, 1 - remainingMs / durationMs)) : 1;
+        return { booking, remainingMs, inRedZone, critical, progress };
       })
       .sort((a, b) => a.remainingMs - b.remainingMs);
   }, [appointments, nowMs]);
@@ -90,9 +90,19 @@ export default function AdminStylistLiveMonitorPage() {
             {!activeCards.length ? (
               <EmptyState icon={Activity} title="No started services right now" description="Once a stylist marks a booking as started, it will show up here with a live countdown." />
             ) : (
-              <div ref={listRef} className="space-y-2.5">
-                {activeCards.map(({ booking, remainingMs, inRedZone, critical }) => (
-                  <div key={booking.id} className="admin-card-hover admin-shadow-sm flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3.5">
+              <motion.div layout className="space-y-2.5">
+                <AnimatePresence initial={false} mode="popLayout">
+                {activeCards.map(({ booking, remainingMs, inRedZone, critical, progress }) => (
+                  <motion.div
+                    key={booking.id}
+                    layout
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: 24 }}
+                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    className="admin-shadow-sm overflow-hidden rounded-xl border border-border/70 bg-card"
+                  >
+                  <div className="flex items-center justify-between gap-3 p-3.5">
                     <div className="flex min-w-0 items-center gap-3">
                       <AvatarBadge name={booking.customer} />
                       <div className="min-w-0">
@@ -108,8 +118,13 @@ export default function AdminStylistLiveMonitorPage() {
                       <StatusPill status={critical ? "Critical" : inRedZone ? "Red zone" : "On track"} className="mt-1" />
                     </div>
                   </div>
+                  <div className="h-1 bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+                    <motion.div className={`h-full ${critical ? "bg-destructive" : inRedZone ? "bg-warning" : "bg-primary"}`} animate={{ width: `${progress * 100}%` }} transition={{ ease: "linear", duration: 1 }} />
+                  </div>
+                  </motion.div>
                 ))}
-              </div>
+                </AnimatePresence>
+              </motion.div>
             )}
           </CardContent>
         </Card>

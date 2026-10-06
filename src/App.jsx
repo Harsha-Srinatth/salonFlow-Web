@@ -20,6 +20,7 @@ const AdminSettingsPage = lazy(() => import("@/admin/pages/settings-page"))
 const AdminServicesPage = lazy(() => import("@/admin/pages/services-page"))
 const AdminStaffPermissionsPage = lazy(() => import("@/admin/pages/staff-permissions-page"))
 const AdminStaffPayrollPage = lazy(() => import("@/admin/pages/staff-payroll-page"))
+const AdminTeamPage = lazy(() => import("@/admin/pages/staff-team-page"))
 const AdminStylistLiveMonitorPage = lazy(() => import("@/admin/pages/stylist-live-monitor-page"))
 const OfferCenterPage = lazy(() => import("@/admin/pages/offer-center-page"))
 const AdminMembershipPage = lazy(() => import("@/admin/pages/membership-page"))
@@ -50,6 +51,7 @@ const UserQueuePage = lazy(() => import("@/user/pages/queue-page"))
 
 const lazyLayout = (loader, name) => lazy(() => loader().then((m) => ({ default: m[name] })))
 const AdminLayout = lazyLayout(() => import("@/admin/portal/admin-layout"), "AdminLayout")
+const AdminFrame = lazyLayout(() => import("@/admin/portal/admin-frame"), "AdminFrame")
 const EmployeeLayout = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeLayout")
 const ReceptionLayout = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionLayout")
 const UserLayout = lazyLayout(() => import("@/user/portal/user-layout"), "UserLayout")
@@ -91,12 +93,15 @@ function App() {
             <Route path="/staff/set-password" element={<StaffSetPasswordPage />} />
 
             <Route element={<RequireRole roles={["ADMIN"]} fallback={adminFallback} />}>
+             {/* One persistent shell for every admin page: the sidebar is never remounted while navigating. */}
+             <Route element={<AdminFrame />}>
               <Route path="/admin-dashboard" element={<AdminDashboardPage />} />
               <Route path="/admin-dashboard/appointments" element={<AdminAppointmentsPage />} />
               <Route path="/admin-dashboard/services" element={<AdminServicesPage />} />
               <Route path="/admin-dashboard/customers" element={<AdminCustomersPage />} />
               <Route path="/admin-dashboard/reports" element={<AdminReportsPage />} />
               <Route path="/admin-dashboard/settings" element={<AdminSettingsPage />} />
+              <Route path="/admin-dashboard/staff" element={<AdminTeamPage />} />
               <Route path="/admin-dashboard/staff/new" element={<CreateStaffPage />} />
               <Route path="/admin-dashboard/staff/permissions" element={<AdminStaffPermissionsPage />} />
               <Route path="/admin-dashboard/staff/payroll" element={<AdminStaffPayrollPage />} />
@@ -105,6 +110,7 @@ function App() {
               <Route path="/admin-dashboard/membership" element={<AdminMembershipPage />} />
               <Route path="/admin-dashboard/feedback" element={<AdminFeedbackPage />} />
               <Route path="/admin-dashboard/loyalty" element={<AdminLoyaltyPage />} />
+             </Route>
             </Route>
 
             <Route element={<RequireRole roles={["STAFF"]} fallback={employeeFallback} />}>

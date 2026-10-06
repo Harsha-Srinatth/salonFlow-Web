@@ -2,6 +2,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, RotateCw } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
 
 /**
  * Persistent inline error surface to pair with toast notifications —
@@ -9,9 +10,14 @@ import { AlertTriangle, RotateCw } from "lucide-react";
  * or the user retries.
  */
 export function ErrorBanner({ message, onRetry, className }) {
-    if (!message) return null;
     return (
-        <div
+        <AnimatePresence initial={false}>
+        {message ? (
+        <motion.div
+            initial={{ opacity: 0, height: 0, y: -6 }}
+            animate={{ opacity: 1, height: "auto", y: 0 }}
+            exit={{ opacity: 0, height: 0 }}
+            style={{ overflow: "hidden" }}
             role="alert"
             className={cn(
                 "flex flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between",
@@ -28,6 +34,8 @@ export function ErrorBanner({ message, onRetry, className }) {
                     Retry
                 </Button>
             ) : null}
-        </div>
+        </motion.div>
+        ) : null}
+        </AnimatePresence>
     );
 }

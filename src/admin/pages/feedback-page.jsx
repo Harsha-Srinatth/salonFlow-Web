@@ -3,7 +3,8 @@
 import { AdminLayout } from "../portal/admin-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FilterTabs } from "@/admin/components/filter-tabs";
+import { SlideOver } from "@/admin/components/slide-over";
 import { StarRating } from "@/components/ui/star-rating";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { EmptyState } from "@/admin/components/empty-state";
@@ -131,20 +132,8 @@ export default function AdminFeedbackPage() {
               <MessageCircle className="size-5" />
               Customer feedback
             </CardTitle>
-            <div className="flex flex-wrap gap-2">
-              {STATUS_TABS.map((status) => (
-                <Button key={status} type="button" size="sm" variant={statusFilter === status ? "default" : "outline"} onClick={() => setStatusFilter(status)}>
-                  {status}
-                </Button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {TYPE_TABS.map((type) => (
-                <Button key={type} type="button" size="sm" variant={typeFilter === type ? "secondary" : "ghost"} onClick={() => setTypeFilter(type)}>
-                  {type === "ALL" ? "All types" : type === "COMPLAINT" ? "Complaints" : "Feedback"}
-                </Button>
-              ))}
-            </div>
+            <FilterTabs label="Status" options={STATUS_TABS} value={statusFilter} onChange={setStatusFilter} />
+            <FilterTabs label="Type" variant="soft" options={TYPE_TABS.map((t) => ({ value: t, label: t === "ALL" ? "All types" : t === "COMPLAINT" ? "Complaints" : "Feedback" }))} value={typeFilter} onChange={setTypeFilter} />
           </CardHeader>
           <CardContent className="space-y-3">
             {loading ? <SkeletonRows count={4} /> : null}
@@ -191,14 +180,24 @@ export default function AdminFeedbackPage() {
         </Card>
       </div>
 
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && closeRespond()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Respond to feedback</DialogTitle>
-            <DialogDescription>
-              {selected?.customerName ? `From ${selected.customerName}` : ""} {selected?.serviceName ? `· ${selected.serviceName}` : ""}
-            </DialogDescription>
-          </DialogHeader>
+      <SlideOver
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && closeRespond()}
+        title="Respond to feedback"
+        description={`${selected?.customerName ? `From ${selected.customerName}` : ""} ${selected?.serviceName ? `· ${selected.serviceName}` : ""}`.trim()}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={closeRespond}>
+              Close
+            </Button>
+            <Button type="button" disabled={saving} onClick={() => void submitResponse()}>
+              <Send className="size-4" />
+              {saving ? "Saving..." : "Save response"}
+            </Button>
+          </div>
+        }
+      >
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -226,33 +225,12 @@ export default function AdminFeedbackPage() {
               </div>
               <div className="space-y-1.5">
                 <p className="text-sm font-medium text-foreground">Mark as</p>
-                <div className="flex flex-wrap gap-2">
-                  {["OPEN", "REVIEWED", "RESOLVED"].map((status) => (
-                    <Button
-                      key={status}
-                      type="button"
-                      size="sm"
-                      variant={nextStatus === status ? "default" : "outline"}
-                      onClick={() => setNextStatus(status)}
-                    >
-                      {status}
-                    </Button>
-                  ))}
-                </div>
+                <FilterTabs label="Mark as" options={["OPEN", "REVIEWED", "RESOLVED"]} value={nextStatus} onChange={setNextStatus} />
               </div>
             </div>
           ) : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeRespond}>
-              Close
-            </Button>
-            <Button type="button" disabled={saving} onClick={() => void submitResponse()}>
-              <Send className="size-4" />
-              {saving ? "Saving..." : "Save response"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      </SlideOver>
     </AdminLayout>
   );
 }

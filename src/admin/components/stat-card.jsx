@@ -1,6 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { useCountUp, useEntrance } from "@/admin/lib/motion";
+import Counter from "@/components/fx/counter";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 /**
@@ -18,6 +19,8 @@ export function StatCard({ icon: Icon, label, value, display, trend, trendLabel,
         destructive: "bg-destructive/10 text-destructive",
         neutral: "bg-secondary text-secondary-foreground",
     };
+    // Whole numbers below ten million roll like an odometer; anything else keeps the plain count-up.
+    const odometer = display == null && typeof value === "number" && Number.isInteger(value) && value >= 0 && value < 1e7;
     const isPositive = typeof trend === "number" ? trend >= 0 : undefined;
     return (
         <div
@@ -31,7 +34,7 @@ export function StatCard({ icon: Icon, label, value, display, trend, trendLabel,
                 <div className="min-w-0">
                     <p className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
                     <p className="mt-1.5 text-2xl font-bold tracking-tight sm:text-[26px]">
-                        {display ?? <span ref={countRef}>0</span>}
+                        {display ?? (odometer ? <Counter value={Math.round(value)} fontSize={26} padding={4} gap={0} horizontalPadding={0} fontWeight={700} gradientHeight={0} gradientFrom="transparent" /> : <span ref={countRef}>0</span>)}
                     </p>
                 </div>
                 {Icon ? (
