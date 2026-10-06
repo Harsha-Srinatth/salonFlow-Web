@@ -1,3 +1,4 @@
+import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import { motion } from "motion/react";
 import { CornerDownLeft, Search } from "lucide-react";
@@ -31,6 +32,8 @@ export function CommandPalette({ open, onOpenChange, groups = [], placeholder = 
       overlayClassName="fixed inset-0 z-palette bg-[hsl(var(--scrim))] backdrop-blur-[3px]"
       contentClassName="fixed inset-x-3 top-[max(12vh,calc(1rem+var(--safe-top)))] z-palette mx-auto max-w-xl outline-none"
     >
+        <Dialog.Title className="sr-only">Command palette</Dialog.Title>
+        <Dialog.Description className="sr-only">Type to search, use the arrow keys to move and Enter to run.</Dialog.Description>
         <motion.div initial={{ opacity: 0, scale: 0.96, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={spring.sheet} className="glass-strong overflow-hidden rounded-sheet">
           <div className="flex items-center gap-3 border-b border-border/60 px-4">
             <Search className="size-5 text-ink-neutral" aria-hidden />
