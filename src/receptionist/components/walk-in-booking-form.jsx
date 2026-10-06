@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { Calendar, Clock, Crown, IndianRupee, User, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export function WalkInBookingForm({ layout = "default", onCreated }) {

@@ -4,7 +4,7 @@ import { Activity, ArrowRight, BarChart3, Building2, Calendar, CalendarCheck, Ch
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { AvatarBadge } from "@/admin/components/avatar-badge";

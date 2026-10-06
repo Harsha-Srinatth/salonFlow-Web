@@ -17,7 +17,7 @@ import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { Flag, MessageCircle, MessageSquareHeart, Send, Sparkles, Star } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 async function authFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);

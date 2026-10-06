@@ -17,7 +17,7 @@ import {
   Sparkles,
   User,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { OtpCodeInput } from "@/auth/components/otp-code-input"

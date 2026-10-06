@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { GlideGroup } from "@/admin/components/glide-nav";
 import { adminNavGroups } from "./nav-config";

@@ -2,7 +2,7 @@
 
 import { isCriticalDelay } from "@/receptionist/lib/booking-utils";
 import { useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 export function useDelayAlerts(bookings = []) {
   const [nowMs, setNowMs] = useState(Date.now());

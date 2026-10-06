@@ -16,7 +16,7 @@ import { recordReceptionPaymentAsync } from "@/store/reception-bookings-slice";
 import { CreditCard, Download, IndianRupee } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 // Bookings are already paid in full at creation (both online self-service and
 // reception walk-in flows collect `payableAmount` immediately). Without this,

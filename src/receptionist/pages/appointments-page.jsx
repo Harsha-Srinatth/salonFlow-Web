@@ -12,7 +12,7 @@ import { LogOut } from "lucide-react";
 import { useEffect } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export default function ReceptionAppointmentsPage() {

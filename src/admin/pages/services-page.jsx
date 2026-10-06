@@ -4,7 +4,7 @@ import { BorderBeam } from "border-beam";
 import { Clock, Images, Pencil, Plus, Scissors, Search, Tag, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowDownLeft, ArrowUpRight, Banknote, BarChart3, Calendar, CalendarRange, ChevronLeft, ChevronRight, Crown, CreditCard, Layers, Receipt, RotateCcw, Smartphone, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
 import { Button } from "@/components/ui/button";
 import { BrushChart } from "@/admin/components/brush-chart";

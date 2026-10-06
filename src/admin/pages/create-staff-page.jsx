@@ -4,7 +4,7 @@ import { BorderBeam } from "border-beam";
 import { Check, CheckCircle2, ConciergeBell, Loader2, Mail, Phone, Scissors, Search, ShieldCheck, User, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

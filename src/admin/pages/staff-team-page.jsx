@@ -6,7 +6,7 @@ import { Check, ConciergeBell, Loader2, Mail, Pencil, Phone, Scissors, Search, T
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
