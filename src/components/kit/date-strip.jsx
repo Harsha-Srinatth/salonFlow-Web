@@ -125,7 +125,7 @@ export function DateStrip({ value, onChange, startDate, days = 30, minDate, maxD
                   <span className={cn("relative text-micro font-semibold uppercase", !selected && "text-ink-neutral")}>{st.isToday ? "Today" : formatIsoDate(iso, { weekday: "short" })}</span>
                   <span className="relative font-display text-xl font-bold leading-tight tabular-nums">{formatIsoDate(iso, { day: "numeric" })}</span>
                   <span className={cn("relative text-[10px] font-medium leading-none", selected ? "opacity-90" : "text-ink-neutral", !firstOfMonth && "invisible")}>{formatIsoDate(iso, { month: "short" })}</span>
-                  {st.avail && DOT[st.avail] ? <span aria-hidden className={cn("absolute bottom-1.5 size-1.5 rounded-full", DOT[st.avail], selected && "ring-2 ring-portal-foreground/70")} /> : null}
+                  {st.avail && DOT[st.avail] ? <span aria-hidden className={cn("absolute top-1.5 right-1.5 size-1.5 rounded-full", DOT[st.avail], selected && "ring-2 ring-portal-foreground/70")} /> : null}
                 </button>
               );
             })}

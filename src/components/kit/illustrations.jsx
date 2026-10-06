@@ -12,13 +12,9 @@ const F = "hsl(var(--muted-foreground))";
 
 function Sparkle({ x, y, s = 1, delay = "0s", fill = G }) {
   return (
-    <path
-      className="kit-twinkle"
-      style={{ animationDelay: delay }}
-      transform={`translate(${x} ${y}) scale(${s})`}
-      d="M0 -6 L1.6 -1.6 L6 0 L1.6 1.6 L0 6 L-1.6 1.6 L-6 0 L-1.6 -1.6 Z"
-      fill={fill}
-    />
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path className="kit-twinkle" style={{ animationDelay: delay }} d="M0 -6 L1.6 -1.6 L6 0 L1.6 1.6 L0 6 L-1.6 1.6 L-6 0 L-1.6 -1.6 Z" fill={fill} />
+    </g>
   );
 }
 
