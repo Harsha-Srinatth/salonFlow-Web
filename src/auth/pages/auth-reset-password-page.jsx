@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { Eye, EyeOff, Lock } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { verifyPasswordResetCode } from "firebase/auth"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { completeDbPasswordReset } from "@/lib/auth/auth-client"

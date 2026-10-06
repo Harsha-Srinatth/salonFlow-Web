@@ -23,7 +23,7 @@ import {
 } from "@/store/admin-portal-slice";
 import { useCallback, useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
 import { getBookingDisplayStatus } from "@/lib/booking-pending-status";
 

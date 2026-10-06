@@ -6,7 +6,7 @@ import { connectStaffBookingsSocket, disconnectStaffBookingsSocket } from "@/lib
 import { staffApiFetch } from "@/lib/staff-auth-client";
 import { buildAppointmentCardModels } from "@/employee/lib/queue-utils";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 export function useEmployeeQueue({ user, enabled = true }) {
   const [queue, setQueue] = useState([]);

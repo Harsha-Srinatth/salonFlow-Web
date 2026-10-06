@@ -4,7 +4,7 @@ import { BorderBeam } from "border-beam";
 import { Check, ChevronLeft, ChevronRight, GripVertical, ImagePlus, Loader2, Plus, Sparkles, Star, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

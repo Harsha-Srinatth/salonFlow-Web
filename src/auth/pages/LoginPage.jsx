@@ -12,7 +12,7 @@ import {
   Phone,
   Star,
 } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider"
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { getFirebaseAuthErrorMessage } from "@/auth/lib/auth-errors"

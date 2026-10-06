@@ -3,7 +3,7 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { BorderBeam } from "border-beam"
 import { CalendarClock, CalendarDays, Crown, Eye, Gift, Layers, Pencil, Percent, Plus, Search, Sparkles, Tag, Trash2, Users, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout"
 import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/admin/components/confirm-dialog"

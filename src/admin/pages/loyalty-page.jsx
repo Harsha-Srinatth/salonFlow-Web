@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { BorderBeam } from "border-beam";
 import { Check, Coins, Gift, Loader2, Pencil, Plus, Save, Settings2, ShieldAlert, Sparkles, Trash2, Undo2, Users, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";

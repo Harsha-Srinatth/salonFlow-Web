@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { BorderBeam } from "border-beam";
 import { Building2, Check, Globe, Hash, HelpCircle, Instagram, Loader2, Mail, MapPin, Phone, Plus, Save, ScrollText, Store, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useDispatch, useSelector } from "react-redux";
 import { createSalonAsync, fetchAdminDashboardData, resetNewSalon, setNewSalonField } from "@/store/admin-dashboard-slice";
 import { Button } from "@/components/ui/button";

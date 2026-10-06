@@ -2,7 +2,8 @@ import { AuthProvider } from "@/components/auth/auth-provider"
 import { GuestOnlyRoute } from "@/components/auth/guest-only-route"
 import { RequireRole } from "@/components/auth/require-role"
 import { ThemeProvider } from "@/components/theme-provider"
-import { Toaster } from "@/components/ui/sonner"
+import { KitProvider } from "@/components/kit/kit-provider"
+import { RouteLoader } from "@/components/kit/route-loader"
 import { lazy, Suspense } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { Provider } from "react-redux"
@@ -71,12 +72,17 @@ const receptionFallback = portalFallback(ReceptionLayout)
 const userFallback = portalFallback(UserLayout)
 
 function PageFallback() {
-  return <LoadingOrb fullScreen />
+  return <RouteLoader fullScreen />
 }
+
+// Dev-only component gallery (src/DESIGN.md). `import.meta.env.DEV` is false in production builds,
+// so the lab and its chunk are dropped entirely.
+const DesignLab = import.meta.env.DEV ? lazy(() => import("@/design-lab/design-lab")) : null
 
 function App() {
   return (
     <ThemeProvider>
+     <KitProvider>
       <Provider store={store}>
         <AuthProvider>
           <Suspense fallback={<PageFallback />}>
@@ -137,12 +143,13 @@ function App() {
               <Route path="/user-dashboard/profile" element={<UserProfilePage />} />
             </Route>
 
+            {DesignLab ? <Route path="/design-lab" element={<DesignLab />} /> : null}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>
-          <Toaster />
         </AuthProvider>
       </Provider>
+     </KitProvider>
     </ThemeProvider>
   )
 }

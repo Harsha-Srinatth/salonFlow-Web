@@ -865,3 +865,48 @@
   [data-sonner-toast].kit-toast [data-content],
   [data-sonner-toast].kit-toast [data-icon] { animation: none !important; }
 }
+
+/* ---------- Kit keyframes: BrandLoader, ripple, live dot ---------- */
+@keyframes kit-snip-a { 0%, 100% { transform: rotate(0deg); } 45%, 55% { transform: rotate(20deg); } }
+@keyframes kit-snip-b { 0%, 100% { transform: rotate(0deg); } 45%, 55% { transform: rotate(-20deg); } }
+@keyframes kit-twinkle {
+  0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+  50% { transform: scale(1) rotate(90deg); opacity: 1; }
+}
+@keyframes kit-dot {
+  0%, 80%, 100% { transform: translateY(0) scale(0.75); opacity: 0.45; }
+  40% { transform: translateY(-45%) scale(1); opacity: 1; }
+}
+@keyframes kit-blob-breathe {
+  0%, 100% { transform: scale(0.86) rotate(0deg); }
+  50% { transform: scale(1.04) rotate(-120deg); }
+}
+@keyframes kit-ripple {
+  from { transform: translate(-50%, -50%) scale(0); opacity: 0.32; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 0; }
+}
+@keyframes kit-fill-fast {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+.kit-snip-a, .kit-snip-b, .kit-twinkle {
+  transform-box: view-box;
+  transform-origin: 32px 34px;
+}
+.kit-snip-a { animation: kit-snip-a 900ms var(--ease-spring) infinite; }
+.kit-snip-b { animation: kit-snip-b 900ms var(--ease-spring) infinite; }
+.kit-twinkle { transform-box: fill-box; transform-origin: center; animation: kit-twinkle 1.8s var(--ease-emphasized) infinite; }
+.kit-dot { animation: kit-dot 1s var(--ease-spring) infinite; }
+.kit-blob { animation: kit-spin 3.2s linear infinite; }
+.kit-blob-inner { animation: kit-blob-breathe 2.4s var(--ease-emphasized) infinite; }
+.kit-float { animation: kit-float 4s var(--ease-emphasized) infinite; }
+.kit-ripple { position: absolute; border-radius: 999px; background: currentColor; pointer-events: none; animation: kit-ripple 600ms var(--ease-out-expo) forwards; }
+.kit-filling-fast { animation: kit-fill-fast 1.6s var(--ease-emphasized) infinite; }
+.kit-live-ping { animation: kit-ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .kit-snip-a, .kit-snip-b, .kit-blob, .kit-blob-inner, .kit-float, .kit-filling-fast, .kit-live-ping { animation: none; }
+  .kit-twinkle { animation: none; opacity: 0.8; transform: none; }
+  .kit-dot { animation: kit-pulse-soft 1.4s ease-in-out infinite; transform: none; }
+  .kit-loader-reduced { animation: kit-pulse-soft 1.6s ease-in-out infinite; }
+  .kit-ripple { display: none; }
+}

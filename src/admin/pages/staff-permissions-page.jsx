@@ -5,7 +5,7 @@ import { BorderBeam } from "border-beam";
 import { Check, ChevronRight, KeyRound, Loader2, Search, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { AvatarBadge } from "@/admin/components/avatar-badge";

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { Eye, EyeOff, KeyRound } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { setStaffPassword } from "@/lib/staff-auth-client"
 import { InlineOrb } from "@/components/shared/loading-orb"

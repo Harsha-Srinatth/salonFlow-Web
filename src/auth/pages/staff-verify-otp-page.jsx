@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { Phone, ShieldCheck } from "lucide-react"
-import { toast } from "sonner"
+import { toast } from "@/lib/notify";
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { isValidE164Phone, toE164Phone } from "@/auth/lib/phone"
 import {

@@ -11,7 +11,7 @@ import { fetchAdminBookings, selectAdminAppointments } from "@/store/admin-porta
 import { Activity, AlertTriangle, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
 
 function formatMs(ms) {

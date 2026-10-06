@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { BorderBeam } from "border-beam";
 import { AlertOctagon, ChevronLeft, ChevronRight, Clock, Loader2, Save, Timer, TrendingDown, Undo2, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
