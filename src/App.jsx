@@ -5,7 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { KitProvider } from "@/components/kit/kit-provider"
 import { RouteLoader } from "@/components/kit/route-loader"
 import { lazy, Suspense } from "react"
-import { Navigate, Route, Routes } from "react-router-dom"
+import { Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { Provider } from "react-redux"
 import { store } from "@/store"
 import { LoadingOrb } from "@/components/shared/loading-orb";
@@ -80,6 +80,21 @@ function PageFallback() {
 const DesignLab = import.meta.env.DEV ? lazy(() => import("@/design-lab/design-lab")) : null
 
 function App() {
+  const { pathname } = useLocation()
+  // The lab renders outside Redux/Auth so it needs no backend or Firebase session.
+  if (DesignLab && pathname.startsWith("/design-lab")) {
+    return (
+      <ThemeProvider>
+        <KitProvider>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/design-lab/*" element={<DesignLab />} />
+            </Routes>
+          </Suspense>
+        </KitProvider>
+      </ThemeProvider>
+    )
+  }
   return (
     <ThemeProvider>
      <KitProvider>
@@ -143,7 +158,6 @@ function App() {
               <Route path="/user-dashboard/profile" element={<UserProfilePage />} />
             </Route>
 
-            {DesignLab ? <Route path="/design-lab" element={<DesignLab />} /> : null}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           </Suspense>

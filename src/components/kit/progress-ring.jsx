@@ -35,7 +35,7 @@ export function ProgressRing({ value, max = 100, size = 96, stroke = 9, tone = "
         />
       </svg>
       <span className="absolute inset-0 grid place-items-center text-center">
-        {children ?? (showValue ? <AnimatedCounter value={Math.round(pct * 100)} format={(n) => `${Math.round(n)}%`} className="font-display text-lg font-bold" /> : null)}
+        {children ?? (showValue ? <AnimatedCounter value={Math.round(pct * 100)} format={(n) => `${Math.round(n)}%`} className="font-display font-bold" style={{ fontSize: Math.max(11, size * 0.2) }} /> : null)}
       </span>
     </div>
   );

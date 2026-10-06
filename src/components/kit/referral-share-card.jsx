@@ -35,7 +35,9 @@ export function ReferralShareCard({ code, link, walletBalance, pendingCredit, pr
 
   return (
     <div className={cn("relative isolate overflow-hidden rounded-card p-5 text-white shadow-float sm:p-6", className)}>
-      <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--accent))_120%)]" />
+      <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--ink-info))_120%)]" />
+      {/* Keeps white text AA on the brighter dark-mode accents. */}
+      <div aria-hidden className="absolute inset-0 -z-[1] hidden bg-[hsl(222_45%_6%/0.5)] dark:block" />
       <div aria-hidden className="grain absolute inset-0 -z-[1]" />
       <motion.div aria-hidden className="absolute -top-10 -right-10 -z-[1] size-40 rounded-blob bg-white/15 blur-xl" animate={reduce ? undefined : { rotate: 360 }} transition={{ duration: 30, repeat: Infinity, ease: "linear" }} />
       <div className="flex items-start justify-between gap-3">

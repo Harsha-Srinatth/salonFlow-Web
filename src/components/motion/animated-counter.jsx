@@ -36,7 +36,7 @@ export function AnimatedCounter({ value, from = 0, duration = 1.1, format = defa
   }, [target, inView, reduce, duration, format]);
 
   return (
-    <span ref={ref} className={className} style={{ fontVariantNumeric: "tabular-nums" }} aria-label={format(target)} {...rest}>
+    <span ref={ref} className={className} style={{ fontVariantNumeric: "tabular-nums lining-nums" }} aria-label={format(target)} {...rest}>
       {format(from)}
     </span>
   );

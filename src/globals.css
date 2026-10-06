@@ -367,6 +367,12 @@
   h6 {
     @apply font-display;
   }
+
+  /* Besley defaults to old-style figures; prices, counters and dates read better with lining ones. */
+  .font-display,
+  h1, h2, h3, h4, h5, h6 {
+    font-variant-numeric: lining-nums;
+  }
 }
 
 
