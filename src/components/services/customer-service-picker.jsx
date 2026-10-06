@@ -6,12 +6,8 @@ import { serviceImageUrl } from "@/lib/service-image";
 import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { cn } from "@/lib/utils";
 import {
-  Brush,
   Check,
   Clock,
-  Droplets,
-  Flower2,
-  Hand,
   Images,
   Info,
   Layers,
@@ -21,17 +17,11 @@ import {
   Sparkles,
   X,
 } from "lucide-react";
+import { iconForCategory } from "@/lib/service-icons";
 import { memo, useDeferredValue, useMemo, useState } from "react";
 
-const CATEGORY_ICONS = [
-  [/wax|thread|shave|beard|detan|bleach|groom/i, Droplets],
-  [/skin|face|facial|clean/i, Sparkles],
-  [/nail|mani|pedi/i, Hand],
-  [/spa|massage|body|relax|reflex/i, Flower2],
-  [/make|bridal|mehendi/i, Brush],
-  [/hair|cut|style|colou?r|kids/i, Scissors],
-];
-export const iconForCategory = (category) => CATEGORY_ICONS.find(([re]) => re.test(category))?.[1] ?? Sparkles;
+// Category icons live in one shared map (src/lib/service-icons.js); re-exported for existing imports.
+export { iconForCategory };
 
 const GENDERS = [
   { value: "ALL", label: "All" },

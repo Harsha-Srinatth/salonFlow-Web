@@ -45,6 +45,67 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
+
+  /* Design-system colour tokens (src/DESIGN.md) */
+  --color-info: hsl(var(--info));
+  --color-plum: hsl(var(--plum));
+  --color-gold: hsl(var(--gold));
+  --color-gold-foreground: hsl(var(--gold-foreground));
+  --color-portal: hsl(var(--portal-accent));
+  --color-portal-foreground: hsl(var(--portal-accent-foreground));
+  --color-ink-primary: hsl(var(--ink-primary));
+  --color-ink-success: hsl(var(--ink-success));
+  --color-ink-warning: hsl(var(--ink-warning));
+  --color-ink-destructive: hsl(var(--ink-destructive));
+  --color-ink-info: hsl(var(--ink-info));
+  --color-ink-plum: hsl(var(--ink-plum));
+  --color-ink-neutral: hsl(var(--ink-neutral));
+  --color-glass: hsl(var(--glass-bg) / var(--glass-alpha));
+
+  /* Elevation: soft (resting), lift (hover), float (sheets/popovers), glow (focus/primary emphasis) */
+  --shadow-soft: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 4px 14px -6px hsl(var(--shadow-color) / 0.12);
+  --shadow-lift: 0 2px 4px hsl(var(--shadow-color) / 0.06), 0 14px 32px -12px hsl(var(--shadow-color) / 0.24);
+  --shadow-float: 0 8px 20px -8px hsl(var(--shadow-color) / 0.2), 0 28px 64px -20px hsl(var(--shadow-color) / 0.38);
+  --shadow-glow: 0 0 0 1px hsl(var(--portal-accent) / 0.22), 0 10px 36px -10px hsl(var(--portal-accent) / 0.55);
+}
+
+/* Static design-system scales. Tailwind v4 turns these into utilities:
+   text-display-2xl … text-micro, rounded-card/sheet/chip/control, ease-spring/bounce/out-expo/sheet. */
+@theme {
+  --text-display-2xl: clamp(2.75rem, 1.6rem + 5vw, 5.5rem);
+  --text-display-2xl--line-height: 1.02;
+  --text-display-2xl--letter-spacing: -0.035em;
+  --text-display-xl: clamp(2.25rem, 1.5rem + 3.4vw, 4rem);
+  --text-display-xl--line-height: 1.05;
+  --text-display-xl--letter-spacing: -0.03em;
+  --text-display-lg: clamp(1.875rem, 1.4rem + 2vw, 3rem);
+  --text-display-lg--line-height: 1.1;
+  --text-display-lg--letter-spacing: -0.025em;
+  --text-title: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+  --text-title--line-height: 1.2;
+  --text-title--letter-spacing: -0.015em;
+  --text-headline: 1.125rem;
+  --text-headline--line-height: 1.35;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.55;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.4;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 1.3;
+  --text-micro--letter-spacing: 0.04em;
+
+  --radius-chip: 0.75rem;
+  --radius-control: 0.875rem;
+  --radius-card: 1.5rem;
+  --radius-sheet: 1.75rem;
+  --radius-blob: 42% 58% 55% 45% / 48% 42% 58% 52%;
+
+  /* Spring curves approximated with linear() (k=170/c=14 and k=260/c=13). Pair with --dur-spring. */
+  --ease-spring: linear(0, 0.09, 0.293, 0.526, 0.749, 0.921, 1.04, 1.109, 1.133, 1.128, 1.103, 1.073, 1.042, 1.017, 0.999, 0.987, 0.983, 0.982, 0.985, 0.989, 0.993, 0.997, 1, 1.001, 1.002, 1);
+  --ease-bounce: linear(0, 0.138, 0.442, 0.764, 1.034, 1.193, 1.248, 1.224, 1.154, 1.073, 1.002, 0.957, 0.939, 0.942, 0.958, 0.979, 0.997, 1.009, 1.015, 1.015, 1.011, 1.006, 1.002, 0.998, 0.996, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+  --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @layer base {
@@ -108,71 +169,178 @@
     --admin-sidebar-gradient: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(120 20% 98%) 100%);
     --admin-topbar-gradient: linear-gradient(90deg, hsl(0 0% 100% / 0.92) 0%, hsl(120 22% 97% / 0.92) 100%);
     --admin-hero-gradient: linear-gradient(135deg, hsl(152 38% 32%) 0%, hsl(160 40% 26%) 55%, hsl(38 68% 45%) 130%);
+
+    /* ---- Design-system tokens (light, additive — palette above unchanged) ---- */
+    --info: 204 62% 42%;
+    --plum: 280 40% 48%;
+    --gold: 38 68% 52%;
+    --gold-foreground: 30 60% 12%;
+    --ink-primary: 152 42% 26%;
+    --ink-success: 142 72% 24%;
+    --ink-warning: 30 90% 30%;
+    --ink-destructive: 0 72% 40%;
+    --ink-info: 204 70% 32%;
+    --ink-plum: 280 45% 38%;
+    --ink-neutral: 150 10% 36%;
+    --shadow-color: 152 30% 22%;
+    --glass-bg: 0 0% 100%;
+    --glass-alpha: 0.7;
+    --glass-border: 150 30% 20% / 0.08;
+    --glass-highlight: 0 0% 100% / 0.7;
+    --aurora-1: 152 45% 70%;
+    --aurora-2: 38 80% 76%;
+    --aurora-3: 165 40% 80%;
+    --aurora-opacity: 0.55;
+    --grain-opacity: 0.045;
+    --scrim: 150 30% 6% / 0.42;
   }
 
+  /* Dark mode — cool ink/slate surfaces, teal primary, indigo accent.
+     Gold survives only as --gold (stars, badges, member price). */
   .dark {
     color-scheme: dark;
 
-    /* Dark mode — rich dark with warm gold */
-    --background: 0 0% 7%;
-    --foreground: 45 18% 90%;
+    --background: 222 32% 7%;
+    --foreground: 214 32% 93%;
 
-    --card: 0 0% 11%;
-    --card-foreground: 45 18% 90%;
+    --card: 222 28% 10%;
+    --card-foreground: 214 32% 93%;
 
-    --popover: 0 0% 11%;
-    --popover-foreground: 45 18% 90%;
+    --popover: 222 27% 12%;
+    --popover-foreground: 214 32% 93%;
 
-    --primary: 43 74% 55%;
-    --primary-foreground: 0 0% 7%;
+    --primary: 170 58% 48%;
+    --primary-foreground: 222 45% 8%;
 
-    --secondary: 0 0% 15%;
-    --secondary-foreground: 45 18% 85%;
+    --secondary: 221 24% 15%;
+    --secondary-foreground: 214 28% 88%;
 
-    --muted: 0 0% 13%;
-    --muted-foreground: 0 0% 55%;
+    --muted: 221 24% 14%;
+    --muted-foreground: 216 18% 68%;
 
-    --accent: 43 74% 55%;
-    --accent-foreground: 0 0% 7%;
+    --accent: 236 82% 76%;
+    --accent-foreground: 230 45% 10%;
 
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 43 74% 55%;
+    --border: 220 20% 20%;
+    --input: 220 20% 22%;
+    --ring: 170 58% 52%;
 
-    --destructive: 0 65% 55%;
-    --destructive-foreground: 0 0% 7%;
+    --destructive: 356 78% 66%;
+    --destructive-foreground: 222 45% 8%;
 
-    --success: 142 60% 40%;
-    --success-foreground: 0 0% 7%;
+    --success: 152 52% 50%;
+    --success-foreground: 222 45% 8%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 7%;
+    --warning: 36 88% 62%;
+    --warning-foreground: 222 45% 8%;
 
-    --error: 0 65% 55%;
-    --error-foreground: 0 0% 7%;
+    --error: 356 78% 66%;
+    --error-foreground: 222 45% 8%;
 
-    --sidebar: 0 0% 11%;
-    --sidebar-foreground: 45 18% 90%;
-    --sidebar-accent: 0 0% 15%;
-    --sidebar-accent-foreground: 45 18% 90%;
-    --sidebar-border: 0 0% 18%;
-    --sidebar-muted: 0 0% 55%;
-    --sidebar-active: 43 74% 55%;
+    --sidebar: 222 30% 9%;
+    --sidebar-foreground: 214 32% 93%;
+    --sidebar-accent: 221 24% 15%;
+    --sidebar-accent-foreground: 214 32% 93%;
+    --sidebar-border: 220 20% 17%;
+    --sidebar-muted: 216 18% 66%;
+    --sidebar-active: 170 58% 52%;
 
-    --chart-1: 43 74% 55%;
-    --chart-2: 152 45% 45%;
-    --chart-3: 204 70% 58%;
-    --chart-4: 280 55% 68%;
-    --chart-5: 350 70% 62%;
+    --chart-1: 170 58% 48%;
+    --chart-2: 236 82% 76%;
+    --chart-3: 204 80% 64%;
+    --chart-4: 280 60% 74%;
+    --chart-5: 350 75% 70%;
 
-    --admin-shadow-color: 0 0% 0%;
-    --admin-sidebar-gradient: linear-gradient(180deg, hsl(0 0% 11%) 0%, hsl(0 0% 8%) 100%);
-    --admin-topbar-gradient: linear-gradient(90deg, hsl(0 0% 11% / 0.92) 0%, hsl(0 0% 9% / 0.92) 100%);
-    --admin-hero-gradient: linear-gradient(135deg, hsl(0 0% 13%) 0%, hsl(0 0% 9%) 55%, hsl(43 60% 20%) 130%);
+    --admin-shadow-color: 225 60% 2%;
+    --admin-sidebar-gradient: linear-gradient(180deg, hsl(222 30% 10%) 0%, hsl(222 32% 8%) 100%);
+    --admin-topbar-gradient: linear-gradient(90deg, hsl(222 28% 10% / 0.88) 0%, hsl(222 30% 9% / 0.88) 100%);
+    --admin-hero-gradient: linear-gradient(135deg, hsl(222 34% 15%) 0%, hsl(224 34% 11%) 55%, hsl(186 55% 20%) 130%);
+
+    /* ---- Design-system tokens (dark) — see src/DESIGN.md ---- */
+    --info: 204 80% 66%;
+    --plum: 280 62% 76%;
+    --gold: 43 74% 60%;
+    --gold-foreground: 30 50% 10%;
+    --ink-primary: 170 60% 62%;
+    --ink-success: 152 55% 62%;
+    --ink-warning: 38 92% 68%;
+    --ink-destructive: 356 85% 74%;
+    --ink-info: 204 85% 72%;
+    --ink-plum: 280 70% 80%;
+    --ink-neutral: 216 18% 72%;
+    --shadow-color: 225 60% 2%;
+    --glass-bg: 222 28% 12%;
+    --glass-alpha: 0.66;
+    --glass-border: 214 40% 90% / 0.08;
+    --glass-highlight: 214 60% 95% / 0.06;
+    --aurora-1: 170 62% 38%;
+    --aurora-2: 236 70% 52%;
+    --aurora-3: 204 70% 40%;
+    --aurora-opacity: 0.32;
+    --grain-opacity: 0.07;
+    --scrim: 225 50% 3% / 0.62;
   }
+
+  /* Motion, layering and layout tokens shared by every portal (theme-independent). */
+  :root {
+    --portal-accent: var(--primary);
+    --portal-accent-foreground: var(--primary-foreground);
+
+    --dur-instant: 120ms;
+    --dur-fast: 200ms;
+    --dur-base: 320ms;
+    --dur-slow: 560ms;
+    --dur-spring: 640ms;
+    --dur-hero: 1000ms;
+    --stagger-tight: 30ms;
+    --stagger-base: 60ms;
+    --stagger-loose: 100ms;
+
+    --z-base: 0;
+    --z-raised: 10;
+    --z-sticky: 20;
+    --z-nav: 30;
+    --z-fab: 35;
+    --z-overlay: 40;
+    --z-sheet: 50;
+    --z-modal: 60;
+    --z-popover: 65;
+    --z-toast: 70;
+    --z-palette: 80;
+    --z-max: 90;
+
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --tabbar-h: 64px;
+    --topbar-h: 60px;
+    --sidebar-w: 264px;
+    --gutter: clamp(1rem, 0.6rem + 1.6vw, 2rem);
+    --content-max: 1280px;
+    --tap: 44px;
+  }
+
+  /* Portal accent presets: <PortalShell accent="teal"> sets data-accent. Default follows --primary. */
+  [data-accent="sage"] { --portal-accent: 152 38% 32%; --portal-accent-foreground: 0 0% 100%; }
+  [data-accent="teal"] { --portal-accent: 182 60% 30%; --portal-accent-foreground: 0 0% 100%; }
+  [data-accent="indigo"] { --portal-accent: 234 50% 48%; --portal-accent-foreground: 0 0% 100%; }
+  [data-accent="rose"] { --portal-accent: 346 55% 44%; --portal-accent-foreground: 0 0% 100%; }
+  [data-accent="amber"] { --portal-accent: 28 75% 38%; --portal-accent-foreground: 0 0% 100%; }
+  .dark [data-accent="sage"], .dark[data-accent="sage"] { --portal-accent: 160 50% 52%; --portal-accent-foreground: 222 45% 8%; }
+  .dark [data-accent="teal"], .dark[data-accent="teal"] { --portal-accent: 182 62% 52%; --portal-accent-foreground: 222 45% 8%; }
+  .dark [data-accent="indigo"], .dark[data-accent="indigo"] { --portal-accent: 236 82% 76%; --portal-accent-foreground: 230 45% 10%; }
+  .dark [data-accent="rose"], .dark[data-accent="rose"] { --portal-accent: 346 80% 76%; --portal-accent-foreground: 222 45% 8%; }
+  .dark [data-accent="amber"], .dark[data-accent="amber"] { --portal-accent: 32 85% 66%; --portal-accent-foreground: 222 45% 8%; }
 
   * {
     @apply border-border outline-ring/50;
+  }
+
+  /* Visible keyboard focus everywhere; components with their own ring keep it (classes beat :where). */
+  :where(a, button, [role="button"], [role="tab"], [role="option"], [role="slider"], input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
   html {
@@ -366,24 +534,24 @@
   --popover-foreground: hsl(150 28% 10%);
 }
 .dark .bklit-chart {
-  --foreground: hsl(45 18% 90%);
-  --muted-foreground: hsl(0 0% 60%);
-  --chart-1: hsl(43 74% 55%);
-  --chart-2: hsl(152 45% 45%);
-  --chart-3: hsl(204 70% 58%);
-  --chart-4: hsl(280 55% 68%);
-  --chart-5: hsl(350 70% 62%);
-  --chart-line-primary: hsl(43 74% 55%);
-  --chart-line-secondary: hsl(152 45% 45%);
-  --chart-grid: hsl(0 0% 20%);
-  --chart-foreground: hsl(45 18% 90%);
-  --chart-foreground-muted: hsl(0 0% 60%);
-  --chart-label: hsl(0 0% 65%);
-  --chart-background: hsl(0 0% 11%);
-  --chart-crosshair: hsl(43 74% 55%);
-  --chart-tooltip-background: hsl(0 0% 13%);
-  --popover: hsl(0 0% 13%);
-  --popover-foreground: hsl(45 18% 90%);
+  --foreground: hsl(214 32% 93%);
+  --muted-foreground: hsl(216 18% 68%);
+  --chart-1: hsl(170 58% 48%);
+  --chart-2: hsl(236 82% 76%);
+  --chart-3: hsl(204 80% 64%);
+  --chart-4: hsl(280 60% 74%);
+  --chart-5: hsl(350 75% 70%);
+  --chart-line-primary: hsl(170 58% 48%);
+  --chart-line-secondary: hsl(236 82% 76%);
+  --chart-grid: hsl(220 20% 20%);
+  --chart-foreground: hsl(214 32% 93%);
+  --chart-foreground-muted: hsl(216 18% 68%);
+  --chart-label: hsl(216 18% 72%);
+  --chart-background: hsl(222 28% 10%);
+  --chart-crosshair: hsl(236 82% 76%);
+  --chart-tooltip-background: hsl(222 27% 12%);
+  --popover: hsl(222 27% 12%);
+  --popover-foreground: hsl(214 32% 93%);
 }
 
 /* ---------- Glide pill (admin/components/glide-nav.jsx), ported from atom-v3 GlideNav ---------- */
@@ -406,4 +574,294 @@
   .glide-group__pill {
     transition: opacity 150ms ease;
   }
+}
+
+
+/* =====================================================================
+   Design-system utilities (src/DESIGN.md). Everything below is additive.
+   ===================================================================== */
+@supports not (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+
+@utility z-raised { z-index: var(--z-raised); }
+@utility z-sticky { z-index: var(--z-sticky); }
+@utility z-nav { z-index: var(--z-nav); }
+@utility z-fab { z-index: var(--z-fab); }
+@utility z-overlay { z-index: var(--z-overlay); }
+@utility z-sheet { z-index: var(--z-sheet); }
+@utility z-modal { z-index: var(--z-modal); }
+@utility z-popover { z-index: var(--z-popover); }
+@utility z-toast { z-index: var(--z-toast); }
+@utility z-palette { z-index: var(--z-palette); }
+
+/* iOS safe areas (index.html sets viewport-fit=cover). */
+@utility pt-safe { padding-top: var(--safe-top); }
+@utility pb-safe { padding-bottom: var(--safe-bottom); }
+@utility pl-safe { padding-left: var(--safe-left); }
+@utility pr-safe { padding-right: var(--safe-right); }
+@utility mb-safe { margin-bottom: var(--safe-bottom); }
+
+/* 44px minimum touch target without changing visual size. */
+@utility tap {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--tap));
+    height: max(100%, var(--tap));
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Frosted glass. Budget: at most ~3 glass layers on screen (backdrop-filter is costly on mid Android). */
+@utility glass-surface {
+  background: hsl(var(--glass-bg) / var(--glass-alpha));
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--shadow-soft), inset 0 1px 0 hsl(var(--glass-highlight));
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+@utility glass-strong {
+  background: hsl(var(--glass-bg) / calc(var(--glass-alpha) + 0.2));
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--shadow-float), inset 0 1px 0 hsl(var(--glass-highlight));
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-surface, .glass-strong { background: hsl(var(--card)); }
+}
+
+/* Film grain overlay (static SVG noise, no animation). Parent needs position:relative. */
+@utility grain {
+  position: relative;
+  isolation: isolate;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: inherit;
+    opacity: var(--grain-opacity);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+}
+
+/* Aurora / gradient-mesh backdrop. Add .aurora-animated for slow drifting blobs (transform-only). */
+@utility aurora {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    z-index: -1;
+    pointer-events: none;
+    opacity: var(--aurora-opacity);
+    background:
+      radial-gradient(40% 35% at 20% 25%, hsl(var(--aurora-1)) 0%, transparent 70%),
+      radial-gradient(35% 30% at 80% 20%, hsl(var(--aurora-2)) 0%, transparent 70%),
+      radial-gradient(45% 40% at 60% 85%, hsl(var(--aurora-3)) 0%, transparent 70%);
+    filter: blur(40px);
+  }
+}
+@utility aurora-animated {
+  &::before { animation: kit-aurora-drift 26s var(--ease-emphasized) infinite alternate; will-change: transform; }
+}
+@keyframes kit-aurora-drift {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate3d(4%, -3%, 0) rotate(8deg) scale(1.08); }
+  100% { transform: translate3d(-3%, 4%, 0) rotate(-6deg) scale(1.02); }
+}
+
+/* Light sweep across a surface: .shine sweeps on hover, .shine-auto every few seconds. */
+@utility shine {
+  position: relative;
+  overflow: hidden;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 35%, hsl(0 0% 100% / 0.35) 50%, transparent 65%);
+    transform: translateX(-120%);
+  }
+  @media (hover: hover) {
+    &:hover::after { transform: translateX(120%); transition: transform 900ms var(--ease-out-expo); }
+  }
+}
+@utility shine-auto {
+  &::after { animation: kit-shine 4.5s var(--ease-emphasized) infinite; }
+}
+@keyframes kit-shine {
+  0%, 60% { transform: translateX(-120%); }
+  85%, 100% { transform: translateX(120%); }
+}
+
+/* Shimmer for skeletons (transform-only sweep). */
+@utility kit-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--muted));
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, hsl(var(--background) / 0.55), transparent);
+    transform: translateX(-100%);
+    animation: kit-shimmer 1.6s var(--ease-emphasized) infinite;
+  }
+}
+@keyframes kit-shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* Gradient text in the portal accent. */
+@utility text-gradient-portal {
+  background: linear-gradient(120deg, hsl(var(--portal-accent)), hsl(var(--accent)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
+/* Shared keyframes used by the kit (CSS-driven so they never wait on JS). */
+@keyframes kit-pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.92); }
+}
+@keyframes kit-ping {
+  0% { transform: scale(1); opacity: 0.6; }
+  80%, 100% { transform: scale(2.4); opacity: 0; }
+}
+@keyframes kit-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+@keyframes kit-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes kit-draw {
+  from { stroke-dashoffset: var(--kit-dash, 48); }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes kit-slide-in {
+  from { transform: translateX(-10px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes kit-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes kit-spin { to { transform: rotate(360deg); } }
+@keyframes kit-progress { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes kit-route-bar {
+  0% { transform: translateX(-100%) scaleX(0.3); }
+  50% { transform: translateX(0%) scaleX(0.6); }
+  100% { transform: translateX(100%) scaleX(0.3); }
+}
+
+/* ---------- Toasts (sonner, restyled). Personality per type lives here so direct toast() calls get it too. ---------- */
+[data-sonner-toaster] {
+  --kit-toast-ms: 4500ms;
+}
+[data-sonner-toast].kit-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: var(--width);
+  padding: 0.875rem 0.875rem 1rem;
+  border-radius: 1.25rem;
+  color: hsl(var(--popover-foreground));
+  background: hsl(var(--glass-bg) / calc(var(--glass-alpha) + 0.22));
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--shadow-float), inset 0 1px 0 hsl(var(--glass-highlight));
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
+  overflow: hidden;
+  font-family: var(--font-sans);
+}
+[data-sonner-toast].kit-toast [data-icon] {
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0;
+  flex-shrink: 0;
+}
+[data-sonner-toast].kit-toast [data-content] { min-width: 0; flex: 1; }
+/* Timer bar: drains over the toast's lifetime, pauses while hovered/expanded. */
+[data-sonner-toast].kit-toast::after {
+  content: "";
+  position: absolute;
+  left: 0.875rem;
+  right: 0.875rem;
+  bottom: 0.4rem;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  color: hsl(var(--kit-toast-tone, var(--primary)));
+  opacity: 0.55;
+  transform-origin: left;
+  animation: kit-progress var(--kit-toast-ms) linear forwards;
+}
+[data-sonner-toaster]:hover [data-sonner-toast].kit-toast::after,
+[data-sonner-toaster][data-expanded="true"] [data-sonner-toast].kit-toast::after { animation-play-state: paused; }
+[data-sonner-toast].kit-toast[data-type="loading"]::after,
+[data-sonner-toast].kit-toast[data-promise="true"]::after { display: none; }
+[data-sonner-toast].kit-toast[data-type="success"] { --kit-toast-tone: var(--success); }
+[data-sonner-toast].kit-toast[data-type="error"] { --kit-toast-tone: var(--destructive); --kit-toast-ms: 7000ms; }
+[data-sonner-toast].kit-toast[data-type="warning"] { --kit-toast-tone: var(--warning); --kit-toast-ms: 6000ms; }
+[data-sonner-toast].kit-toast[data-type="info"] { --kit-toast-tone: var(--info); }
+[data-sonner-toast].kit-toast.kit-toast-reward { --kit-toast-tone: var(--gold); }
+/* Error: the content shakes once (never the <li>, sonner owns its transform). */
+[data-sonner-toast].kit-toast[data-type="error"][data-mounted="true"] [data-content],
+[data-sonner-toast].kit-toast[data-type="error"][data-mounted="true"] [data-icon] {
+  animation: kit-shake 420ms var(--ease-emphasized) 120ms both;
+}
+[data-sonner-toast].kit-toast[data-type="info"][data-mounted="true"] [data-content] {
+  animation: kit-slide-in 360ms var(--ease-out-expo) both;
+}
+[data-sonner-toast].kit-toast [data-title] { font-size: 0.875rem; font-weight: 600; line-height: 1.25rem; }
+[data-sonner-toast].kit-toast [data-description] { margin-top: 0.125rem; font-size: 0.8125rem; line-height: 1.25rem; color: hsl(var(--muted-foreground)); }
+[data-sonner-toast].kit-toast [data-button] {
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 0.75rem;
+  padding: 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+[data-sonner-toast].kit-toast [data-button][data-cancel] { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+[data-sonner-toast].kit-toast [data-close-button] {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+/* ---------- Reduced motion: keep fades, drop movement and loops ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-animated::before,
+  .shine-auto::after,
+  .kit-shimmer::after,
+  .kit-motion-loop { animation: none !important; }
+  .shine::after { display: none; }
+  [data-sonner-toast].kit-toast [data-content],
+  [data-sonner-toast].kit-toast [data-icon] { animation: none !important; }
 }
