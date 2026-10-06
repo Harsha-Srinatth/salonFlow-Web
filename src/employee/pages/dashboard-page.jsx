@@ -10,7 +10,7 @@ import { useEmployeeSession } from "@/employee/hooks/use-employee-session";
 import { computeShiftMetrics, formatBookingTime } from "@/employee/lib/queue-utils";
 import { EmployeeLayout } from "@/employee/portal/employee-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { ArrowRight, Calendar, LogOut, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";

@@ -15,7 +15,7 @@ import {
 } from "@/store/reception-bookings-slice";
 import { useCallback, useState } from "react";
 import { AlertTriangle, CheckCircle2, Clock3, Phone, Scissors, User, XCircle } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { useDispatch, useSelector } from "react-redux";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 

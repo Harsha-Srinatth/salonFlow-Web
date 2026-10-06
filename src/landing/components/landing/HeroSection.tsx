@@ -1,6 +1,6 @@
 import { GOOGLE_RATING } from '@/lib/public-claims';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Calendar, Star, CheckCircle, ArrowRight, Sparkles } from 'lucide-react';
 
 const floatingCard = {

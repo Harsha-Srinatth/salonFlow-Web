@@ -7,7 +7,7 @@ import {
 } from "@/receptionist/lib/booking-utils";
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 
 export function ScheduleBoard({ bookings = [], isCriticalDelay, loading }) {

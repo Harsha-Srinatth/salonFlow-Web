@@ -14,7 +14,7 @@ import {
   Timer,
   User,
 } from "lucide-react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { LoadingOrb } from "@/components/shared/loading-orb";
 
 function AppointmentCard({

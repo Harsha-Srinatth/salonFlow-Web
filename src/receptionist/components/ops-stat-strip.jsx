@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/receptionist/lib/booking-utils";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 const toneStyles = {
   primary: "from-primary/10 to-primary/5 border-primary/20",

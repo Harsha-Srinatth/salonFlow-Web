@@ -6,7 +6,7 @@ import { EmployeeLoadingScreen } from "@/employee/components/employee-loading-sc
 import { useEmployeeSession } from "@/employee/hooks/use-employee-session";
 import { EmployeeLayout } from "@/employee/portal/employee-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LogOut, Mail, Scissors, Shield, User } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

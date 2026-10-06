@@ -6,7 +6,7 @@ import { useReceptionBootstrap } from "@/receptionist/hooks/use-reception-bootst
 import { useReceptionSession } from "@/receptionist/hooks/use-reception-session";
 import { ReceptionLayout } from "@/receptionist/portal/reception-layout";
 import { staffLogout } from "@/lib/staff-auth-client";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";

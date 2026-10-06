@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { computeStylistAvailability } from "@/receptionist/lib/booking-utils";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { Clock3, Scissors, User } from "lucide-react";
 import { useMemo } from "react";
 import { LoadingOrb } from "@/components/shared/loading-orb";
