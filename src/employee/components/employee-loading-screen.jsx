@@ -1,6 +1,6 @@
 "use client";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { BrandLoader } from "@/components/kit";
 
 export function EmployeeLoadingScreen({ message = "Loading your shift…" }) {
-  return <LoadingOrb fullScreen label={message} />;
+  return <BrandLoader fullScreen label={message} />;
 }

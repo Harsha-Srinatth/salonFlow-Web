@@ -5,20 +5,28 @@ import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { connectStaffBookingsSocket, disconnectStaffBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { staffApiFetch } from "@/lib/staff-auth-client";
 import { buildAppointmentCardModels } from "@/employee/lib/queue-utils";
+import { formatMoney } from "@/lib/format";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
 
 export function useEmployeeQueue({ user, enabled = true }) {
   const [queue, setQueue] = useState([]);
   const [queueLoading, setQueueLoading] = useState(false);
+  const [queueError, setQueueError] = useState(null);
   const [mutatingId, setMutatingId] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
   const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const loadQueue = useCallback(async () => {
-    const res = await staffApiFetch(toApiUrl("/api/staff/queue"));
-    const data = await res.json().catch(() => ({}));
-    setQueue(data.queue ?? []);
+    try {
+      const res = await staffApiFetch(toApiUrl("/api/staff/queue"));
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Could not load your bookings");
+      setQueue(data.queue ?? []);
+      setQueueError(null);
+    } catch (e) {
+      setQueueError(e instanceof Error ? e.message : "Could not load your bookings");
+    }
   }, []);
 
   useEffect(() => {
@@ -45,6 +53,9 @@ export function useEmployeeQueue({ user, enabled = true }) {
       const token = await getFirebaseIdToken().catch(() => null);
       await connectStaffBookingsSocket({
         token,
+        // Real connection state (not just "connect() was called"), so the reconnect banner is honest.
+        onConnect: () => mounted && setRealtimeConnected(true),
+        onDisconnect: () => mounted && setRealtimeConnected(false),
         onBookingUpdated: (booking) => {
           if (!mounted || !booking?.id) return;
           void loadQueue();
@@ -67,7 +78,6 @@ export function useEmployeeQueue({ user, enabled = true }) {
         },
         onServiceCatalogUpdated: () => {},
       });
-      if (mounted) setRealtimeConnected(true);
     })();
     return () => {
       mounted = false;
@@ -78,6 +88,7 @@ export function useEmployeeQueue({ user, enabled = true }) {
 
   const cards = useMemo(() => buildAppointmentCardModels(queue, nowMs), [nowMs, queue]);
 
+  /** Resolves on success; throws (after a toast) on failure so buttons can show their error state. */
   async function startBooking(bookingId) {
     setMutatingId(bookingId);
     try {
@@ -88,6 +99,7 @@ export function useEmployeeQueue({ user, enabled = true }) {
       await loadQueue();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not start booking");
+      throw e;
     } finally {
       setMutatingId(null);
     }
@@ -100,10 +112,12 @@ export function useEmployeeQueue({ user, enabled = true }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Could not complete booking");
       const penalty = Number(data?.booking?.penaltyAmount ?? 0);
-      toast.success(penalty > 0 ? `Completed. Penalty: Rs ${penalty.toFixed(2)}` : "Service completed");
+      if (penalty > 0) toast.warning("Completed with penalty", { description: formatMoney(penalty, { decimals: true }) });
+      else toast.success("Service completed");
       await loadQueue();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not complete booking");
+      throw e;
     } finally {
       setMutatingId(null);
     }
@@ -113,6 +127,7 @@ export function useEmployeeQueue({ user, enabled = true }) {
     queue,
     cards,
     queueLoading,
+    queueError,
     mutatingId,
     nowMs,
     realtimeConnected,

@@ -1,34 +1,23 @@
-const STATUS_CONFIG = {
-  PENDING: { label: "Pending", tone: "amber" },
-  CONFIRMED: { label: "Confirmed", tone: "blue" },
-  STARTED: { label: "In service", tone: "primary" },
-  COMPLETED: { label: "Completed", tone: "muted" },
-  CANCELLED: { label: "Cancelled", tone: "destructive" },
-  "NO-SHOW": { label: "Client did not visit", tone: "amber" },
-};
+import { formatMoney, maskPhone as maskPhoneDigits } from "@/lib/format";
+import { formatSalonDateTime, salonDateIso, salonDateOf, salonTimeLabel } from "@/lib/salon-date";
+import { normalizeStatus } from "@/components/kit/status-meta";
 
-export function getBookingStatusConfig(status) {
-  const key = `${status ?? ""}`.trim().toUpperCase();
-  return STATUS_CONFIG[key] ?? { label: status ?? "Unknown", tone: "muted" };
-}
+export const ACTIVE_STATUSES = ["PENDING", "CONFIRMED", "STARTED"];
+export const WAITING_STATUSES = ["PENDING", "CONFIRMED"];
 
+/** Time of a booking in salon time ("3:15 pm"). */
 export function formatBookingTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return iso ? salonTimeLabel(iso) : "—";
 }
 
+/** Date + time of a booking in salon time. Also used by the shared cancel dialog (admin + reception). */
 export function formatBookingDateTime(iso) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return iso ? formatSalonDateTime(iso) : "—";
 }
 
+/** Money for the reception desk. Also used by the shared cancel dialog. */
 export function formatCurrency(amount) {
-  return `Rs ${Number(amount ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return formatMoney(amount, { decimals: !Number.isInteger(Number(amount ?? 0)) });
 }
 
 export function isCriticalDelay(booking, nowMs = Date.now()) {
@@ -50,59 +39,65 @@ export function maskEmail(email) {
 }
 
 export function maskPhone(phone) {
-  const value = `${phone ?? ""}`.replace(/\s+/g, "");
-  if (value.length < 4) return "—";
-  return `${"*".repeat(Math.max(value.length - 4, 4))}${value.slice(-4)}`;
+  return maskPhoneDigits(phone) || "—";
+}
+
+/** Salon-local day of a booking; device time zones can't shift it. */
+export function bookingDayIso(booking) {
+  return booking?.startsAt ? salonDateOf(booking.startsAt) : "";
 }
 
 export function isTodayBooking(booking) {
-  if (!booking?.startsAt) return false;
-  const start = new Date(booking.startsAt);
-  const now = new Date();
-  return (
-    start.getFullYear() === now.getFullYear() &&
-    start.getMonth() === now.getMonth() &&
-    start.getDate() === now.getDate()
-  );
+  return Boolean(booking?.startsAt) && bookingDayIso(booking) === salonDateIso(0);
 }
 
-export function computeOpsMetrics(bookings = [], queue = []) {
+/**
+ * Bookings still owing money. Bookings are normally paid in full at creation (online and walk-in
+ * flows both collect `payableAmount`), so this is usually empty; without it every fresh booking
+ * would look payable and risk a duplicate payment.
+ */
+export function amountDue(booking) {
+  const payable = Number(booking?.payableAmount ?? 0);
+  const paid = Number(booking?.paidAmount ?? 0);
+  return Math.max(0, Math.round((payable - paid) * 100) / 100);
+}
+
+export function computeOpsMetrics(bookings = [], queue = [], nowMs = Date.now()) {
   const todayBookings = bookings.filter(isTodayBooking);
-  const activeQueue = queue.filter((b) => ["PENDING", "CONFIRMED", "STARTED"].includes(b.status));
-  const waiting = activeQueue.filter((b) => ["PENDING", "CONFIRMED"].includes(b.status)).length;
+  const activeQueue = queue.filter((b) => ACTIVE_STATUSES.includes(b.status));
+  const waiting = activeQueue.filter((b) => WAITING_STATUSES.includes(b.status)).length;
   const inService = activeQueue.filter((b) => b.status === "STARTED").length;
+  const live = todayBookings.filter((b) => !["CANCELLED", "NO-SHOW"].includes(normalizeStatus(b.status)));
+  const completed = live.filter((b) => normalizeStatus(b.status) === "COMPLETED").length;
   const todayRevenue = todayBookings
     .filter((b) => b.status !== "CANCELLED")
     .reduce((sum, b) => sum + Number(b.payableAmount ?? 0), 0);
 
   return {
     todayTotal: todayBookings.length,
+    plannedToday: live.length,
+    completed,
     waiting,
     inService,
     todayRevenue,
-    delayed: activeQueue.filter((b) => isCriticalDelay(b)).length,
+    delayed: activeQueue.filter((b) => isCriticalDelay(b, nowMs)).length,
   };
 }
 
 export function groupQueueByStatus(queue = []) {
+  const byTime = (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime();
   return {
-    upcoming: queue.filter((b) => ["PENDING", "CONFIRMED"].includes(b.status)),
-    inService: queue.filter((b) => b.status === "STARTED"),
+    upcoming: queue.filter((b) => WAITING_STATUSES.includes(b.status)).sort(byTime),
+    inService: queue.filter((b) => b.status === "STARTED").sort(byTime),
   };
 }
 
 export function computeStylistAvailability(stylists = [], queue = []) {
-  const activeBookings = queue.filter((b) =>
-    ["PENDING", "CONFIRMED", "STARTED"].includes(b.status)
-  );
+  const activeBookings = queue.filter((b) => ACTIVE_STATUSES.includes(b.status));
 
   return stylists.map((stylist) => {
-    const inService = activeBookings.find(
-      (b) => b.stylistId === stylist.id && b.status === "STARTED"
-    );
-    const upcoming = activeBookings.filter(
-      (b) => b.stylistId === stylist.id && ["PENDING", "CONFIRMED"].includes(b.status)
-    );
+    const inService = activeBookings.find((b) => b.stylistId === stylist.id && b.status === "STARTED");
+    const upcoming = activeBookings.filter((b) => b.stylistId === stylist.id && WAITING_STATUSES.includes(b.status));
 
     let status = "available";
     if (inService) status = "busy";
@@ -118,4 +113,28 @@ export function computeStylistAvailability(stylists = [], queue = []) {
       upcomingCount: upcoming.length,
     };
   });
+}
+
+/** Case-insensitive match on customer, phone digits, service and stylist (instant search). */
+export function bookingMatches(booking, query) {
+  const q = `${query ?? ""}`.trim().toLowerCase();
+  if (!q) return true;
+  const digits = q.replace(/\D/g, "");
+  const hay = [booking.customer, booking.service, booking.stylistName].filter(Boolean).join(" ").toLowerCase();
+  if (hay.includes(q)) return true;
+  return digits.length >= 3 && `${booking.customerPhone ?? ""}`.replace(/\D/g, "").includes(digits);
+}
+
+/** Minutes from now until a booking starts (negative when it is already past). */
+export function minutesUntil(iso, nowMs = Date.now()) {
+  return Math.round((new Date(iso).getTime() - nowMs) / 60000);
+}
+
+/** "in 12 min", "now", "8 min late". */
+export function relativeStartLabel(iso, nowMs = Date.now()) {
+  const m = minutesUntil(iso, nowMs);
+  if (m > 90) return formatBookingTime(iso);
+  if (m > 1) return `in ${m} min`;
+  if (m >= -1) return "now";
+  return `${Math.abs(m)} min late`;
 }

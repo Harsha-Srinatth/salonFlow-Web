@@ -5,7 +5,17 @@ import {
   isStartedPendingAutoComplete,
   normalizeBookingStatus,
 } from "@/lib/booking-pending-status";
+import { salonHour } from "@/lib/salon-date";
 import { formatBookingDateTime, formatBookingTime } from "@/receptionist/lib/booking-utils";
+
+const CLOSED = ["COMPLETED", "CANCELLED", "NO-SHOW"];
+
+/**
+ * The stylist's status machine (unchanged rules, made explicit):
+ * Start only from CONFIRMED, Complete only from STARTED.
+ */
+export const canStartBooking = (booking) => normalizeBookingStatus(booking?.status) === "CONFIRMED";
+export const canCompleteBooking = (booking) => normalizeBookingStatus(booking?.status) === "STARTED";
 
 export function buildAppointmentCardModels(queue, nowMs) {
   return (queue ?? []).map((booking) => {
@@ -34,15 +44,18 @@ export function buildAppointmentCardModels(queue, nowMs) {
       inRedZone,
       beyondGrace,
       serviceTimerText,
+      // For the live timer ring: share of the planned duration already used (0..1+).
+      elapsedRatio: durationMs > 0 ? elapsedMs / durationMs : 0,
+      overtime: isStarted && durationMs > 0 && remainMs < 0,
+      canStart: canStartBooking(booking),
+      canComplete: canCompleteBooking(booking),
     };
   });
 }
 
 export function computeShiftMetrics(queue = [], nowMs = Date.now()) {
   const cards = buildAppointmentCardModels(queue, nowMs);
-  const waiting = cards.filter(
-    (card) => !card.isStarted && !["COMPLETED", "CANCELLED", "NO-SHOW"].includes(card.booking.status ?? "")
-  );
+  const waiting = cards.filter((card) => !card.isStarted && !CLOSED.includes(card.booking.status ?? ""));
   const inService = cards.filter((card) => card.isStarted);
   const delayed = cards.filter((card) => card.beyondGrace);
   const pendingAuto = cards.filter((card) => card.pendingAutoComplete);
@@ -57,16 +70,29 @@ export function computeShiftMetrics(queue = [], nowMs = Date.now()) {
     inService: inService.length,
     delayed: delayed.length,
     pendingAutoComplete: pendingAuto.length,
+    queueValue: cards.reduce((sum, card) => sum + Number(card.booking.payableAmount ?? 0), 0),
+    bookedMinutes: cards.reduce((sum, card) => sum + Number(card.booking.durationMinutes ?? 0), 0),
     nextUp: nextUp ?? null,
   };
 }
 
 export function groupEmployeeQueue(cards = []) {
-  const waiting = cards.filter(
-    (card) => !card.isStarted && !["COMPLETED", "CANCELLED", "NO-SHOW"].includes(card.booking.status ?? "")
-  );
-  const active = cards.filter((card) => card.isStarted);
+  const byTime = (a, b) => new Date(a.booking.startsAt).getTime() - new Date(b.booking.startsAt).getTime();
+  const waiting = cards.filter((card) => !card.isStarted && !CLOSED.includes(card.booking.status ?? "")).sort(byTime);
+  const active = cards.filter((card) => card.isStarted).sort(byTime);
   return { waiting, active };
+}
+
+/** Bookings per salon hour across the assigned queue (first..last hour), for the load sparkline. */
+export function hourlyLoad(queue = []) {
+  const hours = queue.map((b) => salonHour(b.startsAt)).filter((h) => Number.isFinite(h));
+  if (hours.length < 3) return [];
+  const min = Math.min(...hours);
+  const max = Math.max(...hours);
+  if (max === min) return [];
+  const out = Array.from({ length: max - min + 1 }, () => 0);
+  for (const h of hours) out[h - min] += 1;
+  return out;
 }
 
 export { formatBookingDateTime, formatBookingTime };
