@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Eye, EyeOff, KeyRound } from "lucide-react"
+import { ArrowLeft, KeyRound, Lock, Save, ShieldCheck } from "lucide-react"
 import { toast } from "@/lib/notify";
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { setStaffPassword } from "@/lib/staff-auth-client"
-import { InlineOrb } from "@/components/shared/loading-orb"
+import { ButtonLoadingMorph } from "@/components/kit/button-loading-morph"
+import { FloatingLabelInput } from "@/components/kit/floating-label-input"
 
 const SETUP_TOKEN_KEY = "staff_setup_token"
 
@@ -12,8 +13,6 @@ export default function StaffSetPasswordPage() {
   const navigate = useNavigate()
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -55,80 +54,41 @@ export default function StaffSetPasswordPage() {
     }
   }
 
+  const mismatch = confirm && password !== confirm ? "Passwords don't match" : undefined
+
   return (
     <AuthPageShell
-      title="Set password"
+      title="Set your password"
       subtitle="Need to verify again?"
       subtitleLink="/staff/verify-otp"
-      subtitleLinkLabel="Back to OTP"
+      subtitleLinkLabel="Back to code"
       sideTitle="Almost done"
-      sideDescription="Choose a strong password for your staff account. The setup link expires in about 5 minutes."
-      sideCards={[{ icon: KeyRound, text: "Min. 8 characters", sub: "Use letters and numbers" }]}
+      sideDescription="Pick a strong password. This setup link expires in about 5 minutes."
+      sideCards={[
+        { icon: KeyRound, text: "8+ characters" },
+        { icon: ShieldCheck, text: "Letters & numbers" },
+      ]}
+      footer={
+        <Link to="/staff/verify-otp" className="inline-flex h-11 items-center gap-1.5 font-semibold text-ink-primary">
+          <ArrowLeft className="size-4" aria-hidden /> Back to phone check
+        </Link>
+      }
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            New password
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              autoComplete="new-password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="New password (min 8 chars)"
-              className="w-full rounded-xl border border-border bg-card py-3 pl-4 pr-10 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(value => !value)}
-              className="absolute right-3 top-3.5 text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Confirm password
-          </label>
-          <div className="relative">
-            <input
-              type={showConfirm ? "text" : "password"}
-              autoComplete="new-password"
-              value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              placeholder="Confirm password"
-              className="w-full rounded-xl border border-border bg-card py-3 pl-4 pr-10 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirm(value => !value)}
-              className="absolute right-3 top-3.5 text-muted-foreground transition-colors hover:text-foreground"
-              aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
-            >
-              {showConfirm ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-            </button>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {submitting ? <InlineOrb theme="light" /> : null}
-          {submitting ? "Saving…" : "Save password"}
-        </button>
+        <PasswordPair password={password} setPassword={setPassword} confirm={confirm} setConfirm={setConfirm} mismatch={mismatch} />
+        <ButtonLoadingMorph type="submit" state={submitting ? "loading" : "idle"} icon={Save} size="lg" fullWidth loadingLabel="Saving…">
+          Save password
+        </ButtonLoadingMorph>
       </form>
-
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        <Link to="/staff/verify-otp" className="font-semibold text-primary hover:text-primary/80">
-          Back to OTP verification
-        </Link>
-      </p>
     </AuthPageShell>
+  )
+}
+
+function PasswordPair({ password, setPassword, confirm, setConfirm, mismatch }) {
+  return (
+    <div className="space-y-4">
+      <FloatingLabelInput label="New password" icon={Lock} type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} hint="8+ characters" />
+      <FloatingLabelInput label="Confirm password" icon={Lock} type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} error={mismatch} success={Boolean(confirm) && !mismatch && password.length >= 8} />
+    </div>
   )
 }
