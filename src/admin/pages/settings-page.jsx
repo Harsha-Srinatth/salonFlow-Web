@@ -1,17 +1,16 @@
 "use client";
-import { AnimatePresence, motion } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { Building2, Check, Globe, Hash, HelpCircle, Instagram, Loader2, Mail, MapPin, Phone, Plus, Save, ScrollText, Store, Trash2, Undo2 } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Building2, Check, Clock, Facebook, Globe, Hash, HelpCircle, Instagram, Link2, Mail, MapPin, MessageCircle, Phone, Plus, Save, ScrollText, ShieldCheck, Store, Trash2, Undo2, Youtube } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "@/lib/notify";
+import { notify as toast } from "@/lib/notify";
 import { useDispatch, useSelector } from "react-redux";
 import { createSalonAsync, fetchAdminDashboardData, resetNewSalon, setNewSalonField } from "@/store/admin-dashboard-slice";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ErrorBanner } from "@/admin/components/error-banner";
+import { ButtonLoadingMorph, ErrorState, FloatingLabelInput, IconButton, ProgressRing, useAsyncAction } from "@/components/kit";
+import { SkeletonCard, SkeletonText, spring } from "@/components/motion";
+import { dateTimeOf } from "@/admin/lib/safe-format";
+import { useUnsavedGuard } from "@/admin/lib/use-unsaved-guard";
 import { AdminInsightsPanel } from "@/admin/components/admin-insights-panel";
-import { LoadingOrb } from "@/components/shared/loading-orb";
 import { apiJson } from "@/lib/api-json";
 import { cn } from "@/lib/utils";
 import { AdminLayout } from "../portal/admin-layout";
@@ -71,95 +70,53 @@ function buildSalonAddress(form) {
 }
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 
-function Field({ id, label, hint, children, className }) {
-  return (
-    <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
+const isUrl = (v) => !filled(v) || /^https:\/\/\S+\.\S+/i.test(`${v}`.trim());
+const isEmail = (v) => !filled(v) || /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(`${v}`.trim());
+const isPhone = (v) => !filled(v) || `${v}`.replace(/\D/g, "").length >= 10;
 
-function TextArea({ id, value, onChange, rows = 3, maxLength, placeholder, ariaLabel }) {
-  return (
-    <div className="relative">
-      <textarea
-        id={id}
-        rows={rows}
-        maxLength={maxLength}
-        value={value}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-md border border-input bg-transparent px-3 py-2 pb-6 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      />
-      {maxLength ? (
-        <span className={cn("pointer-events-none absolute bottom-1.5 right-2.5 text-[10px] tabular-nums text-muted-foreground", value.length > maxLength * 0.9 && "text-warning")}>
-          {value.length}/{maxLength}
-        </span>
-      ) : null}
-    </div>
-  );
+/** Inline validation: format errors per field (empty is allowed; the API decides what is required). */
+function validateProfile(p) {
+  const errors = {};
+  for (const k of ["mapsUrl", "website", "instagram", "facebook", "youtube", "x", "privacyUrl", "termsUrl"]) if (!isUrl(p[k])) errors[k] = "Start with https://";
+  if (!isEmail(p.supportEmail)) errors.supportEmail = "Check the email";
+  if (!isPhone(p.phone)) errors.phone = "At least 10 digits";
+  if (!isPhone(p.whatsapp)) errors.whatsapp = "At least 10 digits";
+  return errors;
 }
 
 function Section({ id, icon: Icon, title, description, complete, children, index }) {
+  const reduce = useReducedMotion();
   return (
     <motion.section
       id={`settings-${id}`}
       data-section={id}
-      initial={{ opacity: 0, y: 18 }}
+      initial={reduce ? false : { opacity: 0, y: 18 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "0px 0px -8% 0px" }}
-      transition={{ duration: 0.4, delay: Math.min(index, 2) * 0.04, ease: "easeOut" }}
-      className="admin-shadow-sm scroll-mt-24 overflow-hidden rounded-2xl border border-border/70 bg-card"
+      transition={{ ...spring.soft, delay: Math.min(index, 2) * 0.05 }}
+      className="scroll-mt-[calc(var(--topbar-h)+1rem)] overflow-hidden rounded-card border border-border/60 bg-card shadow-soft"
     >
-      <header className="flex items-start justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-4">
-        <div className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-            <Icon className="size-[18px]" />
+      <header className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal/12 text-portal">
+            <Icon className="size-[18px]" aria-hidden />
           </span>
-          <div>
-            <h2 className="font-display text-base font-semibold leading-tight">{title}</h2>
-            {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-base font-semibold">{title}</h2>
+            {description ? <p className="text-caption text-ink-neutral">{description}</p> : null}
           </div>
         </div>
         <AnimatePresence initial={false}>
           {complete ? (
-            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={{ type: "spring", stiffness: 500, damping: 22 }} className="flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
-              <Check className="size-3" /> Done
+            <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} transition={spring.bouncy} className="grid size-7 shrink-0 place-items-center rounded-full bg-success/12 text-ink-success" title="Complete">
+              <Check className="size-4" aria-hidden />
+              <span className="sr-only">Complete</span>
             </motion.span>
           ) : null}
         </AnimatePresence>
       </header>
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </motion.section>
-  );
-}
-
-function CompletenessRing({ percent }) {
-  const r = 34;
-  const c = 2 * Math.PI * r;
-  return (
-    <div className="relative grid size-[88px] place-items-center">
-      <svg viewBox="0 0 80 80" className="size-full -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="7" />
-        <motion.circle
-          cx="40"
-          cy="40"
-          r={r}
-          fill="none"
-          stroke="hsl(var(--primary))"
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          initial={{ strokeDashoffset: c }}
-          animate={{ strokeDashoffset: c * (1 - percent / 100) }}
-          transition={{ type: "spring", stiffness: 70, damping: 18 }}
-        />
-      </svg>
-      <span className="absolute text-lg font-bold tabular-nums">{percent}%</span>
-    </div>
   );
 }
 
@@ -170,11 +127,15 @@ export default function AdminSettingsPage() {
   const [meta, setMeta] = useState({ missingFields: [], updatedAt: null, hours: null });
   const [status, setStatus] = useState("loading"); // loading | ready | error
   const [loadError, setLoadError] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const saveAction = useAsyncAction({ successMs: 900 });
+  const salonAction = useAsyncAction({ successMs: 900 });
+  const saving = saveAction.state === "loading";
   const [activeSection, setActiveSection] = useState("business");
+  const [params, setParams] = useSearchParams();
+  const reduce = useReducedMotion();
   const contentRef = useRef(null);
   const dispatch = useDispatch();
-  const { salons, newSalon, mutating: salonMutating } = useSelector((state) => state.adminDashboard);
+  const { salons, newSalon } = useSelector((state) => state.adminDashboard);
 
   useEffect(() => {
     void dispatch(fetchAdminDashboardData());
@@ -183,15 +144,15 @@ export default function AdminSettingsPage() {
   async function createSalon() {
     const address = buildSalonAddress(newSalon);
     if (!newSalon.name.trim() || !address) {
-      toast.error("Salon name and full address are required");
-      return;
+      toast.warning("Add a name and the address");
+      throw new Error("invalid");
     }
     const result = await dispatch(
       createSalonAsync({ name: newSalon.name.trim(), pincode: `${newSalon.pincode ?? ""}`.trim(), address, latitude: 0, longitude: 0 })
     );
     if (createSalonAsync.rejected.match(result)) {
       toast.error(result.payload ?? "Could not create salon");
-      return;
+      throw new Error("create failed");
     }
     dispatch(resetNewSalon());
     toast.success("Salon created");
@@ -223,16 +184,22 @@ export default function AdminSettingsPage() {
 
   const dirty = useMemo(() => JSON.stringify(profile) !== JSON.stringify(saved), [profile, saved]);
 
-  // Warn before closing the tab with unsaved edits.
+  // Unsaved-changes guard: tab close and in-app links.
+  const guardSheet = useUnsavedGuard(dirty, { title: "Leave settings?", description: "Unsaved profile changes will be lost." });
+  const errors = useMemo(() => validateProfile(profile), [profile]);
+  const invalid = Object.keys(errors).length > 0;
+
+  // ?section=salons (⌘K, dashboard checklist) scrolls to that section once loaded.
   useEffect(() => {
-    if (!dirty) return;
-    const handler = (event) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", handler);
-    return () => window.removeEventListener("beforeunload", handler);
-  }, [dirty]);
+    const section = params.get("section");
+    if (status !== "ready" || !section) return;
+    const timer = setTimeout(() => document.getElementById(`settings-${section}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" }), 200);
+    setParams((p) => {
+      p.delete("section");
+      return p;
+    }, { replace: true });
+    return () => clearTimeout(timer);
+  }, [params, status, reduce, setParams]);
 
   // Scroll-spy: highlight the section nearest the top.
   useEffect(() => {
@@ -250,7 +217,9 @@ export default function AdminSettingsPage() {
   }, [status]);
 
   const set = (field) => (value) => setProfile((current) => ({ ...current, [field]: value }));
-  const input = (field, props = {}) => <Input id={`bp-${field}`} value={profile[field]} onChange={(e) => set(field)(e.target.value)} {...props} />;
+  /** FloatingLabelInput bound to a profile field, with inline format validation. */
+  const input = (field, label, props = {}) => <FloatingLabelInput id={`bp-${field}`} label={label} value={profile[field] ?? ""} error={errors[field]} success={!errors[field] && filled(profile[field]) && props.type && props.type !== "text"} onChange={(e) => set(field)(e.target.value)} {...props} />;
+  const area = (field, label, maxLength, props = {}) => <FloatingLabelInput as="textarea" id={`bp-${field}`} label={label} maxLength={maxLength} value={profile[field] ?? ""} hint={`${`${profile[field] ?? ""}`.length}/${maxLength}`} onChange={(e) => set(field)(e.target.value)} {...props} />;
 
   const sectionComplete = (section) => {
     if (section.custom === "salons") return salons.length > 0;
@@ -263,17 +232,18 @@ export default function AdminSettingsPage() {
     return Math.round((done / (keys.length + 1)) * 100);
   }, [profile]);
 
-  async function save(event) {
-    event?.preventDefault();
-    if (saving || !dirty) return;
-    setSaving(true);
+  async function save() {
+    if (!dirty) return;
+    if (invalid) {
+      toast.warning("Fix the highlighted fields");
+      throw new Error("invalid");
+    }
     try {
       applyProfile(await apiJson("/api/admin/business-profile", { method: "PUT", auth: true, body: profile }));
-      toast.success("Business profile saved. The website footer and assistant now use it.");
+      toast.success("Profile saved", { description: "Website footer and assistant updated" });
     } catch (error) {
       toast.error(error.message);
-    } finally {
-      setSaving(false);
+      throw error;
     }
   }
 
@@ -290,15 +260,29 @@ export default function AdminSettingsPage() {
   const links = [profile.website && "Website", profile.instagram && "Instagram", profile.facebook && "Facebook", profile.youtube && "YouTube", profile.x && "X"].filter(Boolean);
 
   return (
-    <AdminLayout pageTitle="Settings" description="Business profile shown on your website and used by the support assistant.">
-      {status === "error" ? <ErrorBanner message={loadError} onRetry={() => void load()} /> : null}
-      {status === "loading" ? <LoadingOrb compact label="Loading your business profile…" /> : null}
+    <AdminLayout pageTitle="Settings" description="Business profile, salons, AI">
+      {status === "error" ? <ErrorState title="Couldn't load your profile" description={loadError} onRetry={load} /> : null}
+      {status === "loading" ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-5">
+            <SkeletonCard />
+            <SkeletonText lines={4} />
+          </div>
+          <SkeletonCard />
+        </div>
+      ) : null}
 
       {status === "ready" ? (
-        <form onSubmit={save} className="grid gap-6 lg:grid-cols-[180px_minmax(0,1fr)] xl:grid-cols-[180px_minmax(0,1fr)_380px]">
-          {/* Section navigation */}
-          <nav aria-label="Settings sections" className="lg:sticky lg:top-4 lg:self-start">
-            <ul className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void saveAction.run(save);
+          }}
+          className="grid gap-5 lg:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-[170px_minmax(0,1fr)_360px]"
+        >
+          {/* Section navigation: chips on phones, sticky list on desktop */}
+          <nav aria-label="Settings sections" className="sticky top-[calc(var(--topbar-h)+var(--safe-top))] z-raised -mx-[var(--gutter)] bg-background/85 px-[var(--gutter)] py-2 backdrop-blur lg:top-[calc(var(--topbar-h)+1rem)] lg:mx-0 lg:self-start lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+            <ul className="no-scrollbar flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
               {SECTIONS.map((section) => {
                 const active = activeSection === section.id;
                 const Icon = section.icon;
@@ -306,13 +290,14 @@ export default function AdminSettingsPage() {
                   <li key={section.id} className="shrink-0">
                     <button
                       type="button"
-                      onClick={() => document.getElementById(`settings-${section.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                      className={cn("relative flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-colors", active ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground")}
+                      aria-current={active ? "true" : undefined}
+                      onClick={() => document.getElementById(`settings-${section.id}`)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" })}
+                      className={cn("relative flex h-10 w-full items-center gap-2.5 rounded-full px-3 text-sm font-semibold transition-colors lg:h-11 lg:rounded-2xl", active ? "text-portal" : "text-ink-neutral hover:bg-muted hover:text-foreground")}
                     >
-                      {active ? <motion.span layoutId="settings-nav" className="absolute inset-0 rounded-xl bg-primary/10" transition={{ type: "spring", stiffness: 500, damping: 36 }} /> : null}
-                      <Icon className="relative size-4" />
+                      {active ? <motion.span layoutId="settings-nav" className="absolute inset-0 rounded-full bg-portal/12 ring-1 ring-inset ring-portal/20 lg:rounded-2xl" transition={reduce ? { duration: 0 } : spring.snappy} /> : null}
+                      <Icon className="relative size-4" aria-hidden />
                       <span className="relative flex-1 text-left">{section.label}</span>
-                      {sectionComplete(section) ? <Check className="relative size-3.5 text-success" /> : null}
+                      {sectionComplete(section) ? <Check className="relative size-3.5 text-ink-success" aria-label="complete" /> : null}
                     </button>
                   </li>
                 );
@@ -321,269 +306,242 @@ export default function AdminSettingsPage() {
           </nav>
 
           {/* Forms */}
-          <div ref={contentRef} className="min-w-0 space-y-5 pb-24">
+          <div ref={contentRef} className="min-w-0 space-y-5 pb-28">
             <AnimatePresence initial={false}>
               {meta.missingFields.length ? (
-                <motion.div role="status" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                  <div className="rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
-                    <p className="font-semibold">Still missing: {meta.missingFields.map((f) => FIELD_LABELS[f] ?? f).join(", ")}</p>
-                    <p className="text-muted-foreground">Until these are filled in, the website footer leaves them out and the assistant tells customers it does not have them.</p>
-                  </div>
-                </motion.div>
+                <motion.p role="status" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-start gap-2 rounded-2xl bg-warning/14 p-3 text-sm text-ink-warning ring-1 ring-inset ring-warning/30">
+                  <HelpCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                  <span>
+                    <b>Missing:</b> {meta.missingFields.map((f) => FIELD_LABELS[f] ?? f).join(", ")}
+                  </span>
+                </motion.p>
               ) : null}
             </AnimatePresence>
 
-            <Section index={0} id="business" icon={Store} title="Business" description="Shown on the landing page and in the support assistant." complete={sectionComplete(SECTIONS[0])}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field id="bp-businessName" label="Business name">{input("businessName", { maxLength: 120, placeholder: "e.g. Sahasra Unisex Salon" })}</Field>
-                <Field id="bp-tagline" label="Tagline">{input("tagline", { maxLength: 200 })}</Field>
-                <Field className="md:col-span-2" id="bp-about" label="About" hint="A short description of the salon.">
-                  <TextArea id="bp-about" value={profile.about} onChange={set("about")} maxLength={1500} />
-                </Field>
+            <Section index={0} id="business" icon={Store} title="Business" description="Landing page and assistant" complete={sectionComplete(SECTIONS[0])}>
+              <div className="grid gap-3 md:grid-cols-2">
+                {input("businessName", "Business name", { icon: Store, maxLength: 120 })}
+                {input("tagline", "Tagline", { maxLength: 200 })}
+                <div className="md:col-span-2">{area("about", "About", 1500)}</div>
               </div>
             </Section>
 
-            <Section index={1} id="contact" icon={Mail} title="Contact" description="How customers reach you." complete={sectionComplete(SECTIONS[1])}>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field id="bp-phone" label="Phone" hint="With country code, e.g. +91 98765 43210">{input("phone", { type: "tel", maxLength: 24 })}</Field>
-                <Field id="bp-whatsapp" label="WhatsApp">{input("whatsapp", { type: "tel", maxLength: 24 })}</Field>
-                <Field id="bp-supportEmail" label="Support email">{input("supportEmail", { type: "email", maxLength: 254 })}</Field>
+            <Section index={1} id="contact" icon={Mail} title="Contact" complete={sectionComplete(SECTIONS[1])}>
+              <div className="grid gap-3 md:grid-cols-3">
+                {input("phone", "Phone (+91…)", { type: "tel", icon: Phone, maxLength: 24 })}
+                {input("whatsapp", "WhatsApp", { type: "tel", icon: MessageCircle, maxLength: 24 })}
+                {input("supportEmail", "Support email", { type: "email", icon: Mail, maxLength: 254 })}
               </div>
             </Section>
 
-            <Section
-              index={2}
-              id="location"
-              icon={MapPin}
-              title="Location"
-              description={meta.hours ? `Opening hours come from the booking system: ${meta.hours.days}, ${meta.hours.opens} – ${meta.hours.closes} (lunch ${meta.hours.lunchBreak.from} – ${meta.hours.lunchBreak.to}).` : undefined}
-              complete={sectionComplete(SECTIONS[2])}
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field id="bp-addressLine1" label="Address line 1">{input("addressLine1", { maxLength: 200 })}</Field>
-                <Field id="bp-addressLine2" label="Address line 2">{input("addressLine2", { maxLength: 200 })}</Field>
-                <Field id="bp-city" label="City">{input("city", { maxLength: 80 })}</Field>
-                <Field id="bp-state" label="State">{input("state", { maxLength: 80 })}</Field>
-                <Field id="bp-postalCode" label="PIN code">{input("postalCode", { maxLength: 16 })}</Field>
-                <Field id="bp-country" label="Country">{input("country", { maxLength: 80 })}</Field>
-                <Field className="md:col-span-2" id="bp-mapsUrl" label="Google Maps link" hint="https:// link to your map listing">{input("mapsUrl", { type: "url", placeholder: "https://maps.app.goo.gl/…" })}</Field>
+            <Section index={2} id="location" icon={MapPin} title="Location" description={meta.hours ? `Hours from booking: ${meta.hours.days}, ${meta.hours.opens}–${meta.hours.closes}` : undefined} complete={sectionComplete(SECTIONS[2])}>
+              <div className="grid gap-3 md:grid-cols-2">
+                {input("addressLine1", "Address line 1", { icon: MapPin, maxLength: 200 })}
+                {input("addressLine2", "Address line 2", { maxLength: 200 })}
+                {input("city", "City", { maxLength: 80 })}
+                {input("state", "State", { maxLength: 80 })}
+                {input("postalCode", "PIN code", { icon: Hash, inputMode: "numeric", maxLength: 16 })}
+                {input("country", "Country", { maxLength: 80 })}
+                <div className="md:col-span-2">{input("mapsUrl", "Google Maps link", { type: "url", icon: Link2 })}</div>
               </div>
+              {meta.hours ? (
+                <p className="mt-3 flex items-center gap-1.5 text-caption text-ink-neutral">
+                  <Clock className="size-3.5" aria-hidden /> Lunch {meta.hours.lunchBreak.from}–{meta.hours.lunchBreak.to}
+                </p>
+              ) : null}
             </Section>
 
-            <Section index={3} id="salons" icon={Building2} title={`Salons (${salons.length})`} description="Your salon locations. Fill the address fields; they are combined into one address when you create the salon." complete={salons.length > 0}>
+            <Section index={3} id="salons" icon={Building2} title={`Salons · ${salons.length}`} complete={salons.length > 0}>
               <div className="space-y-5" onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") e.preventDefault(); }}>
                 {salons.length ? (
                   <ul className="grid gap-3 sm:grid-cols-2">
                     <AnimatePresence initial={false}>
                       {salons.map((salon) => (
-                        <motion.li key={salon.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="rounded-xl border border-border/70 bg-muted/10 p-3.5 text-sm">
+                        <motion.li key={salon.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring.soft} className="rounded-2xl bg-muted/50 p-3.5 text-sm ring-1 ring-inset ring-border/60">
                           <div className="flex items-center gap-2">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-accent">
-                              <Building2 className="size-4" />
+                            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal/12 text-portal">
+                              <Building2 className="size-4" aria-hidden />
                             </span>
                             <p className="truncate font-semibold">{salon.name}</p>
                           </div>
-                          <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
-                            <MapPin className="mt-0.5 size-3.5 shrink-0" />
+                          <p className="mt-2 flex items-start gap-1.5 text-caption text-ink-neutral">
+                            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                             <span>{salon.address}</span>
                           </p>
-                          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Hash className="size-3.5 shrink-0" /> {salon.pincode}
+                          <p className="mt-1 flex items-center gap-1.5 text-caption text-ink-neutral">
+                            <Hash className="size-3.5 shrink-0" aria-hidden /> {salon.pincode}
                           </p>
                         </motion.li>
                       ))}
                     </AnimatePresence>
                   </ul>
                 ) : (
-                  <p className="rounded-xl border border-dashed py-5 text-center text-sm text-muted-foreground">No salon added yet.</p>
+                  <p className="rounded-2xl border border-dashed border-border py-5 text-center text-caption text-ink-neutral">No salon yet</p>
                 )}
 
-                <div className="space-y-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+                <div className="space-y-3 rounded-2xl border border-dashed border-portal/30 bg-portal/5 p-4">
                   <p className="flex items-center gap-2 text-sm font-semibold">
-                    <Plus className="size-4 text-primary" /> Add a salon
+                    <Plus className="size-4 text-portal" aria-hidden /> Add a salon
                   </p>
                   <div className="grid gap-3 md:grid-cols-2">
                     {[
-                      ["name", "Salon name", "Salon name"],
-                      ["pincode", "Pincode", "Pincode"],
-                      ["buildingNumber", "Building number", "Building no."],
-                      ["streetName", "Street name", "Street name"],
-                      ["areaName", "Area name", "Area name"],
-                      ["cityName", "City name", "City name"],
-                      ["stateName", "State name", "State name"],
-                      ["countryName", "Country name", "Country name"],
-                    ].map(([field, label, placeholder]) => (
-                      <Field key={field} id={`salon-${field}`} label={label}>
-                        <Input id={`salon-${field}`} placeholder={placeholder} value={newSalon[field]} onChange={(e) => dispatch(setNewSalonField({ field, value: e.target.value }))} />
-                      </Field>
+                      ["name", "Salon name"],
+                      ["pincode", "Pincode"],
+                      ["buildingNumber", "Building no."],
+                      ["streetName", "Street"],
+                      ["areaName", "Area"],
+                      ["cityName", "City"],
+                      ["stateName", "State"],
+                      ["countryName", "Country"],
+                    ].map(([field, label]) => (
+                      <FloatingLabelInput key={field} id={`salon-${field}`} label={label} value={newSalon[field] ?? ""} onChange={(e) => dispatch(setNewSalonField({ field, value: e.target.value }))} />
                     ))}
                   </div>
-                  <div className="flex items-start gap-2 rounded-lg border border-dashed border-border bg-card/60 p-3 text-xs text-muted-foreground">
-                    <MapPin className="mt-0.5 size-3.5 shrink-0" />
-                    <span>{buildSalonAddress(newSalon) || "Address preview will appear here"}</span>
-                  </div>
-                  <Button type="button" onClick={() => void createSalon()} disabled={salonMutating}>
-                    {salonMutating ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-                    {salonMutating ? "Creating…" : "Create salon"}
-                  </Button>
+                  <p className="flex items-start gap-2 rounded-xl bg-card/70 p-3 text-caption text-ink-neutral">
+                    <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                    <span>{buildSalonAddress(newSalon) || "Address preview"}</span>
+                  </p>
+                  <ButtonLoadingMorph icon={Plus} state={salonAction.state} loadingLabel="Creating…" successLabel="Created" onClick={() => salonAction.run(createSalon)}>
+                    Create salon
+                  </ButtonLoadingMorph>
                 </div>
               </div>
             </Section>
 
-            <Section index={4} id="online" icon={Globe} title="Online" description="Only filled-in links appear in the website footer. Links must start with https://" complete={sectionComplete(SECTIONS[4])}>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field id="bp-website" label="Website">{input("website", { type: "url" })}</Field>
-                <Field id="bp-instagram" label="Instagram">{input("instagram", { type: "url" })}</Field>
-                <Field id="bp-facebook" label="Facebook">{input("facebook", { type: "url" })}</Field>
-                <Field id="bp-youtube" label="YouTube">{input("youtube", { type: "url" })}</Field>
-                <Field id="bp-x" label="X (Twitter)">{input("x", { type: "url" })}</Field>
-                <Field id="bp-privacyUrl" label="Privacy policy URL">{input("privacyUrl", { type: "url" })}</Field>
-                <Field id="bp-termsUrl" label="Terms of service URL">{input("termsUrl", { type: "url" })}</Field>
+            <Section index={4} id="online" icon={Globe} title="Online" description="Only filled links show. https:// only." complete={sectionComplete(SECTIONS[4])}>
+              <div className="grid gap-3 md:grid-cols-2">
+                {input("website", "Website", { type: "url", icon: Globe })}
+                {input("instagram", "Instagram", { type: "url", icon: Instagram })}
+                {input("facebook", "Facebook", { type: "url", icon: Facebook })}
+                {input("youtube", "YouTube", { type: "url", icon: Youtube })}
+                {input("x", "X (Twitter)", { type: "url", icon: Link2 })}
+                {input("privacyUrl", "Privacy policy", { type: "url", icon: ShieldCheck })}
+                {input("termsUrl", "Terms", { type: "url", icon: ScrollText })}
               </div>
             </Section>
 
-            <Section index={5} id="policies" icon={ScrollText} title="Policies" description="The cancellation and refund policy comes from the booking system. Add anything else customers should know; the assistant quotes these." complete={sectionComplete(SECTIONS[5])}>
-              <div className="grid gap-4">
-                <Field id="bp-paymentPolicy" label="Payments" hint="e.g. accepted payment methods">
-                  <TextArea id="bp-paymentPolicy" value={profile.paymentPolicy} onChange={set("paymentPolicy")} maxLength={1500} />
-                </Field>
-                <Field id="bp-lateArrivalPolicy" label="Late arrival">
-                  <TextArea id="bp-lateArrivalPolicy" value={profile.lateArrivalPolicy} onChange={set("lateArrivalPolicy")} maxLength={1500} />
-                </Field>
-                <Field id="bp-generalPolicy" label="Other policies">
-                  <TextArea id="bp-generalPolicy" value={profile.generalPolicy} onChange={set("generalPolicy")} maxLength={3000} rows={4} />
-                </Field>
+            <Section index={5} id="policies" icon={ScrollText} title="Policies" description="Refund rules come from booking. The assistant quotes these." complete={sectionComplete(SECTIONS[5])}>
+              <div className="grid gap-3">
+                {area("paymentPolicy", "Payments", 1500)}
+                {area("lateArrivalPolicy", "Late arrival", 1500)}
+                {area("generalPolicy", "Other policies", 3000)}
               </div>
             </Section>
 
-            <Section index={6} id="faq" icon={HelpCircle} title="Customer FAQ" description="Questions customers often ask. The assistant answers these exactly as written." complete={sectionComplete(SECTIONS[6])}>
+            <Section index={6} id="faq" icon={HelpCircle} title={`FAQ · ${profile.faq.length}`} description="The assistant answers these word for word" complete={sectionComplete(SECTIONS[6])}>
               <div className="space-y-3">
                 <AnimatePresence initial={false}>
                   {profile.faq.map((item, index) => (
-                    <motion.div
-                      key={faqIds[index] ?? index}
-                      layout
-                      initial={{ opacity: 0, height: 0, scale: 0.98 }}
-                      animate={{ opacity: 1, height: "auto", scale: 1 }}
-                      exit={{ opacity: 0, height: 0, scale: 0.98 }}
-                      transition={{ type: "spring", stiffness: 420, damping: 36 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="space-y-2 rounded-xl border border-border/70 bg-muted/10 p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">{index + 1}</span>
-                          <Input aria-label={`Question ${index + 1}`} placeholder="Question" maxLength={300} value={item.question} onChange={(e) => setFaq(index, "question", e.target.value)} />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Remove question ${index + 1}`}
-                            onClick={() => {
-                              setProfile((current) => ({ ...current, faq: current.faq.filter((_, i) => i !== index) }));
-                              setFaqIds((ids) => ids.filter((_, i) => i !== index));
-                            }}
-                          >
-                            <Trash2 className="size-4 text-destructive" />
-                          </Button>
-                        </div>
-                        <TextArea id={`faq-${index}`} ariaLabel={`Answer ${index + 1}`} placeholder="Answer" value={item.answer} onChange={(value) => setFaq(index, "answer", value)} maxLength={1500} rows={2} />
+                    <motion.div key={faqIds[index] ?? index} layout={!reduce} initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.98 }} transition={spring.soft} className="space-y-2 rounded-2xl bg-muted/40 p-3 ring-1 ring-inset ring-border/60">
+                      <div className="flex items-start gap-2">
+                        <span className="mt-4 grid size-6 shrink-0 place-items-center rounded-full bg-portal/12 text-[11px] font-bold text-portal">{index + 1}</span>
+                        <FloatingLabelInput label="Question" maxLength={300} value={item.question} onChange={(e) => setFaq(index, "question", e.target.value)} />
+                        <IconButton
+                          icon={Trash2}
+                          label={`Remove question ${index + 1}`}
+                          className="mt-1.5 text-ink-destructive"
+                          onClick={() => {
+                            setProfile((current) => ({ ...current, faq: current.faq.filter((_, i) => i !== index) }));
+                            setFaqIds((ids) => ids.filter((_, i) => i !== index));
+                          }}
+                        />
                       </div>
+                      <FloatingLabelInput as="textarea" label="Answer" maxLength={1500} value={item.answer} onChange={(e) => setFaq(index, "answer", e.target.value)} inputClassName="min-h-20" />
                     </motion.div>
                   ))}
                 </AnimatePresence>
-                {!profile.faq.length ? <p className="rounded-xl border border-dashed py-6 text-center text-sm text-muted-foreground">No questions yet. Add the ones customers ask most.</p> : null}
-                <Button
-                  type="button"
+                {!profile.faq.length ? <p className="rounded-2xl border border-dashed border-border py-6 text-center text-caption text-ink-neutral">No questions yet</p> : null}
+                <ButtonLoadingMorph
                   variant="outline"
+                  icon={Plus}
                   disabled={profile.faq.length >= 25}
                   onClick={() => {
                     setProfile((current) => ({ ...current, faq: [...current.faq, { question: "", answer: "" }] }));
                     setFaqIds((ids) => [...ids, newId()]);
                   }}
                 >
-                  <Plus className="size-4" /> Add question
-                </Button>
+                  Add question
+                </ButtonLoadingMorph>
               </div>
             </Section>
           </div>
 
-          {/* Right rail: completeness, live preview, assistants */}
-          <aside className="space-y-4 lg:col-span-2 xl:col-span-1 xl:sticky xl:top-4 xl:self-start">
-            <div className="admin-shadow-sm flex items-center gap-4 rounded-2xl border border-border/70 bg-card p-5">
-              <CompletenessRing percent={completeness} />
-              <div>
-                <p className="font-display text-base font-semibold">Profile completeness</p>
-                <p className="text-xs text-muted-foreground">{completeness === 100 ? "Everything is filled in." : "A fuller profile gives customers and the assistant better answers."}</p>
+          {/* Right rail: completeness, live preview, AI assistants */}
+          <aside className="space-y-4 lg:col-span-2 xl:sticky xl:top-[calc(var(--topbar-h)+1rem)] xl:col-span-1 xl:self-start">
+            <div className="flex items-center gap-4 rounded-card border border-border/60 bg-card p-4 shadow-soft">
+              <ProgressRing value={completeness} size={80} label="Profile completeness" />
+              <div className="min-w-0">
+                <p className="font-display text-base font-semibold">Profile</p>
+                <p className="text-caption text-ink-neutral">{completeness === 100 ? "All filled in" : "Fuller = better answers"}</p>
+                {!dirty && meta.updatedAt ? <p className="mt-1 text-[11px] text-ink-neutral">Saved {dateTimeOf(meta.updatedAt)}</p> : null}
               </div>
             </div>
 
-            <div className="admin-shadow-sm rounded-2xl border border-border/70 bg-card p-5">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Website footer preview</p>
-              <div className="space-y-2 rounded-xl bg-[hsl(var(--sidebar-foreground)/0.96)] p-4 text-sm text-background">
-                <p className="font-display text-base font-semibold">{profile.businessName || "Your salon name"}</p>
-                {profile.tagline ? <p className="text-xs opacity-75">{profile.tagline}</p> : null}
+            <div className="rounded-card border border-border/60 bg-card p-4 shadow-soft">
+              <p className="mb-3 text-micro font-semibold uppercase text-ink-neutral">Footer preview</p>
+              <div className="space-y-2 rounded-2xl bg-foreground p-4 text-sm text-background">
+                <p className="font-display text-base font-semibold">{profile.businessName || "Your salon"}</p>
+                {profile.tagline ? <p className="text-xs opacity-80">{profile.tagline}</p> : null}
                 <div className="space-y-1 pt-1 text-xs opacity-90">
                   {address ? (
                     <p className="flex items-start gap-1.5">
-                      <MapPin className="mt-0.5 size-3 shrink-0" /> {address}
+                      <MapPin className="mt-0.5 size-3 shrink-0" aria-hidden /> {address}
                     </p>
                   ) : null}
                   {profile.phone ? (
                     <p className="flex items-center gap-1.5">
-                      <Phone className="size-3" /> {profile.phone}
+                      <Phone className="size-3" aria-hidden /> {profile.phone}
                     </p>
                   ) : null}
                   {profile.supportEmail ? (
                     <p className="flex items-center gap-1.5">
-                      <Mail className="size-3" /> {profile.supportEmail}
+                      <Mail className="size-3" aria-hidden /> {profile.supportEmail}
                     </p>
                   ) : null}
                 </div>
                 {links.length ? (
-                  <p className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-                    <Instagram className="size-3" />
+                  <p className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
                     {links.map((l) => (
-                      <span key={l} className="rounded-full bg-white/15 px-2 py-0.5">{l}</span>
+                      <span key={l} className="rounded-full bg-background/15 px-2 py-0.5">
+                        {l}
+                      </span>
                     ))}
                   </p>
                 ) : null}
-                {!address && !profile.phone && !profile.supportEmail && !links.length ? <p className="text-xs opacity-60">Fill in contact details to see them here.</p> : null}
+                {!address && !profile.phone && !profile.supportEmail && !links.length ? <p className="text-xs opacity-70">Add contact details</p> : null}
               </div>
             </div>
 
             <AdminInsightsPanel />
           </aside>
 
-          {/* Save bar: only appears when there is something to save */}
+          {/* Save bar: only when there is something to save; above the phone tab bar */}
           <AnimatePresence>
             {dirty || saving ? (
               <motion.div
                 initial={{ y: 80, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 exit={{ y: 80, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 380, damping: 34 }}
-                className="fixed inset-x-3 bottom-4 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur"
+                transition={spring.sheet}
+                className="glass-strong fixed inset-x-3 bottom-[calc(var(--tabbar-h)+var(--safe-bottom)+0.75rem)] z-sticky mx-auto flex max-w-xl items-center justify-between gap-2 rounded-sheet p-2.5 pl-4 shadow-float lg:bottom-6 lg:left-[calc(var(--sidebar-w)+1rem)]"
               >
-                <span className="flex items-center gap-2 pl-1 text-sm font-medium">
-                  <span className="size-2 rounded-full bg-warning" /> Unsaved changes
+                <span className="flex items-center gap-2 text-sm font-semibold">
+                  <span className={cn("size-2 rounded-full", invalid ? "bg-destructive" : "bg-warning")} aria-hidden /> {invalid ? "Fix fields" : "Unsaved"}
                 </span>
                 <div className="flex gap-2">
-                  <Button type="button" variant="ghost" onClick={discard} disabled={saving}>
-                    <Undo2 className="size-4" /> Discard
-                  </Button>
-                  <BorderBeam size="sm" active={!saving}>
-                    <Button type="submit" disabled={saving}>
-                      {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                      {saving ? "Saving…" : "Save changes"}
-                    </Button>
-                  </BorderBeam>
+                  <ButtonLoadingMorph variant="ghost" icon={Undo2} disabled={saving} onClick={discard}>
+                    Discard
+                  </ButtonLoadingMorph>
+                  <ButtonLoadingMorph type="submit" icon={Save} state={saveAction.state} loadingLabel="Saving…" successLabel="Saved" errorLabel="Check fields">
+                    Save
+                  </ButtonLoadingMorph>
                 </div>
               </motion.div>
             ) : null}
           </AnimatePresence>
-          {!dirty && meta.updatedAt ? <p className="text-center text-xs text-muted-foreground lg:col-start-2">Last saved {new Date(meta.updatedAt).toLocaleString()}</p> : null}
         </form>
       ) : null}
+      {guardSheet}
     </AdminLayout>
   );
 }

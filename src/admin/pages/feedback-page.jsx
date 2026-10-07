@@ -1,23 +1,20 @@
 "use client";
 
-import { AdminLayout } from "../portal/admin-layout";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FilterTabs } from "@/admin/components/filter-tabs";
-import { SlideOver } from "@/admin/components/slide-over";
-import { StarRating } from "@/components/ui/star-rating";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Flag, MessageCircle, MessageSquareHeart, Reply, Send, Sparkles, Star } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { ButtonLoadingMorph, ErrorState, FloatingLabelInput, Rating, StatCard, StatusChip, useAsyncAction } from "@/components/kit";
+import { SkeletonList, spring } from "@/components/motion";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { EmptyState } from "@/admin/components/empty-state";
-import { ErrorBanner } from "@/admin/components/error-banner";
-import { SkeletonRows, SkeletonCards } from "@/admin/components/skeleton";
-import { StatCard } from "@/admin/components/stat-card";
-import { StatusPill } from "@/admin/components/status-pill";
-import { useRevealOnReady } from "@/admin/lib/motion";
+import { FilterTabs } from "@/admin/components/filter-tabs";
+import { SlideOver } from "@/admin/components/slide-over";
+import { ToneChip } from "@/admin/components/tone-chip";
+import { dateOf } from "@/admin/lib/safe-format";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
-import { Flag, MessageCircle, MessageSquareHeart, Send, Sparkles, Star } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "@/lib/notify";
+import { notify } from "@/lib/notify";
+import { AdminLayout } from "../portal/admin-layout";
 
 async function authFetch(path, init) {
   const token = await getFirebaseIdToken().catch(() => null);
@@ -35,18 +32,36 @@ async function authFetch(path, init) {
   return data;
 }
 
-const STATUS_TABS = ["ALL", "OPEN", "REVIEWED", "RESOLVED"];
-const TYPE_TABS = ["ALL", "FEEDBACK", "COMPLAINT"];
+const STATUS_TABS = [
+  { value: "ALL", label: "All" },
+  { value: "OPEN", label: "Open" },
+  { value: "REVIEWED", label: "Reviewed" },
+  { value: "RESOLVED", label: "Resolved" },
+];
+const TYPE_TABS = [
+  { value: "ALL", label: "All types" },
+  { value: "FEEDBACK", label: "Reviews", icon: MessageSquareHeart },
+  { value: "COMPLAINT", label: "Complaints", icon: Flag },
+];
+const EMPTY_SUMMARY = { total: 0, averageRating: 0, totalComplaints: 0, openCount: 0, resolvedCount: 0 };
 
-function formatDate(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+/** Feedback type is a category, not a lifecycle status, so it gets a ToneChip. */
+function TypeChip({ type }) {
+  return type === "COMPLAINT" ? (
+    <ToneChip tone="destructive" icon={Flag} size="sm">
+      Complaint
+    </ToneChip>
+  ) : (
+    <ToneChip tone="primary" icon={MessageSquareHeart} size="sm">
+      Review
+    </ToneChip>
+  );
 }
 
 export default function AdminFeedbackPage() {
+  const reduce = useReducedMotion();
   const [feedback, setFeedback] = useState([]);
-  const [summary, setSummary] = useState({ total: 0, averageRating: 0, totalComplaints: 0, openCount: 0, resolvedCount: 0 });
+  const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -54,10 +69,9 @@ export default function AdminFeedbackPage() {
   const [selected, setSelected] = useState(null);
   const [responseText, setResponseText] = useState("");
   const [nextStatus, setNextStatus] = useState("REVIEWED");
-  const [saving, setSaving] = useState(false);
-  const listRef = useRevealOnReady([loading, feedback.length, statusFilter, typeFilter], { selector: ":scope > *" });
+  const save = useAsyncAction({ successMs: 700 });
 
-  async function loadFeedback() {
+  const loadFeedback = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -65,21 +79,19 @@ export default function AdminFeedbackPage() {
       if (typeFilter !== "ALL") params.set("type", typeFilter);
       const data = await authFetch(`/api/admin/feedback${params.toString() ? `?${params.toString()}` : ""}`);
       setFeedback(data.feedback ?? []);
-      setSummary(data.summary ?? { total: 0, averageRating: 0, totalComplaints: 0, openCount: 0, resolvedCount: 0 });
+      setSummary(data.summary ?? EMPTY_SUMMARY);
       setLoadError("");
     } catch (error) {
-      const message = error.message ?? "Could not load feedback";
-      toast.error(message);
-      setLoadError(message);
+      setLoadError(error.message ?? "Could not load feedback");
+      throw error;
     } finally {
       setLoading(false);
     }
-  }
+  }, [statusFilter, typeFilter]);
 
   useEffect(() => {
-    void loadFeedback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, typeFilter]);
+    loadFeedback().catch(() => {});
+  }, [loadFeedback]);
 
   function openRespond(item) {
     setSelected(item);
@@ -87,149 +99,122 @@ export default function AdminFeedbackPage() {
     setNextStatus(item.status === "OPEN" ? "REVIEWED" : item.status);
   }
 
-  function closeRespond() {
-    setSelected(null);
-    setResponseText("");
-  }
-
   async function submitResponse() {
     if (!selected) return;
-    setSaving(true);
     try {
       const data = await authFetch(`/api/admin/feedback/${selected.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status: nextStatus, adminResponse: responseText }),
       });
       setFeedback((prev) => prev.map((item) => (item.id === data.feedback.id ? data.feedback : item)));
-      toast.success("Response saved");
-      closeRespond();
-      void loadFeedback();
+      notify.success("Response saved");
+      setTimeout(() => setSelected(null), 600);
+      loadFeedback().catch(() => {});
     } catch (error) {
-      toast.error(error.message ?? "Could not save response");
-    } finally {
-      setSaving(false);
+      notify.error(error.message ?? "Could not save response");
+      throw error;
     }
   }
 
-  return (
-    <AdminLayout
-      pageTitle="Feedback & Reviews"
-      description="What customers are saying after every visit — respond and close the loop."
-    >
-      <div className="space-y-4">
-        <ErrorBanner message={loadError} onRetry={loadFeedback} />
+  const avg = Number(summary.averageRating) || 0;
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard icon={Star} label="Average rating" value={summary.averageRating} display={`${summary.averageRating.toFixed(1)} ★`} tone="accent" />
-          <StatCard icon={MessageSquareHeart} label="Total reviews" value={summary.total} tone="primary" delay={60} />
-          <StatCard icon={Flag} label="Complaints" value={summary.totalComplaints} tone="destructive" delay={120} />
-          <StatCard icon={Sparkles} label="Resolved" value={summary.resolvedCount} tone="success" delay={180} />
+  return (
+    <AdminLayout pageTitle="Feedback" description="Ratings and complaints">
+      <div className="space-y-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard icon={Star} label="Average rating" value={avg} format={(n) => n.toFixed(1)} tone="gold" loading={loading && !feedback.length && !loadError} />
+          <StatCard icon={MessageSquareHeart} label="Reviews" value={summary.total} tone="primary" loading={loading && !feedback.length && !loadError} />
+          <StatCard icon={Flag} label="Complaints" value={summary.totalComplaints} tone="destructive" loading={loading && !feedback.length && !loadError} />
+          <StatCard icon={Sparkles} label="Resolved" value={summary.resolvedCount} tone="success" loading={loading && !feedback.length && !loadError} />
         </div>
 
-        <Card className="admin-shadow-sm">
-          <CardHeader className="space-y-3">
-            <CardTitle className="flex items-center gap-2">
-              <MessageCircle className="size-5" />
-              Customer feedback
-            </CardTitle>
-            <FilterTabs label="Status" options={STATUS_TABS} value={statusFilter} onChange={setStatusFilter} />
-            <FilterTabs label="Type" variant="soft" options={TYPE_TABS.map((t) => ({ value: t, label: t === "ALL" ? "All types" : t === "COMPLAINT" ? "Complaints" : "Feedback" }))} value={typeFilter} onChange={setTypeFilter} />
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loading ? <SkeletonRows count={4} /> : null}
-            {!loading && feedback.length === 0 ? (
-              <EmptyState
-                icon={MessageSquareHeart}
-                title="No feedback yet"
-                description="Once customers rate completed visits, their reviews and complaints will show up here."
-              />
-            ) : null}
-            <div ref={listRef} className="space-y-2.5">
-              {feedback.map((item) => (
-                <div
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <FilterTabs label="Status" options={STATUS_TABS} value={statusFilter} onChange={setStatusFilter} />
+          <FilterTabs label="Type" options={TYPE_TABS} value={typeFilter} onChange={setTypeFilter} />
+        </div>
+
+        {loadError && !feedback.length ? (
+          <ErrorState title="Couldn't load feedback" description={loadError} onRetry={loadFeedback} />
+        ) : loading && !feedback.length ? (
+          <SkeletonList rows={4} />
+        ) : !feedback.length ? (
+          <EmptyState illustration="sparkle" title="No feedback here" description={statusFilter !== "ALL" || typeFilter !== "ALL" ? "Try another filter." : "Ratings land here after visits."} />
+        ) : (
+          <ul className="grid gap-3 lg:grid-cols-2">
+            <AnimatePresence initial={false}>
+              {feedback.map((item, index) => (
+                <motion.li
                   key={item.id}
-                  className="admin-card-hover admin-shadow-sm flex flex-col gap-3 rounded-xl border border-border/70 bg-card p-4 sm:flex-row sm:items-start sm:justify-between"
+                  layout={!reduce}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }}
+                  className="flex flex-col gap-3 rounded-card border border-border/60 bg-card p-4 shadow-soft"
                 >
-                  <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex items-start gap-3">
                     <AvatarBadge name={item.customerName} />
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{item.customerName}</p>
-                        <StatusPill status={item.type} />
-                        <StatusPill status={item.status} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="truncate font-semibold">{item.customerName}</p>
+                        <Rating value={Number(item.rating) || 0} className="shrink-0" />
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {item.serviceName || "—"} {item.stylistName ? `· with ${item.stylistName}` : ""} · {formatDate(item.createdAt)}
+                      <p className="truncate text-caption text-ink-neutral">
+                        {item.serviceName || "—"}
+                        {item.stylistName ? ` · ${item.stylistName}` : ""} · {dateOf(item.createdAt)}
                       </p>
-                      <StarRating value={item.rating} readOnly size="sm" />
-                      {item.comment ? <p className="max-w-xl text-sm text-foreground/90">{item.comment}</p> : null}
-                      {item.adminResponse ? (
-                        <p className="max-w-xl rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground">Salon reply:</span> {item.adminResponse}
-                        </p>
-                      ) : null}
                     </div>
                   </div>
-                  <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => openRespond(item)}>
-                    {item.adminResponse ? "Edit response" : "Respond"}
-                  </Button>
-                </div>
+                  {item.comment ? <p className="text-sm">{item.comment}</p> : null}
+                  {item.adminResponse ? (
+                    <p className="flex items-start gap-2 rounded-2xl bg-muted/60 px-3 py-2 text-caption">
+                      <Reply className="mt-0.5 size-3.5 shrink-0 text-portal" aria-hidden />
+                      <span className="min-w-0">{item.adminResponse}</span>
+                    </p>
+                  ) : null}
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      <TypeChip type={item.type} />
+                      <StatusChip status={item.status} size="sm" />
+                    </div>
+                    <ButtonLoadingMorph size="sm" variant={item.adminResponse ? "ghost" : "secondary"} icon={item.adminResponse ? MessageCircle : Reply} onClick={() => openRespond(item)}>
+                      {item.adminResponse ? "Edit reply" : "Reply"}
+                    </ButtonLoadingMorph>
+                  </div>
+                </motion.li>
               ))}
-            </div>
-          </CardContent>
-        </Card>
+            </AnimatePresence>
+          </ul>
+        )}
       </div>
 
       <SlideOver
         open={Boolean(selected)}
-        onOpenChange={(open) => !open && closeRespond()}
-        title="Respond to feedback"
-        description={`${selected?.customerName ? `From ${selected.customerName}` : ""} ${selected?.serviceName ? `· ${selected.serviceName}` : ""}`.trim()}
+        onOpenChange={(open) => !open && setSelected(null)}
+        title="Reply"
+        description={[selected?.customerName, selected?.serviceName].filter(Boolean).join(" · ")}
+        icon={Reply}
+        size="md"
         footer={
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={closeRespond}>
-              Close
-            </Button>
-            <Button type="button" disabled={saving} onClick={() => void submitResponse()}>
-              <Send className="size-4" />
-              {saving ? "Saving..." : "Save response"}
-            </Button>
-          </div>
+          <ButtonLoadingMorph icon={Send} state={save.state} loadingLabel="Saving…" successLabel="Saved" onClick={() => save.run(submitResponse)}>
+            Save reply
+          </ButtonLoadingMorph>
         }
       >
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          {selected ? (
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <StarRating value={selected.rating} readOnly />
-                <StatusPill status={selected.type} />
-              </div>
-              {selected.comment ? (
-                <p className="rounded-lg border border-border/60 bg-muted/30 p-3 text-sm">{selected.comment}</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">No written comment was left.</p>
-              )}
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground" htmlFor="admin-response">
-                  Your reply (optional, visible to the customer later)
-                </label>
-                <textarea
-                  id="admin-response"
-                  rows={4}
-                  maxLength={2000}
-                  value={responseText}
-                  onChange={(e) => setResponseText(e.target.value)}
-                  placeholder="Thank you for the feedback — here's what we're doing about it..."
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-foreground">Mark as</p>
-                <FilterTabs label="Mark as" options={["OPEN", "REVIEWED", "RESOLVED"]} value={nextStatus} onChange={setNextStatus} />
-              </div>
+        {selected ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Rating value={Number(selected.rating) || 0} />
+              <TypeChip type={selected.type} />
             </div>
-          ) : null}
-        </div>
+            {selected.comment ? <p className="rounded-2xl bg-muted/60 p-3 text-sm">{selected.comment}</p> : <p className="text-caption text-ink-neutral">No written comment.</p>}
+            <FloatingLabelInput as="textarea" label="Your reply" maxLength={2000} value={responseText} onChange={(e) => setResponseText(e.target.value)} hint={`${responseText.length}/2000 · shown to the customer`} />
+            <div className="space-y-2">
+              <p className="text-caption font-semibold text-ink-neutral">Mark as</p>
+              <FilterTabs label="Mark as" options={STATUS_TABS.filter((t) => t.value !== "ALL")} value={nextStatus} onChange={setNextStatus} size="md" />
+            </div>
+          </div>
+        ) : null}
       </SlideOver>
     </AdminLayout>
   );

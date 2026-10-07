@@ -1,22 +1,25 @@
 "use client"
-import { AnimatePresence, LayoutGroup, motion } from "motion/react"
-import { BorderBeam } from "border-beam"
-import { CalendarClock, CalendarDays, Crown, Eye, Gift, Layers, Pencil, Percent, Plus, Search, Sparkles, Tag, Trash2, Users, X } from "lucide-react"
+import { AnimatePresence, motion, useReducedMotion } from "motion/react"
+import { CalendarClock, CalendarDays, CircleCheck, CircleDashed, Crown, Eye, Gift, Hourglass, Layers, Pencil, Percent, Plus, Search, Sparkles, Tag, TimerOff, Trash2, Users, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { toast } from "@/lib/notify";
+import { useSearchParams } from "react-router-dom"
+import { AnimatedTabBar, ButtonLoadingMorph, ErrorState, IconButton, StatCard, TONE_CLASSES } from "@/components/kit"
+import { interaction, spring } from "@/components/motion"
+import { notify } from "@/lib/notify"
 import { AdminLayout } from "../portal/admin-layout"
-import { Button } from "@/components/ui/button"
 import { useConfirm } from "@/admin/components/confirm-dialog"
 import { EmptyState } from "@/admin/components/empty-state"
 import { ErrorBanner } from "@/admin/components/error-banner"
+import { FilterTabs } from "@/admin/components/filter-tabs"
 import { emptyForm, formFromOffer, OfferEditor, payloadFromForm, SEGMENT_META, TYPE_META } from "@/admin/components/offer-editor"
-import { Switch } from "@/admin/components/service-editor-drawer"
-import { StatCard } from "@/admin/components/stat-card"
-import { SegmentedControl } from "@/components/fx/segmented-control"
-import { LoadingOrb } from "@/components/shared/loading-orb"
+import { SkeletonCards } from "@/admin/components/skeleton"
+import { Switch } from "@/admin/components/switch"
+import { ToneChip } from "@/admin/components/tone-chip"
 import { getFirebaseIdToken } from "@/lib/auth/auth-client"
 import { toApiUrl } from "@/lib/api-base"
+import { formatMoney } from "@/lib/format"
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket"
+import { formatIsoDate, salonDateOf } from "@/lib/salon-date"
 import { cn } from "@/lib/utils"
 
 async function authFetch(path, init) {
@@ -35,14 +38,15 @@ async function authFetch(path, init) {
   return data
 }
 
-const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`
-const dayLabel = (iso) => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" })
+const inr = (n) => formatMoney(n)
+const dayLabel = (iso) => (iso && !Number.isNaN(new Date(iso).getTime()) ? formatIsoDate(salonDateOf(iso)) : "—")
 
+// Schedule state derived here (not an API status), so it renders as a ToneChip.
 const STATUS = {
-  live: { label: "Live", dot: "bg-success", text: "text-success" },
-  scheduled: { label: "Soon", dot: "bg-chart-3", text: "text-chart-3" },
-  ended: { label: "Ended", dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
-  off: { label: "Off", dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
+  live: { label: "Live", tone: "success", icon: CircleCheck },
+  scheduled: { label: "Soon", tone: "info", icon: Hourglass },
+  ended: { label: "Ended", tone: "neutral", icon: TimerOff },
+  off: { label: "Off", tone: "neutral", icon: CircleDashed },
 }
 
 function statusOf(item, now) {
@@ -59,85 +63,83 @@ function whenLabel(item, status) {
   return "Always on"
 }
 
-const TYPE_FILTERS = [
-  { value: "ALL", label: "All", icon: Layers },
-  ...Object.entries(TYPE_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon })),
-]
+const TYPE_FILTERS = [{ value: "ALL", label: "All", icon: Layers }, ...Object.entries(TYPE_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon }))]
 const SEGMENT_OPTIONS = Object.entries(SEGMENT_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon }))
 
 const SOURCE_META = {
-  MEMBERSHIP_OFFER: { icon: Crown, title: "Member offer", tone: "bg-accent/15 text-accent" },
-  COMBO_OFFER: { icon: Gift, title: "Combo", tone: "bg-chart-4/15 text-chart-4" },
-  SERVICE_DISCOUNT: { icon: Tag, title: "Service offer", tone: "bg-chart-3/15 text-chart-3" },
-  GLOBAL_DISCOUNT: { icon: Percent, title: "Sitewide offer", tone: "bg-primary/10 text-primary" },
+  MEMBERSHIP_OFFER: { icon: Crown, title: "Member offer", tone: TONE_CLASSES.plum },
+  COMBO_OFFER: { icon: Gift, title: "Combo", tone: TONE_CLASSES.info },
+  SERVICE_DISCOUNT: { icon: Tag, title: "Service offer", tone: TONE_CLASSES.success },
+  GLOBAL_DISCOUNT: { icon: Percent, title: "Sitewide offer", tone: TONE_CLASSES.primary },
 }
 
 function OfferCard({ offer, index, busy, onToggle, onEdit, onDelete }) {
+  const reduce = useReducedMotion()
   const meta = TYPE_META[offer.type]
   const Icon = meta.icon
   const st = STATUS[offer.status]
   const seg = offer.type === "MEMBERSHIP" ? SEGMENT_META[offer.membershipSegment] : null
   return (
     <motion.article
-      layout
-      initial={{ opacity: 0, y: 14, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      layout={!reduce}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.03 }}
-      whileHover={{ y: -3 }}
-      className={cn("admin-shadow-sm flex flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4", (offer.status === "ended" || offer.status === "off") && "opacity-70")}
+      whileHover={reduce ? undefined : interaction.cardHover}
+      transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }}
+      className={cn("flex flex-col gap-4 rounded-card border border-border/60 bg-card p-4 shadow-soft transition-shadow hover:shadow-lift", (offer.status === "ended" || offer.status === "off") && "opacity-75")}
     >
       <div className="flex items-start justify-between gap-3">
-        <span title={meta.label} className={cn("grid size-11 shrink-0 place-items-center rounded-xl", meta.tone)}>
-          <Icon className="size-5" />
+        <span title={meta.label} className={cn("grid size-11 shrink-0 place-items-center rounded-2xl ring-1 ring-inset", meta.tone)}>
+          <Icon className="size-5" aria-hidden />
+          <span className="sr-only">{meta.label}</span>
         </span>
         <div className="text-right">
-          <p className="font-display text-3xl font-bold leading-none tracking-tight">{offer.type === "COMBO" ? inr(offer.offerPrice) : `${offer.discountPercent}%`}</p>
-          {offer.type === "COMBO" && offer.savings ? <p className="mt-1 text-xs font-semibold text-success">Saves {inr(offer.savings)}</p> : offer.type !== "COMBO" ? <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">off</p> : null}
+          <p className="font-display text-3xl leading-none font-bold tracking-tight tabular-nums">{offer.type === "COMBO" ? inr(offer.offerPrice) : `${offer.discountPercent}%`}</p>
+          {offer.type === "COMBO" && offer.savings ? <p className="mt-1 text-caption font-semibold text-ink-success">Saves {inr(offer.savings)}</p> : offer.type !== "COMBO" ? <p className="mt-1 text-micro font-semibold uppercase text-ink-neutral">off</p> : null}
         </div>
       </div>
 
       <div className="min-w-0">
-        <h3 className="truncate font-display text-base font-semibold leading-tight">{offer.title}</h3>
+        <h3 className="truncate font-display text-headline font-semibold">{offer.title}</h3>
         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {seg ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
-              <seg.icon className="size-3" /> {seg.label}
-            </span>
+            <ToneChip tone="plum" icon={seg.icon} size="sm">
+              {seg.label}
+            </ToneChip>
           ) : null}
           {offer.type === "COMBO" ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-              <Layers className="size-3" /> {offer.serviceCount}
-            </span>
+            <ToneChip icon={Layers} size="sm">
+              {offer.serviceCount} services
+            </ToneChip>
           ) : null}
-          {offer.type === "COMBO" ? (
-            <span className="inline-flex items-center gap-1">
-              {(offer.visibleSegments ?? []).map((s) => {
-                const SegIcon = SEGMENT_META[s]?.icon ?? Users
-                return <SegIcon key={s} title={SEGMENT_META[s]?.label} className="size-3.5 text-muted-foreground" />
-              })}
-            </span>
-          ) : null}
+          {offer.type === "COMBO"
+            ? (offer.visibleSegments ?? []).map((sg) => {
+                const SegIcon = SEGMENT_META[sg]?.icon ?? Users
+                return (
+                  <span key={sg} title={SEGMENT_META[sg]?.label} className="grid size-6 place-items-center rounded-full bg-muted text-ink-neutral">
+                    <SegIcon className="size-3.5" aria-hidden />
+                    <span className="sr-only">{SEGMENT_META[sg]?.label}</span>
+                  </span>
+                )
+              })
+            : null}
         </div>
       </div>
 
-      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-        <div className="min-w-0 space-y-0.5">
-          <p className={cn("flex items-center gap-1.5 text-xs font-semibold", st.text)}>
-            <span className={cn("size-1.5 rounded-full", st.dot, offer.status === "live" && "admin-live-dot relative text-success")} /> {st.label}
-          </p>
-          <p className="flex items-center gap-1 text-xs text-muted-foreground">
-            <CalendarDays className="size-3.5" /> {whenLabel(offer, offer.status)}
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-3">
+        <div className="min-w-0 space-y-1">
+          <ToneChip tone={st.tone} icon={st.icon} size="sm">
+            {st.label}
+          </ToneChip>
+          <p className="flex items-center gap-1 text-caption text-ink-neutral">
+            <CalendarDays className="size-3.5" aria-hidden /> {whenLabel(offer, offer.status)}
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <Switch checked={offer.isEnabled} onChange={() => onToggle(offer)} label={offer.isEnabled ? "Turn off" : "Turn on"} />
-          <Button type="button" size="icon" variant="ghost" aria-label={`Edit ${offer.title}`} disabled={busy} onClick={() => onEdit(offer)}>
-            <Pencil className="size-4" />
-          </Button>
-          <Button type="button" size="icon" variant="ghost" aria-label={`Delete ${offer.title}`} disabled={busy} onClick={() => onDelete(offer)}>
-            <Trash2 className="size-4 text-destructive" />
-          </Button>
+          <Switch checked={offer.isEnabled} onChange={() => onToggle(offer)} disabled={busy} label={offer.isEnabled ? `Turn off ${offer.title}` : `Turn on ${offer.title}`} />
+          <IconButton icon={Pencil} label={`Edit ${offer.title}`} disabled={busy} onClick={() => onEdit(offer)} />
+          <IconButton icon={Trash2} label={`Delete ${offer.title}`} disabled={busy} className="text-ink-destructive" onClick={() => onDelete(offer)} />
         </div>
       </div>
     </motion.article>
@@ -149,24 +151,30 @@ function PreviewCard({ item, index }) {
   const Icon = src?.icon ?? Tag
   const discounted = Number(item.finalPrice) < Number(item.originalPrice)
   return (
-    <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ delay: Math.min(index, 10) * 0.02 }} className="admin-shadow-sm flex items-center gap-3 rounded-xl border border-border/70 bg-card p-3">
-      <span title={src?.title ?? "No offer"} className={cn("grid size-10 shrink-0 place-items-center rounded-xl", src?.tone ?? "bg-muted text-muted-foreground")}>
-        <Icon className="size-[18px]" />
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.03 }} className="flex min-h-16 items-center gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-soft">
+      <span title={src?.title ?? "No offer"} className={cn("grid size-10 shrink-0 place-items-center rounded-xl ring-1 ring-inset", src?.tone ?? TONE_CLASSES.neutral)}>
+        <Icon className="size-[18px]" aria-hidden />
+        <span className="sr-only">{src?.title ?? "No offer"}</span>
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{item.serviceName}</p>
+        <p className="truncate text-sm font-semibold">{item.serviceName}</p>
         <p className="flex items-baseline gap-2 text-sm">
           <span className="font-bold tabular-nums">{inr(item.finalPrice)}</span>
-          {discounted ? <span className="text-xs text-muted-foreground line-through tabular-nums">{inr(item.originalPrice)}</span> : null}
+          {discounted ? <span className="text-caption text-ink-neutral line-through tabular-nums">{inr(item.originalPrice)}</span> : null}
         </p>
       </div>
-      {discounted ? <span className="shrink-0 rounded-full bg-success/10 px-2 py-1 text-xs font-bold text-success">-{Math.round(item.appliedPercent)}%</span> : null}
+      {discounted ? (
+        <ToneChip tone="success" size="sm">
+          −{Math.round(item.appliedPercent)}%
+        </ToneChip>
+      ) : null}
     </motion.div>
   )
 }
 
 export default function OfferCenterPage() {
-  const { confirm, confirmDialog } = useConfirm()
+  const { ask, confirmSheet } = useConfirm()
+  const [params, setParams] = useSearchParams()
   const [center, setCenter] = useState({ services: [], serviceDiscounts: [], membershipDiscounts: [], combos: [], dashboard: {}, globalDiscount: null })
   const [preview, setPreview] = useState({ segment: "FREE", services: [], combos: [] })
   const [loading, setLoading] = useState(true)
@@ -193,9 +201,8 @@ export default function OfferCenterPage() {
       setPreview(previewData)
       setLoadError("")
     } catch (error) {
-      const message = error.message ?? "Could not load offers"
-      toast.error(message)
-      setLoadError(message)
+      setLoadError(error.message ?? "Could not load offers")
+      throw error
     } finally {
       setLoading(false)
     }
@@ -206,7 +213,7 @@ export default function OfferCenterPage() {
   }, [preview.segment])
 
   useEffect(() => {
-    void reloadAll("FREE")
+    reloadAll("FREE").catch(() => {})
     void getFirebaseIdToken()
       .catch(() => null)
       .then((token) =>
@@ -219,12 +226,22 @@ export default function OfferCenterPage() {
               setPreview(payload.previews[segment])
               return
             }
-            void reloadAll(segment)
+            reloadAll(segment).catch(() => {})
           },
         })
       )
     return () => disconnectAdminBookingsSocket()
   }, [reloadAll])
+
+  // ?new=1 (dashboard, ⌘K, FAB) opens the type picker.
+  useEffect(() => {
+    if (!params.get("new")) return
+    setEditor({ open: true, form: null })
+    setParams((p) => {
+      p.delete("new")
+      return p
+    }, { replace: true })
+  }, [params, setParams])
 
   const servicesById = useMemo(() => new Map((center.services ?? []).map((s) => [s.id, s])), [center.services])
 
@@ -243,9 +260,7 @@ export default function OfferCenterPage() {
 
   const visibleOffers = useMemo(() => {
     const rank = { live: 0, scheduled: 1, off: 2, ended: 3 }
-    return offers
-      .filter((o) => (typeFilter === "ALL" || o.type === typeFilter) && (showEnded || (o.status !== "ended" && o.status !== "off")))
-      .sort((a, b) => rank[a.status] - rank[b.status])
+    return offers.filter((o) => (typeFilter === "ALL" || o.type === typeFilter) && (showEnded || (o.status !== "ended" && o.status !== "off"))).sort((a, b) => rank[a.status] - rank[b.status])
   }, [offers, typeFilter, showEnded])
 
   const hiddenCount = offers.filter((o) => (typeFilter === "ALL" || o.type === typeFilter) && (o.status === "ended" || o.status === "off")).length
@@ -255,14 +270,14 @@ export default function OfferCenterPage() {
     const payload = payloadFromForm(form)
     if (form.id) {
       await authFetch(`/api/admin/offers/${form.type}/${form.id}`, { method: "PATCH", body: JSON.stringify(payload) })
-      toast.success("Offer updated")
+      notify.success("Offer updated")
     } else {
       const path = { GLOBAL: "global", SERVICE: "service", MEMBERSHIP: "membership", COMBO: "combos" }[form.type]
       const data = await authFetch(`/api/admin/offers/${path}`, { method: "POST", body: JSON.stringify(payload) })
-      if (data.warning) toast.message(data.warning)
-      toast.success("Offer created")
+      if (data.warning) notify.warning(data.warning)
+      notify.success("Offer created")
     }
-    await reloadAll()
+    await reloadAll().catch(() => {})
   }
 
   async function toggleOffer(offer) {
@@ -270,28 +285,31 @@ export default function OfferCenterPage() {
     try {
       const form = { ...formFromOffer(offer.type, offer), isEnabled: !offer.isEnabled }
       await authFetch(`/api/admin/offers/${offer.type}/${offer.id}`, { method: "PATCH", body: JSON.stringify(payloadFromForm(form)) })
-      toast.success(form.isEnabled ? "Offer is live" : "Offer turned off")
-      await reloadAll()
+      notify.success(form.isEnabled ? "Offer is live" : "Offer turned off")
+      await reloadAll().catch(() => {})
     } catch (error) {
-      toast.error(error.message ?? "Could not update offer")
+      notify.error(error.message ?? "Could not update offer")
     } finally {
       setBusy(false)
     }
   }
 
-  async function deleteOffer(offer) {
-    const ok = await confirm({ title: `Delete "${offer.title}"?`, description: "Customers stop seeing it right away.", confirmLabel: "Delete", hold: true })
-    if (!ok) return
-    setBusy(true)
-    try {
-      await authFetch(`/api/admin/offers/${offer.type}/${offer.id}`, { method: "DELETE" })
-      toast.success("Offer deleted")
-      await reloadAll()
-    } catch (error) {
-      toast.error(error.message ?? "Could not delete offer")
-    } finally {
-      setBusy(false)
-    }
+  function deleteOffer(offer) {
+    ask({
+      title: `Delete "${offer.title}"?`,
+      description: "Customers stop seeing it right away.",
+      confirmLabel: "Slide to delete",
+      action: async () => {
+        try {
+          await authFetch(`/api/admin/offers/${offer.type}/${offer.id}`, { method: "DELETE" })
+          notify.success("Offer deleted")
+          await reloadAll().catch(() => {})
+        } catch (error) {
+          notify.error(error.message ?? "Could not delete offer")
+          throw error
+        }
+      },
+    })
   }
 
   const openNew = (type) => setEditor({ open: true, form: type ? emptyForm(type) : null })
@@ -301,7 +319,7 @@ export default function OfferCenterPage() {
     try {
       setPreview(await authFetch(`/api/admin/offers/preview?membershipSegment=${segment}`))
     } catch (error) {
-      toast.error(error.message ?? "Could not load preview")
+      notify.error(error.message ?? "Could not load preview")
     }
   }
 
@@ -322,32 +340,31 @@ export default function OfferCenterPage() {
   )
 
   const d = center.dashboard ?? {}
+  const firstLoad = loading && !offers.length
 
   return (
     <AdminLayout
-      pageTitle="Offer Center"
-      description="Discounts, combos and member pricing."
+      pageTitle="Offers"
+      description="Discounts, combos, member prices"
       actions={
-        <BorderBeam size="sm">
-          <Button type="button" onClick={() => openNew(null)}>
-            <Plus className="size-4" /> New offer
-          </Button>
-        </BorderBeam>
+        <ButtonLoadingMorph icon={Plus} onClick={() => openNew(null)}>
+          New offer
+        </ButtonLoadingMorph>
       }
     >
       <div className="space-y-5">
-        <ErrorBanner message={loadError} onRetry={() => void reloadAll()} />
+        <ErrorBanner message={offers.length ? loadError : ""} onRetry={() => reloadAll()} />
 
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
-          <StatCard icon={Percent} label="Live discounts" value={d.activeDiscounts ?? 0} tone="primary" />
-          <StatCard icon={Gift} label="Live combos" value={d.activeCombos ?? 0} tone="accent" delay={40} />
-          <StatCard icon={Crown} label="Member offers" value={(d.premiumOffers ?? 0) + (d.basicOffers ?? 0) + (d.freeOffers ?? 0)} tone="success" delay={80} />
-          <StatCard icon={CalendarClock} label="Ending in 3 days" value={d.expiringSoon ?? 0} tone={d.expiringSoon ? "destructive" : "neutral"} delay={120} />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard icon={Percent} label="Live discounts" value={d.activeDiscounts ?? 0} tone="primary" loading={firstLoad && !loadError} />
+          <StatCard icon={Gift} label="Live combos" value={d.activeCombos ?? 0} tone="info" loading={firstLoad && !loadError} />
+          <StatCard icon={Crown} label="Member offers" value={(d.premiumOffers ?? 0) + (d.basicOffers ?? 0) + (d.freeOffers ?? 0)} tone="plum" loading={firstLoad && !loadError} />
+          <StatCard icon={CalendarClock} label="Ending ≤ 3 days" value={d.expiringSoon ?? 0} tone={d.expiringSoon ? "warning" : "neutral"} loading={firstLoad && !loadError} />
         </div>
 
-        <SegmentedControl
+        <AnimatedTabBar
           label="View"
-          options={[
+          items={[
             { value: "offers", label: "Offers", icon: Sparkles },
             { value: "preview", label: "Customer view", icon: Eye },
           ]}
@@ -356,81 +373,83 @@ export default function OfferCenterPage() {
         />
 
         <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }} className="space-y-4">
+          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={spring.soft} className="space-y-4">
             {tab === "offers" ? (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="max-w-full overflow-x-auto pb-1">
-                    <SegmentedControl label="Offer type" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} />
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Switch checked={showEnded} onChange={setShowEnded} label="Show ended and off" />
-                    Ended{hiddenCount ? <span className="rounded-full bg-muted px-1.5 text-xs font-semibold">{hiddenCount}</span> : null}
+                  <FilterTabs label="Offer type" options={TYPE_FILTERS} value={typeFilter} onChange={setTypeFilter} className="min-w-0" />
+                  <label className="flex items-center gap-2.5 text-sm font-semibold">
+                    <Switch checked={showEnded} onChange={setShowEnded} label="Show ended and off offers" />
+                    Ended / off{hiddenCount ? <span className="rounded-full bg-muted px-2 text-caption font-bold tabular-nums">{hiddenCount}</span> : null}
                   </label>
                 </div>
 
-                {loading && !offers.length ? (
-                  <LoadingOrb compact label="Loading offers…" />
+                {loadError && !offers.length ? (
+                  <ErrorState title="Couldn't load offers" description={loadError} onRetry={() => reloadAll()} />
+                ) : firstLoad ? (
+                  <SkeletonCards count={3} />
                 ) : !visibleOffers.length ? (
-                  <EmptyState icon={Percent} title="No offers here" description={offers.length ? "Try another type, or show ended offers." : "Create your first discount or combo."} actionLabel="New offer" onAction={() => openNew(null)} />
+                  <EmptyState illustration="gift" title="No offers here" description={offers.length ? "Try another type or show ended." : "Create a discount or combo."} actionLabel="New offer" actionIcon={Plus} onAction={() => openNew(null)} />
                 ) : (
-                  <LayoutGroup>
-                    <motion.div layout className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                      <AnimatePresence mode="popLayout">
-                        {visibleOffers.map((offer, index) => (
-                          <OfferCard key={`${offer.type}-${offer.id}`} offer={offer} index={index} busy={busy} onToggle={toggleOffer} onEdit={openEdit} onDelete={deleteOffer} />
-                        ))}
-                      </AnimatePresence>
-                    </motion.div>
-                  </LayoutGroup>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    <AnimatePresence mode="popLayout">
+                      {visibleOffers.map((offer, index) => (
+                        <OfferCard key={`${offer.type}-${offer.id}`} offer={offer} index={index} busy={busy} onToggle={toggleOffer} onEdit={openEdit} onDelete={deleteOffer} />
+                      ))}
+                    </AnimatePresence>
+                  </div>
                 )}
               </>
             ) : (
               <>
-                <div className="flex flex-wrap items-center gap-3">
-                  <SegmentedControl label="Customer type" options={SEGMENT_OPTIONS} value={preview.segment} onChange={(v) => void changeSegment(v)} />
-                  <div className="relative min-w-0 flex-1 sm:max-w-xs">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <input value={previewSearch} onChange={(e) => setPreviewSearch(e.target.value)} placeholder="Search" aria-label="Search services" className="h-10 w-full rounded-xl border bg-card pl-9 pr-8 text-sm outline-none" />
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <FilterTabs label="Customer type" options={SEGMENT_OPTIONS} value={preview.segment} onChange={(v) => void changeSegment(v)} />
+                  <label className="relative block min-w-0 flex-1 sm:max-w-xs">
+                    <span className="sr-only">Search services</span>
+                    <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-neutral" aria-hidden />
+                    <input value={previewSearch} onChange={(e) => setPreviewSearch(e.target.value)} placeholder="Search" className="h-11 w-full rounded-control bg-card pr-10 pl-10 text-sm shadow-soft ring-1 ring-inset ring-border/60 outline-none placeholder:text-ink-neutral focus-visible:ring-2 focus-visible:ring-portal" />
                     {previewSearch ? (
-                      <button type="button" aria-label="Clear" onClick={() => setPreviewSearch("")} className="absolute right-2.5 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-muted">
-                        <X className="size-3" />
+                      <button type="button" aria-label="Clear search" onClick={() => setPreviewSearch("")} className="tap absolute top-1/2 right-3 grid size-6 -translate-y-1/2 place-items-center rounded-full bg-muted">
+                        <X className="size-3.5" aria-hidden />
                       </button>
                     ) : null}
-                  </div>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Switch checked={onlyDiscounted} onChange={setOnlyDiscounted} label="Only discounted" />
-                    <Percent className="size-4" />
+                  </label>
+                  <label className="flex items-center gap-2.5 text-sm font-semibold">
+                    <Switch checked={onlyDiscounted} onChange={setOnlyDiscounted} label="Only discounted services" />
+                    <Percent className="size-4 text-ink-neutral" aria-hidden /> Discounted
                   </label>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground" aria-label="Priority order">
-                  <span className="font-semibold uppercase tracking-wide">Applied first →</span>
+                <ol className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-caption text-ink-neutral" aria-label="Which offer wins, first to last">
                   {Object.entries(SOURCE_META).map(([key, m], i) => (
-                    <span key={key} className="flex items-center gap-1.5">
-                      <span className={cn("grid size-5 place-items-center rounded-md", m.tone)}>
-                        <m.icon className="size-3" />
+                    <li key={key} className="flex items-center gap-1.5">
+                      <span className={cn("grid size-6 place-items-center rounded-lg ring-1 ring-inset", m.tone)}>
+                        <m.icon className="size-3.5" aria-hidden />
                       </span>
                       {m.title}
                       {i < 3 ? <span aria-hidden>›</span> : null}
-                    </span>
+                    </li>
                   ))}
-                </div>
+                </ol>
 
                 {previewCombos.length ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {previewCombos.map((c) => (
-                      <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="admin-shadow-sm rounded-2xl border border-chart-4/30 bg-chart-4/5 p-4">
+                      <motion.div key={c.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft} className="rounded-card border border-info/30 bg-info/8 p-4 shadow-soft">
                         <div className="flex items-center gap-2">
-                          <span className="grid size-9 place-items-center rounded-xl bg-chart-4/15 text-chart-4">
-                            <Gift className="size-[18px]" />
+                          <span className={cn("grid size-9 place-items-center rounded-xl ring-1 ring-inset", TONE_CLASSES.info)}>
+                            <Gift className="size-[18px]" aria-hidden />
                           </span>
                           <p className="truncate font-display font-semibold">{c.name}</p>
                         </div>
                         <p className="mt-3 flex items-baseline gap-2">
                           <span className="font-display text-2xl font-bold tabular-nums">{inr(c.offerPrice)}</span>
-                          <span className="text-sm text-muted-foreground line-through tabular-nums">{inr(c.actual)}</span>
-                          {c.savings ? <span className="ml-auto rounded-full bg-success/10 px-2 py-0.5 text-xs font-bold text-success">-{inr(c.savings)}</span> : null}
+                          <span className="text-sm text-ink-neutral line-through tabular-nums">{inr(c.actual)}</span>
+                          {c.savings ? (
+                            <ToneChip tone="success" size="sm" className="ml-auto">
+                              −{inr(c.savings)}
+                            </ToneChip>
+                          ) : null}
                         </p>
                       </motion.div>
                     ))}
@@ -438,15 +457,15 @@ export default function OfferCenterPage() {
                 ) : null}
 
                 {!previewServices.length && !previewCombos.length ? (
-                  <EmptyState icon={Eye} compact title="Nothing to show" description="No services match." />
+                  <EmptyState compact illustration="search" title="Nothing to show" description="No services match." />
                 ) : (
-                  <motion.div layout className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                     <AnimatePresence mode="popLayout">
                       {previewServices.map((item, i) => (
                         <PreviewCard key={item.serviceId} item={item} index={i} />
                       ))}
                     </AnimatePresence>
-                  </motion.div>
+                  </div>
                 )}
               </>
             )}
@@ -454,15 +473,8 @@ export default function OfferCenterPage() {
         </AnimatePresence>
       </div>
 
-      <OfferEditor
-        open={editor.open}
-        onOpenChange={(open) => setEditor((e) => ({ ...e, open }))}
-        services={center.services ?? []}
-        initial={editor.form}
-        existingGlobal={center.globalDiscount}
-        onSubmit={saveOffer}
-      />
-      {confirmDialog}
+      <OfferEditor open={editor.open} onOpenChange={(open) => setEditor((e) => ({ ...e, open }))} services={center.services ?? []} initial={editor.form} existingGlobal={center.globalDiscount} onSubmit={saveOffer} />
+      {confirmSheet}
     </AdminLayout>
   )
 }

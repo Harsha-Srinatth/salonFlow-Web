@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
+import { formatIsoDate, salonDateIso } from "@/lib/salon-date";
 
 /* ---------- date helpers (all local time, "YYYY-MM-DD" strings) ---------- */
 const pad = (n) => `${n}`.padStart(2, "0");
@@ -16,7 +17,7 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
 const endOfMonth = (d) => new Date(d.getFullYear(), d.getMonth() + 1, 0);
 const sameDay = (a, b) => a && b && ymd(a) === ymd(b);
-const short = (d, withYear) => d.toLocaleDateString([], { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
+const short = (d, withYear) => formatIsoDate(ymd(d), { day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
 
 /** Local start/end of a "YYYY-MM-DD" day as ISO strings (what the API filters on). */
 export const dayStartIso = (s) => (s ? new Date(`${s}T00:00:00`).toISOString() : undefined);
@@ -53,7 +54,8 @@ function monthCells(view) {
  * (a bottom sheet on phones). `value` is { from, to } as "YYYY-MM-DD" ("" = open ended).
  */
 export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allowFuture = false, allowPast = true, anyLabel = "Any date", className, label = "Date range", inline = false }) {
-  const today = useMemo(() => new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()), []);
+  // "Today" is the salon's calendar day, whatever the device time zone.
+  const today = useMemo(() => parseYmd(salonDateIso()), []);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState({ from: "", to: "" });
   const [view, setView] = useState(() => startOfMonth(today));
@@ -122,11 +124,11 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
         aria-expanded={open}
         aria-label={`${label}: ${text}`}
         onClick={() => (open ? close() : openPicker())}
-        className={cn("flex h-10 items-center gap-2 rounded-xl border bg-card px-3 text-sm font-medium outline-none transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50", open && "border-primary")}
+        className={cn("flex h-11 w-full items-center gap-2 rounded-control bg-card px-3.5 text-sm font-semibold shadow-soft ring-1 ring-inset ring-border/60 outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-portal sm:w-auto", open && "ring-2 ring-portal")}
       >
-        <CalendarDays className="size-4 text-primary" />
-        <span className="truncate">{text}</span>
-        <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <CalendarDays className="size-4 text-portal" aria-hidden />
+        <span className="min-w-0 flex-1 truncate text-left">{text}</span>
+        <ChevronDown className={cn("size-4 text-ink-neutral transition-transform", open && "rotate-180")} />
       </button>
 
       <AnimatePresence>
@@ -139,9 +141,9 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
             exit={{ opacity: 0, y: 8, scale: 0.98 }}
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
             className={cn(
-              "rounded-2xl border bg-popover p-3 text-popover-foreground",
+              "glass-strong rounded-sheet p-3 text-popover-foreground",
               // inline: expands in the page flow (needed inside slide-overs, which clip and transform floating children)
-              inline ? "mt-2 w-full max-w-sm" : "fixed inset-x-3 bottom-3 z-50 shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-[19.5rem]"
+              inline ? "mt-2 w-full max-w-sm" : "fixed inset-x-3 bottom-[calc(0.75rem+var(--safe-bottom))] z-popover shadow-float sm:absolute sm:inset-x-auto sm:bottom-auto sm:left-0 sm:top-full sm:mt-2 sm:w-[20rem]"
             )}
           >
             {/* Presets */}
@@ -156,7 +158,7 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
                       onChange(p.range(today));
                       close();
                     }}
-                    className={cn("shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors", on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}
+                    className={cn("tap h-9 shrink-0 rounded-full px-3 text-caption font-semibold ring-1 ring-inset transition-colors", on ? "bg-portal text-portal-foreground ring-portal" : "bg-card ring-border hover:bg-muted")}
                   >
                     {p.label}
                   </button>
@@ -165,21 +167,21 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
             </div>
 
             {/* Calendar */}
-            <div className="mt-1 rounded-xl bg-muted/30 p-2">
+            <div className="mt-1 rounded-2xl bg-muted/40 p-2">
               <div className="mb-1 flex items-center justify-between">
-                <button type="button" aria-label="Previous month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))} className="grid size-8 place-items-center rounded-lg hover:bg-muted">
-                  <ChevronLeft className="size-4" />
+                <button type="button" aria-label="Previous month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))} className="tap grid size-9 place-items-center rounded-xl hover:bg-muted">
+                  <ChevronLeft className="size-4" aria-hidden />
                 </button>
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.span key={`${view.getFullYear()}-${view.getMonth()}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.12 }} className="text-sm font-semibold">
-                    {view.toLocaleDateString([], { month: "long", year: "numeric" })}
+                    {formatIsoDate(ymd(view), { month: "long", year: "numeric" })}
                   </motion.span>
                 </AnimatePresence>
-                <button type="button" aria-label="Next month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))} className="grid size-8 place-items-center rounded-lg hover:bg-muted">
-                  <ChevronRight className="size-4" />
+                <button type="button" aria-label="Next month" onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))} className="tap grid size-9 place-items-center rounded-xl hover:bg-muted">
+                  <ChevronRight className="size-4" aria-hidden />
                 </button>
               </div>
-              <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase text-muted-foreground">
+              <div className="grid grid-cols-7 text-center text-[10px] font-semibold uppercase text-ink-neutral">
                 {WEEKDAYS.map((w, i) => (
                   <span key={i} className="py-1">
                     {w}
@@ -202,14 +204,14 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
                       onClick={() => pick(d)}
                       onMouseEnter={() => setHover(d)}
                       className={cn(
-                        "relative my-0.5 grid h-9 place-items-center text-sm tabular-nums transition-colors",
-                        middle && "bg-primary/10",
-                        start && preview.to && "rounded-l-full bg-primary/10",
-                        end && preview.from && preview.from !== preview.to && "rounded-r-full bg-primary/10",
+                        "relative my-0.5 grid h-10 place-items-center text-sm tabular-nums transition-colors",
+                        middle && "bg-portal/12",
+                        start && preview.to && "rounded-l-full bg-portal/12",
+                        end && preview.from && preview.from !== preview.to && "rounded-r-full bg-portal/12",
                         off && "cursor-not-allowed opacity-30"
                       )}
                     >
-                      <span className={cn("grid size-8 place-items-center rounded-full", (start || end) && "bg-primary font-semibold text-primary-foreground", !start && !end && !off && "hover:bg-muted", sameDay(d, today) && !start && !end && "ring-1 ring-primary/50")}>{d.getDate()}</span>
+                      <span className={cn("grid size-9 place-items-center rounded-full", (start || end) && "bg-portal font-semibold text-portal-foreground", !start && !end && !off && "hover:bg-muted", sameDay(d, today) && !start && !end && "ring-1 ring-portal/60")}>{d.getDate()}</span>
                     </button>
                   );
                 })}
@@ -218,15 +220,15 @@ export function DateRangePicker({ value, onChange, presets = PAST_PRESETS, allow
 
             {/* Footer */}
             <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="min-w-0 truncate text-xs font-medium text-muted-foreground">{draft.from ? `${short(parseYmd(draft.from))}${draft.to && draft.to !== draft.from ? ` → ${short(parseYmd(draft.to))}` : ""}` : "Pick a start date"}</p>
+              <p className="min-w-0 truncate text-caption font-semibold text-ink-neutral">{draft.from ? `${short(parseYmd(draft.from))}${draft.to && draft.to !== draft.from ? ` → ${short(parseYmd(draft.to))}` : ""}` : "Pick a start date"}</p>
               <div className="flex gap-1.5">
                 {anyLabel && presets.every((p) => p.key !== "always") ? (
-                  <button type="button" onClick={() => { onChange({ from: "", to: "" }); close(); }} aria-label="Clear dates" className="grid size-8 place-items-center rounded-lg border hover:bg-muted">
-                    <X className="size-4" />
+                  <button type="button" onClick={() => { onChange({ from: "", to: "" }); close(); }} aria-label="Clear dates" className="tap grid size-9 place-items-center rounded-xl bg-muted hover:bg-muted/70">
+                    <X className="size-4" aria-hidden />
                   </button>
                 ) : null}
-                <button type="button" disabled={!canApply} onClick={apply} className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-40">
-                  <Check className="size-3.5" /> Apply
+                <button type="button" disabled={!canApply} onClick={apply} className="flex h-9 items-center gap-1.5 rounded-xl bg-portal px-3.5 text-caption font-semibold text-portal-foreground disabled:opacity-40">
+                  <Check className="size-3.5" aria-hidden /> Apply
                 </button>
               </div>
             </div>

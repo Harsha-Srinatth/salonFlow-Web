@@ -1,18 +1,18 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { AlertOctagon, ChevronLeft, ChevronRight, Clock, Loader2, Save, Timer, TrendingDown, Undo2, Wallet } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AlertOctagon, ChevronLeft, ChevronRight, Clock, Save, Timer, TrendingDown, Undo2, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "@/lib/notify";
+import { notify as toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
+import { ButtonLoadingMorph, ErrorState, IconButton, StatCard, useAsyncAction } from "@/components/kit";
+import { SkeletonList, spring } from "@/components/motion";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
+import { Panel } from "@/admin/components/panel";
 import { EmptyState } from "@/admin/components/empty-state";
-import { ErrorBanner } from "@/admin/components/error-banner";
-import { StatCard } from "@/admin/components/stat-card";
 import { Stepper } from "@/admin/components/stepper";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { formatMoney } from "@/lib/format";
+import { formatIsoDate, monthStartIso, salonDateIso } from "@/lib/salon-date";
 import { toApiUrl } from "@/lib/api-base";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { cn } from "@/lib/utils";
@@ -26,18 +26,13 @@ async function authHeaders() {
 }
 
 const DEFAULT_POLICY = { graceMinutes: 10, penaltyPerMinute: 0 };
-const inr = (n) => `Rs ${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+const inr = (n) => formatMoney(n, { decimals: !Number.isInteger(Number(n || 0)) });
 
-function shiftMonth(month, delta) {
-  const [y, m] = month.split("-").map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}`;
-}
-const monthLabel = (month) => new Date(`${month}-01T00:00:00`).toLocaleDateString([], { month: "long", year: "numeric" });
-const currentMonth = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}`;
-};
+// Months are "YYYY-MM" in salon time.
+const shiftMonth = (month, delta) => monthStartIso(`${month}-01`, delta).slice(0, 7);
+const monthLabel = (month) => formatIsoDate(`${month}-01`, { month: "long", year: "numeric" });
+const currentMonth = () => salonDateIso().slice(0, 7);
+
 
 export default function AdminStaffPayrollPage() {
   const { appUser } = useAuth();
@@ -47,7 +42,9 @@ export default function AdminStaffPayrollPage() {
   const [direction, setDirection] = useState(1);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const saveAction = useAsyncAction({ successMs: 900 });
+  const saving = saveAction.state === "loading";
+  const reduce = useReducedMotion();
   const [loadError, setLoadError] = useState("");
 
   const totalCut = useMemo(() => items.reduce((sum, item) => sum + Number(item.totalPenalty ?? 0), 0), [items]);
@@ -85,8 +82,8 @@ export default function AdminStaffPayrollPage() {
       setLoadError("");
     } catch (e) {
       const message = e instanceof Error ? e.message : "Could not load payroll";
-      toast.error(message);
       setLoadError(message);
+      throw e;
     } finally {
       setLoading(false);
     }
@@ -94,12 +91,11 @@ export default function AdminStaffPayrollPage() {
 
   useEffect(() => {
     if (appUser?.role !== "ADMIN") return;
-    void loadAll();
+    loadAll().catch(() => {});
     // Policy is reloaded with the month; unsaved policy edits are not clobbered because load only runs on month change.
   }, [appUser?.role, month]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function savePolicy() {
-    setSaving(true);
     try {
       const headers = await authHeaders();
       const res = await fetch(toApiUrl("/api/admin/payroll/policy"), {
@@ -117,8 +113,7 @@ export default function AdminStaffPayrollPage() {
       await loadReport(month);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save payroll policy");
-    } finally {
-      setSaving(false);
+      throw e;
     }
   }
 
@@ -127,141 +122,107 @@ export default function AdminStaffPayrollPage() {
     setMonth((m) => shiftMonth(m, delta));
   }
 
-  if (!appUser || appUser.role !== "ADMIN") return <div className="p-4">Admin only.</div>;
+  if (!appUser || appUser.role !== "ADMIN") return <AdminLayout pageTitle="Payroll"><EmptyState illustration="search" title="Admins only" /></AdminLayout>;
 
   const isCurrent = month === currentMonth();
 
   return (
-    <AdminLayout pageTitle="Stylist Payroll" description="Delay penalties and monthly deductions per stylist.">
-      <div className="space-y-6">
-        <ErrorBanner message={loadError} onRetry={() => void loadAll()} />
-
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard icon={Wallet} label={`Total cut · ${monthLabel(month)}`} display={inr(totalCut)} tone="destructive" />
-          <StatCard icon={Clock} label="Overtime minutes" value={totalOvertimeMinutes} tone="warning" delay={60} />
-          <StatCard icon={TrendingDown} label="Stylists affected" value={items.length} tone="neutral" delay={120} />
+    <AdminLayout pageTitle="Payroll" description="Overrun penalties per stylist">
+      <div className="space-y-5">
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard icon={Wallet} label="Total cut" value={totalCut} format={inr} tone="destructive" loading={loading && !items.length && !loadError} />
+          <StatCard icon={Clock} label="Overtime min" value={totalOvertimeMinutes} tone="warning" loading={loading && !items.length && !loadError} />
+          <StatCard icon={TrendingDown} label="Stylists" value={items.length} tone="neutral" loading={loading && !items.length && !loadError} />
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
-          {/* Policy */}
-          <section className="admin-shadow-sm h-fit rounded-2xl border border-border/70 bg-card">
-            <header className="flex items-center gap-3 border-b border-border/60 bg-muted/20 px-5 py-4">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                <AlertOctagon className="size-[18px]" />
-              </span>
-              <div>
-                <h2 className="font-display text-base font-semibold leading-tight">Delay deduction policy</h2>
-                <p className="text-xs text-muted-foreground">Applied when a service runs past its planned time.</p>
-              </div>
-            </header>
-            <div className="space-y-5 p-5">
-              <Stepper id="graceMinutes" label="Grace period" hint="Minutes of overrun with no penalty." value={policy.graceMinutes} onChange={(v) => setPolicy((p) => ({ ...p, graceMinutes: v }))} min={0} max={180} suffix="min" />
-              <Stepper id="penaltyPerMinute" label="Penalty per minute" hint="Charged for every minute beyond the grace period." value={policy.penaltyPerMinute} onChange={(v) => setPolicy((p) => ({ ...p, penaltyPerMinute: v }))} min={0} step={1} prefix="Rs" />
-              <div className="flex items-start gap-2.5 rounded-xl bg-primary/5 p-3 text-sm">
-                <Timer className="mt-0.5 size-4 shrink-0 text-primary" />
-                <p className="text-muted-foreground">
-                  A service that overruns by <span className="font-semibold text-foreground">{exampleLate} min</span> costs the stylist{" "}
-                  <motion.span key={exampleCost} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="inline-block font-semibold text-foreground">
-                    {inr(exampleCost)}
-                  </motion.span>
-                  .
-                </p>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className={cn("text-xs", dirty ? "font-medium text-warning" : "text-muted-foreground")}>{dirty ? "Unsaved changes" : "Saved"}</span>
-                <div className="flex gap-2">
-                  {dirty ? (
-                    <Button type="button" variant="ghost" onClick={() => setPolicy(savedPolicy)} disabled={saving}>
-                      <Undo2 className="size-4" /> Reset
-                    </Button>
-                  ) : null}
-                  <BorderBeam size="sm" active={dirty && !saving}>
-                    <Button disabled={!dirty || saving} onClick={() => void savePolicy()}>
-                      {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-                      {saving ? "Saving…" : "Save policy"}
-                    </Button>
-                  </BorderBeam>
-                </div>
-              </div>
+          <Panel title="Delay policy" icon={AlertOctagon} subtitle="When a service overruns" className="h-fit" bodyClassName="space-y-5 p-4 sm:p-5">
+            <Stepper id="graceMinutes" label="Grace period" value={policy.graceMinutes} onChange={(v) => setPolicy((p) => ({ ...p, graceMinutes: v }))} min={0} max={180} suffix="min" />
+            <Stepper id="penaltyPerMinute" label="Per minute after" value={policy.penaltyPerMinute} onChange={(v) => setPolicy((p) => ({ ...p, penaltyPerMinute: v }))} min={0} step={1} prefix="₹" />
+            <div className="flex items-center gap-3 rounded-2xl bg-portal/8 p-3 text-sm">
+              <Timer className="size-4 shrink-0 text-portal" aria-hidden />
+              <p>
+                {exampleLate} min over costs{" "}
+                <motion.span key={exampleCost} initial={reduce ? false : { opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={spring.snappy} className="inline-block font-display font-bold tabular-nums">
+                  {inr(exampleCost)}
+                </motion.span>
+              </p>
             </div>
-          </section>
+            <div className="flex items-center justify-end gap-2">
+              {dirty ? (
+                <ButtonLoadingMorph variant="ghost" icon={Undo2} disabled={saving} onClick={() => setPolicy(savedPolicy)}>
+                  Reset
+                </ButtonLoadingMorph>
+              ) : null}
+              <ButtonLoadingMorph icon={Save} state={saveAction.state} disabled={!dirty} loadingLabel="Saving…" successLabel="Saved" onClick={() => saveAction.run(savePolicy)}>
+                Save
+              </ButtonLoadingMorph>
+            </div>
+          </Panel>
 
-          {/* Deductions */}
-          <section className="admin-shadow-sm rounded-2xl border border-border/70 bg-card">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-4">
-              <div>
-                <h2 className="font-display text-base font-semibold leading-tight">Monthly stylist deductions</h2>
-                <p className="text-xs text-muted-foreground">Ranked by amount cut.</p>
-              </div>
-              <div className="flex items-center gap-1 rounded-full border bg-background p-1">
-                <Button type="button" size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Previous month" onClick={() => go(-1)}>
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <div className="relative h-8 w-36 overflow-hidden text-center">
+          <Panel
+            title="Deductions"
+            icon={Wallet}
+            subtitle="Ranked by amount"
+            action={
+              <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+                <IconButton icon={ChevronLeft} label="Previous month" size="sm" onClick={() => go(-1)} />
+                <div className="relative h-8 w-28 overflow-hidden text-center sm:w-36">
                   <AnimatePresence mode="popLayout" initial={false} custom={direction}>
                     <motion.span
                       key={month}
                       custom={direction}
-                      variants={{ enter: (d) => ({ opacity: 0, x: 24 * d }), center: { opacity: 1, x: 0 }, exit: (d) => ({ opacity: 0, x: -24 * d }) }}
+                      variants={{ enter: (d) => ({ opacity: 0, x: reduce ? 0 : 24 * d }), center: { opacity: 1, x: 0 }, exit: (d) => ({ opacity: 0, x: reduce ? 0 : -24 * d }) }}
                       initial="enter"
                       animate="center"
                       exit="exit"
-                      transition={{ duration: 0.18 }}
-                      className="absolute inset-0 flex items-center justify-center text-sm font-semibold"
+                      transition={spring.snappy}
+                      className="absolute inset-0 flex items-center justify-center text-caption font-semibold"
                     >
                       {monthLabel(month)}
                     </motion.span>
                   </AnimatePresence>
                 </div>
-                <Button type="button" size="icon" variant="ghost" className="size-8 rounded-full" aria-label="Next month" disabled={isCurrent} onClick={() => go(1)}>
-                  <ChevronRight className="size-4" />
-                </Button>
+                <IconButton icon={ChevronRight} label="Next month" size="sm" disabled={isCurrent} onClick={() => go(1)} />
               </div>
-            </header>
-            <div className="p-5">
-              {loading && !items.length ? (
-                <LoadingOrb compact label="Loading deductions…" />
-              ) : !ranked.length ? (
-                <EmptyState icon={Wallet} title="No deductions for this month" description="Stylists with delay penalties for the selected month will appear here." />
-              ) : (
-                <motion.ul layout className="space-y-3">
-                  <AnimatePresence initial={false} mode="popLayout">
-                    {ranked.map((item, index) => {
-                      const penalty = Number(item.totalPenalty ?? 0);
-                      return (
-                        <motion.li
-                          key={item.stylistId}
-                          layout
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.03 }}
-                          className="rounded-xl border border-border/70 p-3.5"
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex min-w-0 items-center gap-3">
-                              <span className="w-5 text-center text-xs font-bold text-muted-foreground">{index + 1}</span>
-                              <AvatarBadge name={item.stylistName} size="sm" />
-                              <div className="min-w-0">
-                                <p className="truncate font-medium">{item.stylistName}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {item.bookingsCount} completed · {item.overtimeMinutes} min overtime
-                                </p>
-                              </div>
+            }
+          >
+            {loadError && !items.length ? (
+              <ErrorState compact title="Couldn't load payroll" description={loadError} onRetry={loadAll} />
+            ) : loading && !items.length ? (
+              <SkeletonList rows={3} />
+            ) : !ranked.length ? (
+              <EmptyState compact illustration="sparkle" title="No deductions" description={`Nobody overran in ${monthLabel(month)}.`} className="bg-transparent" />
+            ) : (
+              <ul className="space-y-2.5">
+                <AnimatePresence initial={false} mode="popLayout">
+                  {ranked.map((item, index) => {
+                    const penalty = Number(item.totalPenalty ?? 0);
+                    return (
+                      <motion.li key={item.stylistId} layout={!reduce} initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }} className="rounded-2xl bg-muted/40 p-3.5 ring-1 ring-inset ring-border/60">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="w-5 text-center font-display text-sm font-bold text-ink-neutral">{index + 1}</span>
+                            <AvatarBadge name={item.stylistName} size="sm" />
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold">{item.stylistName}</p>
+                              <p className="text-caption text-ink-neutral">
+                                {item.bookingsCount} done · {item.overtimeMinutes} min over
+                              </p>
                             </div>
-                            <p className="shrink-0 font-semibold tabular-nums text-destructive">- {inr(penalty)}</p>
                           </div>
-                          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
-                            <motion.div className="h-full rounded-full bg-destructive/70" initial={{ width: 0 }} animate={{ width: `${(penalty / maxPenalty) * 100}%` }} transition={{ type: "spring", stiffness: 110, damping: 20, delay: 0.1 }} />
-                          </div>
-                        </motion.li>
-                      );
-                    })}
-                  </AnimatePresence>
-                </motion.ul>
-              )}
-            </div>
-          </section>
+                          <p className="shrink-0 font-display font-bold tabular-nums text-ink-destructive">−{inr(penalty)}</p>
+                        </div>
+                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <motion.div className="h-full origin-left rounded-full bg-destructive/70" initial={{ scaleX: 0 }} animate={{ scaleX: penalty / maxPenalty }} transition={{ ...spring.gentle, delay: 0.1 }} />
+                        </div>
+                      </motion.li>
+                    );
+                  })}
+                </AnimatePresence>
+              </ul>
+            )}
+          </Panel>
         </div>
       </div>
     </AdminLayout>

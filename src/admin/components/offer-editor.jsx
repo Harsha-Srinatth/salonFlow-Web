@@ -1,21 +1,22 @@
 "use client";
-import { AnimatePresence, motion } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { ArrowLeft, Check, Crown, Gift, Loader2, Percent, Search, Star, Tag, Users, X } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ArrowLeft, Baby, Check, Crown, Gift, IndianRupee, Percent, Search, Star, Tag, User, UserRound, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { DateRangePicker, FUTURE_PRESETS, parseYmd, ymd } from "@/admin/components/date-range-picker";
+import { AnimatedTabBar, ButtonLoadingMorph, FloatingLabelInput, TONE_CLASSES, useAsyncAction } from "@/components/kit";
+import { haptic, interaction, spring } from "@/components/motion";
+import { formatMoney } from "@/lib/format";
+import { formatIsoDate } from "@/lib/salon-date";
+import { DateRangePicker, FUTURE_PRESETS, ymd } from "@/admin/components/date-range-picker";
 import { SlideOver } from "@/admin/components/slide-over";
-import { Switch } from "@/admin/components/service-editor-drawer";
+import { Switch } from "@/admin/components/switch";
 import { ToggleChip } from "@/admin/components/toggle-chip";
-import { SegmentedControl } from "@/components/fx/segmented-control";
 import { cn } from "@/lib/utils";
 
 export const TYPE_META = {
-  GLOBAL: { label: "Sitewide", short: "All services", icon: Percent, tone: "bg-primary/10 text-primary" },
-  SERVICE: { label: "Service", short: "One service", icon: Tag, tone: "bg-chart-3/15 text-chart-3" },
-  MEMBERSHIP: { label: "Member", short: "Plan members", icon: Crown, tone: "bg-accent/15 text-accent" },
-  COMBO: { label: "Combo", short: "Bundle price", icon: Gift, tone: "bg-chart-4/15 text-chart-4" },
+  GLOBAL: { label: "Sitewide", short: "All services", icon: Percent, tone: TONE_CLASSES.primary },
+  SERVICE: { label: "Service", short: "One service", icon: Tag, tone: TONE_CLASSES.success },
+  MEMBERSHIP: { label: "Member", short: "Plan members", icon: Crown, tone: TONE_CLASSES.plum },
+  COMBO: { label: "Combo", short: "Bundle price", icon: Gift, tone: TONE_CLASSES.info },
 };
 export const SEGMENT_META = {
   FREE: { label: "Free", icon: Users },
@@ -24,12 +25,12 @@ export const SEGMENT_META = {
 };
 const SEGMENT_OPTIONS = Object.entries(SEGMENT_META).map(([value, m]) => ({ value, label: m.label, icon: m.icon }));
 const CATEGORY_OPTIONS = [
-  { value: "MEN", label: "Men" },
-  { value: "WOMEN", label: "Women" },
-  { value: "CHILDREN", label: "Children" },
+  { value: "MEN", label: "Men", icon: User },
+  { value: "WOMEN", label: "Women", icon: UserRound },
+  { value: "CHILDREN", label: "Kids", icon: Baby },
 ];
 const QUICK_PERCENT = [5, 10, 15, 20, 25, 30, 50];
-const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
+const inr = (n) => formatMoney(n);
 
 /* ---- form <-> API mapping ---- */
 const localYmd = (iso) => (iso ? ymd(new Date(iso)) : "");
@@ -85,11 +86,11 @@ function validate(form) {
 function SearchBox({ value, onChange, placeholder = "Search" }) {
   return (
     <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="h-9 w-full rounded-lg border bg-background pl-9 pr-8 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50" />
+      <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-neutral" aria-hidden />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="h-11 w-full rounded-control bg-muted/60 pr-10 pl-10 text-sm outline-none placeholder:text-ink-neutral focus-visible:ring-2 focus-visible:ring-portal" />
       {value ? (
-        <button type="button" aria-label="Clear" onClick={() => onChange("")} className="absolute right-2 top-1/2 grid size-5 -translate-y-1/2 place-items-center rounded-full bg-muted">
-          <X className="size-3" />
+        <button type="button" aria-label="Clear" onClick={() => onChange("")} className="tap absolute top-1/2 right-3 grid size-6 -translate-y-1/2 place-items-center rounded-full bg-muted">
+          <X className="size-3.5" aria-hidden />
         </button>
       ) : null}
     </div>
@@ -102,22 +103,22 @@ function ServiceRadioList({ services, value, onChange }) {
   return (
     <div className="space-y-2">
       <SearchBox value={q} onChange={setQ} placeholder="Find a service" />
-      <ul className="admin-scrollbar max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-muted/20 p-1.5" role="radiogroup" aria-label="Service">
+      <ul className="admin-scrollbar max-h-56 space-y-1 overflow-y-auto rounded-2xl bg-muted/40 p-1.5 ring-1 ring-inset ring-border/60" role="radiogroup" aria-label="Service" data-vaul-no-drag>
         {list.map((s) => {
           const on = s.id === value;
           return (
             <li key={s.id}>
-              <button type="button" role="radio" aria-checked={on} onClick={() => onChange(s.id)} className={cn("flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors", on ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>
+              <button type="button" role="radio" aria-checked={on} onClick={() => onChange(s.id)} className={cn("flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors", on ? "bg-portal text-portal-foreground" : "hover:bg-muted")}>
                 <span className="flex min-w-0 items-center gap-2">
                   {on ? <Check className="size-4 shrink-0" /> : null}
                   <span className="truncate font-medium">{s.name}</span>
                 </span>
-                <span className={cn("shrink-0 text-xs tabular-nums", on ? "opacity-90" : "text-muted-foreground")}>{inr(s.basePrice)}</span>
+                <span className={cn("shrink-0 text-caption tabular-nums", on ? "opacity-90" : "text-ink-neutral")}>{inr(s.basePrice)}</span>
               </button>
             </li>
           );
         })}
-        {!list.length ? <li className="py-4 text-center text-xs text-muted-foreground">No match</li> : null}
+        {!list.length ? <li className="py-4 text-center text-caption text-ink-neutral">No match</li> : null}
       </ul>
     </div>
   );
@@ -130,13 +131,13 @@ function ServiceMultiList({ services, value, onChange }) {
   return (
     <div className="space-y-2">
       <SearchBox value={q} onChange={setQ} placeholder="Find services" />
-      <div className="admin-scrollbar flex max-h-52 flex-wrap gap-1.5 overflow-y-auto rounded-xl border bg-muted/20 p-2">
+      <div className="admin-scrollbar flex max-h-52 flex-wrap gap-1.5 overflow-y-auto rounded-2xl bg-muted/40 p-2 ring-1 ring-inset ring-border/60" data-vaul-no-drag>
         {list.map((s) => (
           <ToggleChip key={s.id} size="sm" selected={value.includes(s.id)} onClick={() => toggle(s.id)}>
             {s.name}
           </ToggleChip>
         ))}
-        {!list.length ? <p className="w-full py-3 text-center text-xs text-muted-foreground">No match</p> : null}
+        {!list.length ? <p className="w-full py-3 text-center text-caption text-ink-neutral">No match</p> : null}
       </div>
     </div>
   );
@@ -145,13 +146,13 @@ function ServiceMultiList({ services, value, onChange }) {
 function PercentField({ value, onChange }) {
   return (
     <div className="space-y-2">
-      <div className="flex items-baseline gap-1 rounded-xl bg-primary/5 px-4 py-3">
+      <div className="flex items-baseline gap-1 rounded-2xl bg-portal/8 px-4 py-3 ring-1 ring-inset ring-portal/20 focus-within:ring-2 focus-within:ring-portal">
         <input aria-label="Discount percent" type="number" inputMode="decimal" min="0" max="100" step="0.5" value={value} onChange={(e) => onChange(e.target.value)} className="w-24 bg-transparent font-display text-5xl font-bold tracking-tight outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
-        <span className="text-2xl font-bold text-muted-foreground">% off</span>
+        <span className="text-2xl font-bold text-ink-neutral">% off</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
         {QUICK_PERCENT.map((p) => (
-          <motion.button key={p} type="button" whileTap={{ scale: 0.94 }} onClick={() => onChange(`${p}`)} className={cn("rounded-full border px-3 py-1 text-xs font-semibold transition-colors", Number(value) === p ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}>
+          <motion.button key={p} type="button" whileTap={interaction.press} onClick={() => { haptic("tap"); onChange(`${p}`); }} className={cn("tap h-9 rounded-full px-3.5 text-caption font-bold ring-1 ring-inset transition-colors", Number(value) === p ? "bg-portal text-portal-foreground ring-portal" : "bg-card ring-border hover:bg-muted")}>
             {p}%
           </motion.button>
         ))}
@@ -163,7 +164,7 @@ function PercentField({ value, onChange }) {
 function Row({ label, children }) {
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
+      <p className="text-caption font-semibold text-ink-neutral">{label}</p>
       {children}
     </div>
   );
@@ -175,8 +176,10 @@ function Row({ label, children }) {
  */
 export function OfferEditor({ open, onOpenChange, services, initial, existingGlobal, onSubmit }) {
   const [form, setForm] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const saveAction = useAsyncAction({ successMs: 700 });
+  const saving = saveAction.state === "loading";
   const [error, setError] = useState("");
+  const reduce = useReducedMotion();
   const editing = Boolean(initial?.id);
 
   useEffect(() => {
@@ -201,130 +204,111 @@ export function OfferEditor({ open, onOpenChange, services, initial, existingGlo
     const message = validate(form);
     if (message) {
       setError(message);
-      return;
+      throw new Error(message);
     }
-    setSaving(true);
     try {
       await onSubmit(form);
-      onOpenChange(false);
+      setTimeout(() => onOpenChange(false), 650);
     } catch (e) {
       setError(e?.message ?? "Could not save");
-    } finally {
-      setSaving(false);
+      throw e;
     }
   }
 
   const meta = form ? TYPE_META[form.type] : null;
   const title = editing ? `Edit ${meta?.label.toLowerCase()} offer` : form ? `New ${meta.label.toLowerCase()} offer` : "New offer";
 
+  const rangeText = form?.range.from
+    ? form.range.to && form.range.to !== form.range.from
+      ? `${formatIsoDate(form.range.from)} → ${formatIsoDate(form.range.to, { day: "numeric", month: "short", year: "numeric" })}`
+      : formatIsoDate(form.range.from, { day: "numeric", month: "short", year: "numeric" })
+    : "";
+
   return (
     <SlideOver
       open={open}
       onOpenChange={onOpenChange}
       title={title}
+      icon={meta?.icon ?? Gift}
+      size="md"
       footer={
         form ? (
-          <div className="space-y-2">
+          <div className="w-full space-y-2">
             <AnimatePresence initial={false}>
               {error ? (
-                <motion.p key="e" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden text-sm font-medium text-destructive" role="alert">
+                <motion.p key="e" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="text-sm font-semibold text-ink-destructive" role="alert">
                   {error}
                 </motion.p>
               ) : null}
             </AnimatePresence>
             <div className="flex items-center justify-between gap-2">
               {!editing ? (
-                <Button type="button" variant="ghost" onClick={() => setForm(null)} disabled={saving}>
-                  <ArrowLeft className="size-4" /> Type
-                </Button>
+                <ButtonLoadingMorph variant="ghost" icon={ArrowLeft} disabled={saving} onClick={() => setForm(null)}>
+                  Type
+                </ButtonLoadingMorph>
               ) : (
                 <span />
               )}
-              <div className="flex gap-2">
-                <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
-                  Cancel
-                </Button>
-                <BorderBeam size="sm" active={!saving}>
-                  <Button type="button" onClick={() => void submit()} disabled={saving}>
-                    {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                    {saving ? "Saving…" : editing ? "Save" : "Create"}
-                  </Button>
-                </BorderBeam>
-              </div>
+              <ButtonLoadingMorph icon={Check} state={saveAction.state} loadingLabel="Saving…" successLabel="Saved" errorLabel="Fix and retry" onClick={() => saveAction.run(submit)}>
+                {editing ? "Save" : "Create"}
+              </ButtonLoadingMorph>
             </div>
           </div>
         ) : null
       }
     >
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5">
+      <div className="overflow-x-hidden">
         <AnimatePresence mode="wait" initial={false}>
           {!form ? (
-            <motion.div key="pick" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} className="grid gap-3 sm:grid-cols-2">
+            <motion.div key="pick" initial={{ opacity: 0, x: reduce ? 0 : -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -16 }} transition={spring.soft} className="grid grid-cols-2 gap-3">
               {Object.entries(TYPE_META).map(([type, m], i) => {
                 const Icon = m.icon;
                 return (
                   <motion.button
                     key={type}
                     type="button"
-                    initial={{ opacity: 0, y: 12 }}
+                    initial={reduce ? false : { opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    whileHover={{ y: -3 }}
-                    whileTap={{ scale: 0.97 }}
+                    transition={{ ...spring.soft, delay: i * 0.06 }}
+                    whileHover={reduce ? undefined : interaction.cardHover}
+                    whileTap={reduce ? undefined : interaction.press}
                     onClick={() => setForm(type === "GLOBAL" && existingGlobal ? formFromOffer("GLOBAL", existingGlobal) : emptyForm(type))}
-                    className="flex flex-col items-start gap-3 rounded-2xl border p-4 text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
+                    className="flex flex-col items-start gap-3 rounded-card bg-card p-4 text-left ring-1 ring-inset ring-border/60 transition-colors hover:ring-portal/40"
                   >
-                    <span className={cn("grid size-11 place-items-center rounded-xl", m.tone)}>
-                      <Icon className="size-5" />
+                    <span className={cn("grid size-11 place-items-center rounded-2xl ring-1 ring-inset", m.tone)}>
+                      <Icon className="size-5" aria-hidden />
                     </span>
                     <span>
                       <span className="block font-display text-base font-semibold">{m.label}</span>
-                      <span className="block text-xs text-muted-foreground">{m.short}</span>
+                      <span className="block text-caption text-ink-neutral">{m.short}</span>
                     </span>
                   </motion.button>
                 );
               })}
             </motion.div>
           ) : (
-            <motion.div key="form" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }} className="space-y-6">
-              <div className="flex items-center gap-3">
-                <span className={cn("grid size-11 place-items-center rounded-xl", meta.tone)}>
-                  <meta.icon className="size-5" />
-                </span>
-                <div>
-                  <p className="font-display text-lg font-semibold leading-tight">{meta.label}</p>
-                  <p className="text-xs text-muted-foreground">{meta.short}</p>
-                </div>
-              </div>
-
+            <motion.div key="form" initial={{ opacity: 0, x: reduce ? 0 : 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : 16 }} transition={spring.soft} className="space-y-5">
               {form.type === "COMBO" ? (
                 <>
-                  <Row label="Name">
-                    <input value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="e.g. Bridal glow pack" maxLength={80} className="h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-                  </Row>
+                  <FloatingLabelInput label="Combo name" icon={Gift} value={form.name} maxLength={80} onChange={(e) => set({ name: e.target.value })} />
                   <Row label="For">
-                    <SegmentedControl fluid label="Category" options={CATEGORY_OPTIONS} value={form.category} onChange={(category) => set({ category })} />
+                    <AnimatedTabBar fullWidth label="Category" items={CATEGORY_OPTIONS} value={form.category} onChange={(category) => set({ category })} />
                   </Row>
                   <Row label={`Services · ${form.serviceIds.length}`}>
                     <ServiceMultiList services={services} value={form.serviceIds} onChange={(serviceIds) => set({ serviceIds })} />
                   </Row>
-                  <Row label="Combo price">
-                    <div className="flex items-center gap-3 rounded-xl bg-primary/5 px-4 py-3">
-                      <span className="text-2xl font-bold text-muted-foreground">₹</span>
-                      <input aria-label="Combo price" type="number" inputMode="numeric" min="1" value={form.offerPrice} onChange={(e) => set({ offerPrice: e.target.value })} className="w-full min-w-0 bg-transparent font-display text-4xl font-bold tracking-tight outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none" />
-                    </div>
-                    {comboActual ? (
-                      <p className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground line-through">{inr(comboActual)}</span>
-                        {comboOffer > 0 ? <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", comboSave ? "bg-success/10 text-success" : "bg-warning/15 text-warning")}>{comboSave ? `Saves ${inr(comboSave)}` : "No saving"}</span> : null}
-                      </p>
-                    ) : null}
-                  </Row>
+                  <FloatingLabelInput label="Combo price (₹)" icon={IndianRupee} type="number" inputMode="numeric" min="1" value={form.offerPrice} onChange={(e) => set({ offerPrice: e.target.value })} />
+                  {comboActual ? (
+                    <p className="flex items-center gap-2 text-sm">
+                      <span className="text-ink-neutral line-through tabular-nums">{inr(comboActual)}</span>
+                      {comboOffer > 0 ? <span className={cn("rounded-full px-2.5 py-0.5 text-caption font-bold ring-1 ring-inset", comboSave ? TONE_CLASSES.success : TONE_CLASSES.warning)}>{comboSave ? `Saves ${inr(comboSave)}` : "No saving"}</span> : null}
+                    </p>
+                  ) : null}
                   <Row label="Visible to">
                     <div className="flex flex-wrap gap-2">
                       {Object.entries(SEGMENT_META).map(([seg, m]) => (
                         <ToggleChip key={seg} selected={form.visibleSegments.includes(seg)} onClick={() => set({ visibleSegments: form.visibleSegments.includes(seg) ? form.visibleSegments.filter((x) => x !== seg) : [...form.visibleSegments, seg] })}>
-                          <m.icon className="size-3.5" /> {m.label}
+                          <m.icon className="size-3.5" aria-hidden /> {m.label}
                         </ToggleChip>
                       ))}
                     </div>
@@ -334,7 +318,7 @@ export function OfferEditor({ open, onOpenChange, services, initial, existingGlo
                 <>
                   {form.type === "MEMBERSHIP" ? (
                     <Row label="Member plan">
-                      <SegmentedControl fluid label="Member plan" options={SEGMENT_OPTIONS} value={form.membershipSegment} onChange={(membershipSegment) => set({ membershipSegment })} />
+                      <AnimatedTabBar fullWidth label="Member plan" items={SEGMENT_OPTIONS} value={form.membershipSegment} onChange={(membershipSegment) => set({ membershipSegment })} />
                     </Row>
                   ) : null}
                   {form.type !== "GLOBAL" ? (
@@ -345,9 +329,9 @@ export function OfferEditor({ open, onOpenChange, services, initial, existingGlo
                   <Row label="Discount">
                     <PercentField value={form.discountPercent} onChange={(discountPercent) => set({ discountPercent })} />
                     {original ? (
-                      <p className="flex items-center gap-2 text-sm">
-                        <span className="text-muted-foreground line-through">{inr(original)}</span>
-                        <span className="font-semibold">{inr(discounted)}</span>
+                      <p className="flex items-center gap-2 text-sm tabular-nums">
+                        <span className="text-ink-neutral line-through">{inr(original)}</span>
+                        <span className="font-display text-base font-bold">{inr(discounted)}</span>
                       </p>
                     ) : null}
                   </Row>
@@ -356,11 +340,11 @@ export function OfferEditor({ open, onOpenChange, services, initial, existingGlo
 
               <Row label="When">
                 <DateRangePicker value={form.range} onChange={(range) => set({ range })} presets={FUTURE_PRESETS} allowPast={false} allowFuture anyLabel="Always on" label="Offer dates" inline />
-                {form.range.from ? <p className="text-xs text-muted-foreground">{form.range.to && form.range.to !== form.range.from ? `${parseYmd(form.range.from).toLocaleDateString([], { day: "numeric", month: "short" })} to ${parseYmd(form.range.to).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}` : parseYmd(form.range.from).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })}</p> : null}
+                {rangeText ? <p className="text-caption text-ink-neutral">{rangeText}</p> : null}
               </Row>
 
-              <div className="flex items-center justify-between rounded-xl border p-3">
-                <span className="text-sm font-medium">Live</span>
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3">
+                <span className="text-sm font-semibold">Live</span>
                 <Switch checked={form.isEnabled} onChange={(isEnabled) => set({ isEnabled })} label="Offer live" />
               </div>
             </motion.div>

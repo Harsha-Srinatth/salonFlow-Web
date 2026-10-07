@@ -1,15 +1,15 @@
 "use client";
-import { AnimatePresence, motion, Reorder } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { Check, ChevronLeft, ChevronRight, GripVertical, ImagePlus, Loader2, Plus, Sparkles, Star, Trash2, UploadCloud } from "lucide-react";
+import { AnimatePresence, motion, Reorder, useReducedMotion } from "motion/react";
+import { Check, ChevronLeft, ChevronRight, Clock, GripVertical, ImagePlus, IndianRupee, Layers, Plus, Scissors, Sparkles, Star, Tag, Trash2, UploadCloud } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { toast } from "@/lib/notify";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { PixelImage } from "@/components/fx/pixel-image";
+import { AnimatedStepper, BrandLoader, ButtonLoadingMorph, FloatingLabelInput, IconButton, useAsyncAction } from "@/components/kit";
+import { haptic, spring } from "@/components/motion";
 import { SlideOver } from "@/admin/components/slide-over";
+import { Switch } from "@/admin/components/switch";
+import { formatMoney } from "@/lib/format";
+import { iconForAudience } from "@/lib/service-icons";
 import { apiJson } from "@/lib/api-json";
 import { cn } from "@/lib/utils";
 import { MAX_GALLERY_IMAGES, SERVICE_DETAIL_LIMITS, SERVICE_DETAIL_SECTIONS } from "@/lib/service-details";
@@ -17,10 +17,11 @@ import { serviceImageUrl } from "@/lib/service-image";
 import { createAdminServiceAsync, updateAdminServiceAsync, uploadAdminServiceImageAsync } from "@/store/admin-portal-slice";
 
 const STEPS = [
-  { id: "basics", label: "Basics", hint: "Name, category and who it is for" },
-  { id: "pricing", label: "Pricing", hint: "Price, duration and variants" },
-  { id: "media", label: "Photos & details", hint: "What customers see" },
+  { id: "basics", label: "Basics", icon: Scissors, hint: "Name, category, audience" },
+  { id: "pricing", label: "Pricing", icon: Tag, hint: "Price, time, variants" },
+  { id: "media", label: "Photos", icon: ImagePlus, hint: "Photos and details" },
 ];
+// Audience is the service's `gender` field (the API's men / women / kids split: BOY and GIRL are kids).
 const AUDIENCES = [
   ["UNISEX", "Unisex"],
   ["WOMEN", "Women"],
@@ -32,8 +33,8 @@ const DURATIONS = [15, 30, 45, 60, 90, 120];
 const MAX_PHOTOS = 1 + MAX_GALLERY_IMAGES;
 const MAX_FILE_BYTES = 6 * 1024 * 1024;
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-const textareaClass =
-  "w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
+const chip = (on) =>
+  `tap inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-caption font-semibold ring-1 ring-inset transition-colors ${on ? "bg-portal text-portal-foreground ring-portal" : "bg-card ring-border hover:bg-muted"}`;
 
 function readAsDataUri(file) {
   return new Promise((resolve, reject) => {
@@ -71,41 +72,18 @@ function formFromService(service) {
   };
 }
 
-/** Animated on/off switch. */
-export function Switch({ checked, onChange, label }) {
+function Section({ title, hint, action, children }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn("flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors", checked ? "justify-end bg-primary" : "justify-start bg-muted-foreground/30")}
-    >
-      <motion.span layout transition={{ type: "spring", stiffness: 700, damping: 32 }} className="size-5 rounded-full bg-white shadow" />
-    </button>
-  );
-}
-
-function Field({ label, htmlFor, hint, error, children, className }) {
-  return (
-    <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={htmlFor} className="text-sm">
-        {label}
-      </Label>
+    <section className="space-y-2.5">
+      <div className="flex items-end justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold">{title}</p>
+          {hint ? <p className="text-caption text-ink-neutral">{hint}</p> : null}
+        </div>
+        {action}
+      </div>
       {children}
-      <AnimatePresence initial={false}>
-        {error ? (
-          <motion.p key="e" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="text-xs font-medium text-destructive">
-            {error}
-          </motion.p>
-        ) : hint ? (
-          <p key="h" className="text-xs text-muted-foreground">
-            {hint}
-          </p>
-        ) : null}
-      </AnimatePresence>
-    </div>
+    </section>
   );
 }
 
@@ -117,10 +95,12 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
   const [dir, setDir] = useState(1);
   const [form, setForm] = useState(emptyForm);
   const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
+  const saveAction = useAsyncAction({ successMs: 700 });
+  const draftAction = useAsyncAction();
+  const saving = saveAction.state === "loading";
   const [uploading, setUploading] = useState(0);
   const [dragOver, setDragOver] = useState(false);
-  const [drafting, setDrafting] = useState(false);
+  const reduce = useReducedMotion();
   const [overwrite, setOverwrite] = useState(false);
   const fileRef = useRef(null);
 
@@ -189,8 +169,7 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
   }
 
   async function draftWithAi() {
-    if (!service || drafting) return;
-    setDrafting(true);
+    if (!service) return;
     try {
       const data = await apiJson(`/api/admin/agents/service-content/${service.id}`, { method: "POST", auth: true, body: {}, timeoutMs: 90_000 });
       let filled = 0;
@@ -207,15 +186,13 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
       });
       toast.success(filled ? "Draft added. Review and edit it before saving." : "Nothing changed: all sections already have text.");
     } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setDrafting(false);
+      toast.error(error.message ?? "Could not draft");
+      throw error;
     }
   }
 
   async function save() {
-    if (!validate()) return;
-    setSaving(true);
+    if (!validate()) throw new Error("invalid");
     const [cover = "", ...gallery] = form.photos;
     const payload = {
       name: form.name.trim(),
@@ -232,120 +209,83 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
       isActive: form.isActive,
     };
     const result = await dispatch(isEdit ? updateAdminServiceAsync({ id: service.id, payload }) : createAdminServiceAsync(payload));
-    setSaving(false);
     if (result.error || result.meta?.requestStatus === "rejected") {
       toast.error(result.payload ?? "Could not save service");
-      return;
+      throw new Error("save failed");
     }
     toast.success(isEdit ? "Service updated" : "Service created");
-    onOpenChange(false);
+    setTimeout(() => onOpenChange(false), 650);
   }
 
   const memberSaves = form.memberPrice !== "" && Number(form.memberPrice) > 0 && Number(form.basePrice) > Number(form.memberPrice) ? Number(form.basePrice) - Number(form.memberPrice) : 0;
   const last = step === STEPS.length - 1;
 
   const footer = (
-    <div className="flex items-center gap-2">
-      <Button type="button" variant="ghost" disabled={step === 0 || saving} onClick={() => goto(step - 1)}>
-        <ChevronLeft className="size-4" /> Back
-      </Button>
+    <div className="flex w-full items-center gap-2">
+      <IconButton icon={ChevronLeft} label="Previous step" variant="ghost" disabled={step === 0 || saving} onClick={() => goto(step - 1)} />
       <div className="ml-auto flex items-center gap-2">
         {!last ? (
-          <Button type="button" variant="outline" onClick={() => goto(step + 1)}>
-            Next <ChevronRight className="size-4" />
-          </Button>
+          <ButtonLoadingMorph variant="outline" onClick={() => goto(step + 1)}>
+            Next <ChevronRight className="size-4" aria-hidden />
+          </ButtonLoadingMorph>
         ) : null}
-        <BorderBeam size="sm" active={!saving}>
-          <Button type="button" onClick={() => void save()} disabled={saving || uploading > 0}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-            {saving ? "Saving…" : isEdit ? "Save changes" : "Create service"}
-          </Button>
-        </BorderBeam>
+        <ButtonLoadingMorph icon={Check} state={saveAction.state} disabled={uploading > 0} loadingLabel="Saving…" successLabel="Saved" errorLabel="Check fields" onClick={() => saveAction.run(save)}>
+          {isEdit ? "Save" : "Create"}
+        </ButtonLoadingMorph>
       </div>
     </div>
   );
+  const AudienceIcon = (value) => iconForAudience(value);
 
   return (
-    <SlideOver open={open} onOpenChange={onOpenChange} title={isEdit ? `Edit ${service.name}` : "Add a service"} description={STEPS[step].hint} footer={footer}>
-      <nav className="relative grid grid-cols-3 border-b px-2" aria-label="Steps">
-        {STEPS.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => goto(i)}
-            aria-current={i === step ? "step" : undefined}
-            className={cn("relative flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors", i === step ? "text-primary" : "text-muted-foreground hover:text-foreground")}
-          >
-            <span className={cn("grid size-5 place-items-center rounded-full text-[11px] font-bold", i < step ? "bg-primary text-primary-foreground" : i === step ? "bg-primary/15 text-primary" : "bg-muted")}>
-              {i < step ? <Check className="size-3" /> : i + 1}
-            </span>
-            <span className="hidden sm:inline">{s.label}</span>
-            <span className="sm:hidden">{s.label.split(" ")[0]}</span>
-            {i === step ? <motion.span layoutId="svc-step-underline" className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary" /> : null}
-          </button>
-        ))}
-      </nav>
+    <SlideOver open={open} onOpenChange={onOpenChange} title={isEdit ? service.name : "New service"} description={STEPS[step].hint} icon={isEdit ? Scissors : Plus} footer={footer} size="lg">
+      <AnimatedStepper steps={STEPS} current={step} onStepClick={goto} className="mb-5" />
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-5 py-5">
+      <div className="relative overflow-x-hidden">
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           <motion.div
             key={step}
             custom={dir}
-            variants={{ enter: (d) => ({ opacity: 0, x: 28 * d }), center: { opacity: 1, x: 0 }, exit: (d) => ({ opacity: 0, x: -28 * d }) }}
+            variants={{ enter: (d) => ({ opacity: 0, x: reduce ? 0 : 28 * d }), center: { opacity: 1, x: 0 }, exit: (d) => ({ opacity: 0, x: reduce ? 0 : -28 * d }) }}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="space-y-5"
+            transition={spring.soft}
+            className="space-y-5 pb-1"
           >
             {step === 0 ? (
               <>
-                <Field label="Service name" htmlFor="sv-name" error={errors.name}>
-                  <Input id="sv-name" autoFocus placeholder="e.g. Hydra facial" value={form.name} aria-invalid={Boolean(errors.name)} onChange={(e) => set("name", e.target.value)} />
-                </Field>
-                <Field label="Category" htmlFor="sv-cat" hint="Pick one or type a new category">
-                  <Input id="sv-cat" placeholder="e.g. Hair, Skin, Nails" value={form.category} onChange={(e) => set("category", e.target.value)} />
+                <FloatingLabelInput label="Service name" icon={Scissors} autoFocus value={form.name} error={errors.name} onChange={(e) => set("name", e.target.value)} />
+                <div className="space-y-2">
+                  <FloatingLabelInput label="Category" icon={Layers} value={form.category} onChange={(e) => set("category", e.target.value)} hint="Pick one or type a new one" />
                   {categories.length ? (
-                    <div className="flex flex-wrap gap-1.5 pt-1">
+                    <div className="flex flex-wrap gap-1.5">
                       {categories.map((c) => (
-                        <motion.button
-                          key={c}
-                          type="button"
-                          whileTap={{ scale: 0.94 }}
-                          onClick={() => set("category", c)}
-                          className={cn("rounded-full border px-2.5 py-1 text-xs font-medium transition-colors", form.category.trim().toUpperCase() === c ? "border-primary bg-primary/10 text-primary" : "hover:bg-muted")}
-                        >
-                          {c}
-                        </motion.button>
+                        <button key={c} type="button" onClick={() => set("category", c)} className={chip(form.category.trim().toUpperCase() === c)}>
+                          {c.charAt(0) + c.slice(1).toLowerCase()}
+                        </button>
                       ))}
                     </div>
                   ) : null}
-                </Field>
-                <Field label="Who is it for?">
-                  <div className="relative grid grid-cols-5 gap-1 rounded-xl bg-muted p-1" role="radiogroup">
-                    {AUDIENCES.map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={form.gender === value}
-                        onClick={() => set("gender", value)}
-                        className={cn("relative rounded-lg py-1.5 text-xs font-medium transition-colors", form.gender === value ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
-                      >
-                        {form.gender === value ? <motion.span layoutId="svc-audience" className="absolute inset-0 rounded-lg bg-primary" transition={{ type: "spring", stiffness: 500, damping: 34 }} /> : null}
-                        <span className="relative">{label}</span>
-                      </button>
-                    ))}
+                </div>
+                <Section title="Who is it for?">
+                  <div role="radiogroup" aria-label="Who is it for" className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                    {AUDIENCES.map(([value, label]) => {
+                      const on = form.gender === value;
+                      const Icon = AudienceIcon(value);
+                      return (
+                        <button key={value} type="button" role="radio" aria-checked={on} onClick={() => { haptic("tap"); set("gender", value); }} className={`relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-2xl text-caption font-semibold ring-1 ring-inset transition-colors ${on ? "text-portal-foreground ring-portal" : "bg-card ring-border hover:bg-muted"}`}>
+                          {on ? <motion.span layoutId="svc-audience" className="absolute inset-0 rounded-2xl bg-portal" transition={reduce ? { duration: 0 } : spring.snappy} /> : null}
+                          <Icon className="relative size-4" aria-hidden />
+                          <span className="relative">{label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                </Field>
-                <Field label="Short description" htmlFor="sv-desc" hint="One or two lines shown on the service card">
-                  <textarea id="sv-desc" rows={3} value={form.description} onChange={(e) => set("description", e.target.value)} className={textareaClass} />
-                </Field>
-                <div className="flex items-center justify-between rounded-xl border p-3">
-                  <div>
-                    <p className="text-sm font-medium">Visible to customers</p>
-                    <p className="text-xs text-muted-foreground">Turn off to hide it from booking without deleting it</p>
-                  </div>
+                </Section>
+                <FloatingLabelInput as="textarea" label="Short description" value={form.description} onChange={(e) => set("description", e.target.value)} hint="One or two lines on the card" />
+                <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3">
+                  <span className="text-sm font-semibold">Visible to customers</span>
                   <Switch checked={form.isActive} onChange={(v) => set("isActive", v)} label="Visible to customers" />
                 </div>
               </>
@@ -353,109 +293,71 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
 
             {step === 1 ? (
               <>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label="Price (Rs)" htmlFor="sv-price" error={errors.basePrice}>
-                    <Input id="sv-price" type="number" inputMode="numeric" min="1" value={form.basePrice} aria-invalid={Boolean(errors.basePrice)} onChange={(e) => set("basePrice", e.target.value)} />
-                  </Field>
-                  <Field label="Member price (Rs)" htmlFor="sv-mprice" error={errors.memberPrice} hint="Optional. Leave empty if members pay the same">
-                    <Input id="sv-mprice" type="number" inputMode="numeric" min="1" value={form.memberPrice} aria-invalid={Boolean(errors.memberPrice)} onChange={(e) => set("memberPrice", e.target.value)} />
-                  </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FloatingLabelInput label="Price (₹)" icon={IndianRupee} type="number" inputMode="numeric" min="1" value={form.basePrice} error={errors.basePrice} onChange={(e) => set("basePrice", e.target.value)} />
+                  <FloatingLabelInput label="Member price (₹)" icon={Star} type="number" inputMode="numeric" min="1" value={form.memberPrice} error={errors.memberPrice} hint="Optional" success={memberSaves > 0} onChange={(e) => set("memberPrice", e.target.value)} />
                 </div>
                 <AnimatePresence initial={false}>
                   {memberSaves ? (
-                    <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden rounded-lg bg-accent/15 px-3 py-2 text-xs font-medium">
-                      Members save Rs {memberSaves}
+                    <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-gold/16 px-3 text-caption font-semibold text-ink-warning ring-1 ring-inset ring-gold/35">
+                      <Star className="size-3.5" aria-hidden /> Members save {formatMoney(memberSaves)}
                     </motion.p>
                   ) : null}
                 </AnimatePresence>
-                <Field label="Duration" error={errors.duration}>
+                <Section title="Duration" hint={errors.duration}>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {DURATIONS.map((d) => (
-                      <motion.button
-                        key={d}
-                        type="button"
-                        whileTap={{ scale: 0.94 }}
-                        onClick={() => set("duration", `${d}`)}
-                        className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", Number(form.duration) === d ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted")}
-                      >
+                      <button key={d} type="button" onClick={() => set("duration", `${d}`)} className={chip(Number(form.duration) === d)}>
                         {d >= 60 && d % 60 === 0 ? `${d / 60} hr` : `${d} min`}
-                      </motion.button>
+                      </button>
                     ))}
-                    <Input aria-label="Custom duration in minutes" type="number" min="10" className="h-8 w-24" value={form.duration} onChange={(e) => set("duration", e.target.value)} />
-                    <span className="text-xs text-muted-foreground">min</span>
+                    <label className="inline-flex h-9 items-center gap-1.5 rounded-full bg-muted px-3 text-caption font-semibold">
+                      <Clock className="size-3.5 text-ink-neutral" aria-hidden />
+                      <input aria-label="Custom duration in minutes" type="number" min="10" value={form.duration} onChange={(e) => set("duration", e.target.value)} className="w-12 bg-transparent text-center tabular-nums outline-none" />
+                      min
+                    </label>
                   </div>
-                </Field>
+                </Section>
 
-                <section className="space-y-2 rounded-xl border border-dashed p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-medium">Variants</p>
-                      <p className="text-xs text-muted-foreground">Different lengths or sizes with their own price. Drag to reorder.</p>
-                    </div>
-                    <Button type="button" size="sm" variant="outline" onClick={() => set("variants", [...form.variants, { _id: uid(), name: "", price: "", memberPrice: "", duration: form.duration }])}>
-                      <Plus className="size-3.5" /> Add
-                    </Button>
-                  </div>
-                  <Reorder.Group axis="y" values={form.variants} onReorder={(v) => set("variants", v)} className="space-y-2">
+                <Section
+                  title={`Variants · ${form.variants.length}`}
+                  hint="Own price per length or size. Drag to reorder."
+                  action={
+                    <ButtonLoadingMorph size="sm" variant="outline" icon={Plus} onClick={() => set("variants", [...form.variants, { _id: uid(), name: "", price: "", memberPrice: "", duration: form.duration }])}>
+                      Add
+                    </ButtonLoadingMorph>
+                  }
+                >
+                  <Reorder.Group axis="y" values={form.variants} onReorder={(v) => set("variants", v)} className="space-y-2" data-vaul-no-drag>
                     <AnimatePresence initial={false}>
                       {form.variants.map((variant, index) => (
-                        <Reorder.Item
-                          key={variant._id}
-                          value={variant}
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          whileDrag={{ scale: 1.02, boxShadow: "0 10px 30px -10px rgb(0 0 0 / .25)" }}
-                          className="relative rounded-lg border bg-card"
-                        >
-                          <div className="flex items-start gap-2 p-2">
-                            <GripVertical className="mt-2 size-4 shrink-0 cursor-grab text-muted-foreground" aria-hidden />
-                            <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-4">
-                              <Input
-                                className="col-span-2 sm:col-span-4"
-                                aria-label="Variant name"
-                                placeholder="Variant name (e.g. Long hair)"
-                                value={variant.name}
-                                onChange={(e) => set("variants", form.variants.map((v, i) => (i === index ? { ...v, name: e.target.value } : v)))}
-                              />
+                        <Reorder.Item key={variant._id} value={variant} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} whileDrag={{ scale: 1.02 }} className="rounded-2xl bg-muted/50 p-2 ring-1 ring-inset ring-border/60">
+                          <div className="flex items-start gap-1">
+                            <GripVertical className="mt-4 size-4 shrink-0 cursor-grab text-ink-neutral" aria-hidden />
+                            <div className="grid min-w-0 flex-1 grid-cols-3 gap-2">
+                              <FloatingLabelInput className="col-span-3" label="Variant name" value={variant.name} onChange={(e) => set("variants", form.variants.map((v, i) => (i === index ? { ...v, name: e.target.value } : v)))} />
                               {[
                                 ["price", "Price"],
                                 ["memberPrice", "Member"],
-                                ["duration", "Minutes"],
+                                ["duration", "Min"],
                               ].map(([key, label]) => (
-                                <Input
-                                  key={key}
-                                  type="number"
-                                  min="1"
-                                  aria-label={`Variant ${label.toLowerCase()}`}
-                                  placeholder={label}
-                                  value={variant[key]}
-                                  onChange={(e) => set("variants", form.variants.map((v, i) => (i === index ? { ...v, [key]: e.target.value } : v)))}
-                                />
+                                <FloatingLabelInput key={key} label={label} type="number" min="1" value={variant[key]} onChange={(e) => set("variants", form.variants.map((v, i) => (i === index ? { ...v, [key]: e.target.value } : v)))} />
                               ))}
-                              <Button type="button" variant="ghost" size="icon" aria-label="Remove variant" onClick={() => set("variants", form.variants.filter((_, i) => i !== index))}>
-                                <Trash2 className="size-4 text-destructive" />
-                              </Button>
                             </div>
+                            <IconButton icon={Trash2} label="Remove variant" variant="ghost" className="text-ink-destructive" onClick={() => set("variants", form.variants.filter((_, i) => i !== index))} />
                           </div>
                         </Reorder.Item>
                       ))}
                     </AnimatePresence>
                   </Reorder.Group>
-                  {!form.variants.length ? <p className="py-2 text-center text-xs text-muted-foreground">No variants. The service uses the price above.</p> : null}
-                </section>
+                  {!form.variants.length ? <p className="rounded-2xl border border-dashed border-border py-3 text-center text-caption text-ink-neutral">Uses the price above</p> : null}
+                </Section>
               </>
             ) : null}
 
             {step === 2 ? (
               <>
-                <section className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>
-                      Photos ({form.photos.length}/{MAX_PHOTOS})
-                    </Label>
-                    <span className="text-xs text-muted-foreground">First photo is the cover. Drag to reorder.</span>
-                  </div>
+                <Section title={`Photos · ${form.photos.length}/${MAX_PHOTOS}`} hint="First is the cover. Drag to reorder.">
                   <div
                     onDragOver={(e) => {
                       e.preventDefault();
@@ -470,84 +372,75 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
                   >
                     <motion.button
                       type="button"
-                      animate={{ scale: dragOver ? 1.02 : 1 }}
-                      whileTap={{ scale: 0.99 }}
+                      animate={{ scale: dragOver && !reduce ? 1.02 : 1 }}
+                      transition={spring.snappy}
                       disabled={form.photos.length >= MAX_PHOTOS || uploading > 0}
                       onClick={() => fileRef.current?.click()}
-                      className={cn("flex w-full flex-col items-center gap-1 rounded-xl border-2 border-dashed bg-muted/30 px-4 py-5 text-sm text-muted-foreground transition-colors disabled:opacity-60", dragOver && "border-primary bg-primary/5")}
+                      className={`flex w-full flex-col items-center gap-1.5 rounded-2xl border-2 border-dashed px-4 py-5 text-sm transition-colors disabled:opacity-60 ${dragOver ? "border-portal bg-portal/8" : "border-border bg-muted/40"}`}
                     >
-                      {uploading ? <Loader2 className="size-6 animate-spin text-primary" /> : <UploadCloud className="size-6 text-primary" />}
-                      <span className="font-medium text-foreground">{uploading ? "Uploading…" : "Drop photos here or click to browse"}</span>
-                      <span className="text-xs">JPG, PNG, WebP or GIF up to 6 MB</span>
+                      {uploading ? <BrandLoader variant="dots" size="sm" hideLabel /> : <UploadCloud className="size-6 text-portal" aria-hidden />}
+                      <span className="font-semibold">{uploading ? `Uploading ${uploading}…` : form.photos.length >= MAX_PHOTOS ? "Photo limit reached" : "Drop or tap to add photos"}</span>
+                      <span className="text-caption text-ink-neutral">JPG, PNG, WebP, GIF · 6 MB</span>
                     </motion.button>
                     <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple className="hidden" onChange={(e) => void addFiles(e.target.files)} />
                   </div>
                   {form.photos.length ? (
-                    <Reorder.Group axis="x" values={form.photos} onReorder={(p) => set("photos", p)} className="admin-scrollbar flex gap-2 overflow-x-auto pb-1">
+                    <Reorder.Group axis="x" values={form.photos} onReorder={(p) => set("photos", p)} className="admin-scrollbar flex gap-2 overflow-x-auto pb-1" data-vaul-no-drag>
                       {form.photos.map((url, index) => (
-                        <Reorder.Item key={url} value={url} whileDrag={{ scale: 1.08, zIndex: 5 }} className="group relative size-24 shrink-0 cursor-grab overflow-hidden rounded-xl border active:cursor-grabbing">
-                          <PixelImage src={serviceImageUrl(url, 240)} className="size-full" imgClassName="pointer-events-none" draggable={false} />
-                          {index === 0 ? <span className="absolute left-1 top-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">Cover</span> : null}
-                          <div className="absolute inset-x-1 bottom-1 flex justify-end gap-1 sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100">
+                        <Reorder.Item key={url} value={url} whileDrag={{ scale: 1.06, zIndex: 5 }} className="group relative size-24 shrink-0 cursor-grab overflow-hidden rounded-2xl bg-muted ring-1 ring-inset ring-border/60 active:cursor-grabbing">
+                          <img src={serviceImageUrl(url, 240)} alt={`Photo ${index + 1}`} draggable={false} loading="lazy" className="pointer-events-none size-full object-cover" />
+                          {index === 0 ? <span className="absolute top-1 left-1 rounded-full bg-portal px-2 py-0.5 text-[10px] font-bold text-portal-foreground">Cover</span> : null}
+                          <div className="absolute inset-x-1 bottom-1 flex justify-end gap-1">
                             {index > 0 ? (
-                              <button type="button" aria-label="Make cover photo" onClick={() => set("photos", [url, ...form.photos.filter((u) => u !== url)])} className="grid size-6 place-items-center rounded-full bg-card/90 shadow">
-                                <Star className="size-3" />
+                              <button type="button" aria-label={`Make photo ${index + 1} the cover`} onClick={() => set("photos", [url, ...form.photos.filter((u) => u !== url)])} className="tap grid size-7 place-items-center rounded-full bg-card/90 shadow-soft">
+                                <Star className="size-3.5" aria-hidden />
                               </button>
                             ) : null}
-                            <button type="button" aria-label="Remove photo" onClick={() => set("photos", form.photos.filter((u) => u !== url))} className="grid size-6 place-items-center rounded-full bg-card/90 text-destructive shadow">
-                              <Trash2 className="size-3" />
+                            <button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => set("photos", form.photos.filter((u) => u !== url))} className="tap grid size-7 place-items-center rounded-full bg-card/90 text-ink-destructive shadow-soft">
+                              <Trash2 className="size-3.5" aria-hidden />
                             </button>
                           </div>
                         </Reorder.Item>
                       ))}
                     </Reorder.Group>
                   ) : (
-                    <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                      <ImagePlus className="size-3.5" /> No photos yet
+                    <p className="flex items-center justify-center gap-1.5 text-caption text-ink-neutral">
+                      <ImagePlus className="size-3.5" aria-hidden /> No photos yet
                     </p>
                   )}
-                </section>
+                </Section>
 
-                <section className="space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label>Description sections</Label>
-                    {isEdit ? (
-                      <div className="flex items-center gap-3">
-                        {aiAvailable ? (
-                          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} /> Replace existing text
-                          </label>
-                        ) : null}
-                        <Button type="button" size="sm" variant="secondary" disabled={!aiAvailable || drafting} title={aiAvailable ? "Suggest text for empty sections" : "Configure ANTHROPIC_API_KEY on the server to enable drafting"} onClick={() => void draftWithAi()}>
-                          {drafting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-                          {drafting ? "Drafting…" : "Draft with AI"}
-                        </Button>
-                      </div>
+                <Section
+                  title="Details"
+                  hint={isEdit ? "Empty sections stay hidden. “- ” makes a bullet." : "AI drafting unlocks after creating."}
+                  action={
+                    isEdit ? (
+                      <ButtonLoadingMorph size="sm" variant="secondary" icon={Sparkles} state={draftAction.state} disabled={!aiAvailable} loadingLabel="Drafting…" successLabel="Drafted" title={aiAvailable ? "Suggest text for empty sections" : "AI is not configured on the server"} onClick={() => draftAction.run(draftWithAi)}>
+                        Draft
+                      </ButtonLoadingMorph>
+                    ) : null
+                  }
+                >
+                  {isEdit && aiAvailable ? (
+                    <label className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3 text-sm font-semibold">
+                      Replace existing text
+                      <Switch checked={overwrite} onChange={setOverwrite} label="Replace existing text when drafting" />
+                    </label>
+                  ) : null}
+                  <AnimatePresence>
+                    {draftAction.state === "loading" ? (
+                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="status" className="flex items-center gap-2 rounded-2xl bg-portal/8 p-3 text-caption font-semibold text-portal">
+                        <BrandLoader variant="dots" size="xs" hideLabel /> Writing a draft from the service…
+                      </motion.p>
                     ) : null}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Empty sections are hidden from customers. Start a line with "- " for a bullet.
-                    {isEdit ? " Check AI drafts carefully (precautions especially)." : " AI drafting is available once the service is created."}
-                  </p>
+                  </AnimatePresence>
                   <div className="grid gap-3">
-                    {SERVICE_DETAIL_SECTIONS.map(({ key, label, hint, icon: Icon }) => (
-                      <div key={key} className="space-y-1">
-                        <Label htmlFor={`sd-${key}`} className="flex items-center gap-1.5 text-sm">
-                          <Icon className="size-3.5 text-primary" /> {label}
-                        </Label>
-                        <textarea
-                          id={`sd-${key}`}
-                          rows={2}
-                          maxLength={SERVICE_DETAIL_LIMITS[key]}
-                          placeholder={hint}
-                          value={form.details[key] ?? ""}
-                          onChange={(e) => setForm((f) => ({ ...f, details: { ...f.details, [key]: e.target.value } }))}
-                          className={textareaClass}
-                        />
-                      </div>
+                    {SERVICE_DETAIL_SECTIONS.map(({ key, label, icon: Icon }) => (
+                      <FloatingLabelInput key={key} as="textarea" icon={Icon} label={label} maxLength={SERVICE_DETAIL_LIMITS[key]} value={form.details[key] ?? ""} onChange={(e) => setForm((f) => ({ ...f, details: { ...f.details, [key]: e.target.value } }))} inputClassName="min-h-20" />
                     ))}
                   </div>
-                </section>
+                  {isEdit ? <p className="text-caption text-ink-neutral">Check AI drafts, precautions especially.</p> : null}
+                </Section>
               </>
             ) : null}
           </motion.div>
