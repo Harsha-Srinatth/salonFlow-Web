@@ -5,10 +5,11 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { KitProvider } from "@/components/kit/kit-provider"
 import { RouteLoader } from "@/components/kit/route-loader"
 import { lazy, Suspense } from "react"
-import { Navigate, Route, Routes, useLocation } from "react-router-dom"
+import { Route, Routes, useLocation } from "react-router-dom"
 import { Provider } from "react-redux"
 import { store } from "@/store"
 import { LoadingOrb } from "@/components/shared/loading-orb";
+import { PublicErrorBoundary } from "@/landing/components/public-error-boundary"
 
 // Each page is its own chunk: a visitor on the landing page no longer downloads the admin,
 // reception and stylist portals (and a customer never downloads the other three).
@@ -37,6 +38,7 @@ const AuthResetPasswordPage = lazy(() => import("@/auth/pages/auth-reset-passwor
 const StaffSetPasswordPage = lazy(() => import("@/auth/pages/staff-set-password-page"))
 const StaffVerifyOtpPage = lazy(() => import("@/auth/pages/staff-verify-otp-page"))
 const LandingPage = lazy(() => import("@/landing/pages/LandingPage"))
+const NotFoundPage = lazy(() => import("@/landing/pages/NotFoundPage"))
 const ReceptionAppointmentsPage = lazy(() => import("@/receptionist/pages/appointments-page"))
 const ReceptionDashboardPage = lazy(() => import("@/receptionist/pages/dashboard-page"))
 const ReceptionProfilePage = lazy(() => import("@/receptionist/pages/profile-page"))
@@ -100,6 +102,7 @@ function App() {
      <KitProvider>
       <Provider store={store}>
         <AuthProvider>
+         <PublicErrorBoundary resetKey={pathname}>
           <Suspense fallback={<PageFallback />}>
           <Routes>
             <Route path="/" element={<GuestOnlyRoute><LandingPage /></GuestOnlyRoute>} />
@@ -158,9 +161,10 @@ function App() {
               <Route path="/user-dashboard/profile" element={<UserProfilePage />} />
             </Route>
 
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
           </Suspense>
+         </PublicErrorBoundary>
         </AuthProvider>
       </Provider>
      </KitProvider>

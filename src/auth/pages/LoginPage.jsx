@@ -1,20 +1,11 @@
 import { GOOGLE_RATING } from "@/lib/public-claims";
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { motion } from "motion/react"
-import {
-  Award,
-  CheckCircle,
-  Eye,
-  EyeOff,
-  Lock,
-  Mail,
-  Phone,
-  Star,
-} from "lucide-react"
+import { AnimatePresence, motion } from "motion/react"
+import { CalendarCheck, Gift, KeyRound, Lock, LogIn, Mail, MessageSquareText, Pencil, Phone, Star } from "lucide-react"
 import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider"
-import { AuthPageShell } from "@/auth/components/auth-page-shell"
+import { AuthDivider, AuthPageShell, GoogleLogo } from "@/auth/components/auth-page-shell"
 import { getFirebaseAuthErrorMessage } from "@/auth/lib/auth-errors"
 import { isValidE164Phone, toE164Phone } from "@/auth/lib/phone"
 import { getDashboardPathByRole } from "@/lib/auth/role-routing"
@@ -35,7 +26,11 @@ import {
   verifyPhoneOtp,
 } from "@/lib/auth/auth-client"
 import { staffLogin } from "@/lib/staff-auth-client"
-import { InlineOrb } from "@/components/shared/loading-orb"
+import { variants } from "@/components/motion/presets"
+import { AnimatedTabBar } from "@/components/kit/animated-tab-bar"
+import { ButtonLoadingMorph } from "@/components/kit/button-loading-morph"
+import { FloatingLabelInput } from "@/components/kit/floating-label-input"
+import { OtpInput } from "@/components/kit/otp-input"
 
 const ACCOUNT_NOT_FOUND_MESSAGES = new Set(["ACCOUNT_NOT_FOUND", "Phone number is required for registration"])
 
@@ -46,11 +41,14 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [phone, setPhone] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState("email")
   const [submitting, setSubmitting] = useState(false)
   const [otpSent, setOtpSent] = useState(false)
   const [otp, setOtp] = useState("")
+  const [otpError, setOtpError] = useState(false)
+  // Guards the auto-submit on the sixth digit against a second submit (Enter / button) racing it:
+  // a duplicate confirm burns one of the customer's limited attempts.
+  const verifyingRef = useRef(false)
 
   useEffect(() => {
     if (loading || !appUser?.role) return
@@ -138,18 +136,21 @@ export default function LoginPage() {
     }
   }
 
-  async function handleVerifyOtp(event) {
-    event.preventDefault()
+  async function handleVerifyOtp(event, code = otp) {
+    event?.preventDefault()
     const e164 = toE164Phone(phone)
-    if (!otp.trim()) {
+    if (!code.trim()) {
       toast.error("Enter OTP code")
       return
     }
+    if (verifyingRef.current) return
+    verifyingRef.current = true
 
     setSubmitting(true)
+    setOtpError(false)
     try {
       assertOtpVerifyNotLocked("customer", e164)
-      const result = await verifyPhoneOtp(otp.trim())
+      const result = await verifyPhoneOtp(code.trim())
       clearOtpVerifyGuards("customer", e164)
       if (result.appUser?.role) {
         toast.success("Phone verified and signed in")
@@ -160,6 +161,7 @@ export default function LoginPage() {
       }
     } catch (error) {
       recordOtpVerifyFailure("customer", e164)
+      setOtpError(true)
       if (error instanceof Error && ACCOUNT_NOT_FOUND_MESSAGES.has(error.message)) {
         toast.error("No account found for this phone number. Please sign up first.")
         navigate("/auth/signup", { replace: true, state: { phone } })
@@ -167,6 +169,7 @@ export default function LoginPage() {
       }
       toast.error(getFirebaseAuthErrorMessage(error))
     } finally {
+      verifyingRef.current = false
       setSubmitting(false)
     }
   }
@@ -208,227 +211,122 @@ export default function LoginPage() {
     }
   }
 
+  const switchTab = tab => {
+    setActiveTab(tab)
+    setOtpSent(false)
+    setOtp("")
+    setOtpError(false)
+  }
+  const busy = submitting ? "loading" : "idle"
+
   return (
     <AuthPageShell
       title="Sign in"
-      subtitle="Don't have an account?"
+      subtitle="New here?"
       subtitleLink="/auth/signup"
-      subtitleLinkLabel="Sign up"
-      sideTitle="Welcome Back"
-      sideDescription="Your perfect salon experience awaits. Login to continue booking."
+      subtitleLinkLabel="Create an account"
+      sideTitle="Welcome back"
+      sideDescription="Sign in to book, track your visit and use your rewards."
       sideCards={[
-        { icon: Star, text: GOOGLE_RATING.label, sub: GOOGLE_RATING.sub },
-        { icon: CheckCircle, text: "Instant Booking", sub: "In under 60 seconds" },
-        { icon: Award, text: "Premium Service", sub: "Expert stylists" },
+        { icon: Star, text: GOOGLE_RATING.label },
+        { icon: CalendarCheck, text: "Book online" },
+        { icon: Gift, text: "Refer & earn" },
       ]}
-      sideFooter={
-        <div className="rounded-2xl border border-border bg-card/50 p-6 backdrop-blur-sm">
-          <div className="flex justify-center gap-1">
-            {[1, 2, 3, 4, 5].map(i => (
-              <Star key={i} className="size-4 fill-primary text-primary" />
-            ))}
-          </div>
-          <p className="mt-3 font-display text-2xl font-bold text-foreground">{GOOGLE_RATING.value} / 5</p>
-          <p className="mt-1 text-sm text-muted-foreground">from {GOOGLE_RATING.reviews} Google reviews</p>
-        </div>
+      footer={
+        <>
+          Staff, first time?{" "}
+          <Link to="/staff/verify-otp" className="tap font-semibold text-ink-primary underline-offset-4 hover:underline">
+            Verify phone &amp; set password
+          </Link>
+        </>
       }
     >
-      <div className="mb-8 flex gap-2 rounded-xl border border-border bg-card/50 p-1">
-        {["email", "phone"].map(tab => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => {
-              setActiveTab(tab)
-              setOtpSent(false)
-              setOtp("")
-            }}
-            className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
-              activeTab === tab
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab === "email" ? "Email" : "Phone OTP"}
-          </button>
-        ))}
-      </div>
+      <AnimatedTabBar
+        items={[
+          { value: "email", label: "Email", icon: Mail },
+          { value: "phone", label: "Phone OTP", icon: MessageSquareText },
+        ]}
+        value={activeTab}
+        onChange={switchTab}
+        fullWidth
+        label="Sign-in method"
+        className="mb-6"
+      />
 
-      {activeTab === "email" ? (
-        <motion.form
-          key="email-form"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          onSubmit={handleEmailLogin}
-          className="space-y-4"
-        >
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Email
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="hello@sahasra.com"
-                autoComplete="email"
-                className="w-full rounded-xl border border-border bg-card py-3 pl-10 pr-4 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                className="w-full rounded-xl border border-border bg-card py-3 pl-10 pr-10 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(value => !value)}
-                className="absolute right-3 top-3.5 text-muted-foreground transition-colors hover:text-foreground"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
+      <AnimatePresence mode="wait" initial={false}>
+        {activeTab === "email" ? (
+          <motion.form key="email-form" variants={variants.fadeUp} initial="hidden" animate="show" exit="exit" onSubmit={handleEmailLogin} className="space-y-4">
+            <FloatingLabelInput label="Email" icon={Mail} type="email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" inputMode="email" />
+            <FloatingLabelInput label="Password" icon={Lock} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />
+            <div className="flex justify-end">
+              <button type="button" onClick={handleForgotPassword} disabled={submitting} className="tap inline-flex items-center gap-1.5 text-sm font-semibold text-ink-primary disabled:opacity-50">
+                <KeyRound className="size-4" aria-hidden /> Forgot password?
               </button>
             </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {submitting ? <InlineOrb theme="light" /> : null}
-            {submitting ? "Signing in..." : "Sign in with Email"}
-          </button>
-
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              disabled={submitting}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Forgot password?
-            </button>
-          </div>
-        </motion.form>
-      ) : (
-        <motion.form
-          key="phone-form"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          onSubmit={otpSent ? handleVerifyOtp : handleSendOtp}
-          className="space-y-4"
-        >
-          {!otpSent ? (
-            <>
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Phone Number
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute left-3 top-3.5 flex items-center gap-1.5 text-muted-foreground">
-                    <span className="text-sm font-semibold">+91</span>
-                    <Phone className="size-5" />
-                  </div>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                    placeholder="9876543210"
-                    maxLength={10}
-                    autoComplete="tel"
-                    className="w-full rounded-xl border border-border bg-card py-3 pl-20 pr-4 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {submitting ? <InlineOrb theme="light" /> : null}
-                {submitting ? "Sending OTP..." : "Send OTP"}
-              </button>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Enter OTP
-                </label>
-                <input
-                  type="text"
+            <ButtonLoadingMorph type="submit" state={busy} icon={LogIn} size="lg" fullWidth loadingLabel="Signing in…" successLabel="Signed in">
+              Sign in
+            </ButtonLoadingMorph>
+          </motion.form>
+        ) : (
+          <motion.form key={otpSent ? "otp-form" : "phone-form"} variants={variants.fadeUp} initial="hidden" animate="show" exit="exit" onSubmit={otpSent ? handleVerifyOtp : handleSendOtp} className="space-y-4">
+            {!otpSent ? (
+              <>
+                <FloatingLabelInput
+                  label="Mobile number"
+                  icon={Phone}
+                  type="tel"
                   inputMode="numeric"
-                  value={otp}
-                  onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  placeholder="000000"
-                  maxLength={6}
-                  className="w-full rounded-xl border border-border bg-card px-4 py-3 text-center font-sans tabular-nums text-lg tracking-widest text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  maxLength={10}
+                  autoComplete="tel-national"
+                  hint="+91 · 10 digits"
+                  success={phone.length === 10}
                 />
-              </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {submitting ? <InlineOrb theme="light" /> : null}
-                {submitting ? "Verifying..." : "Verify OTP"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpSent(false)
-                  setOtp("")
-                }}
-                className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Edit phone number
-              </button>
-            </>
-          )}
-        </motion.form>
-      )}
+                <ButtonLoadingMorph type="submit" state={busy} icon={MessageSquareText} size="lg" fullWidth loadingLabel="Sending code…">
+                  Send code
+                </ButtonLoadingMorph>
+              </>
+            ) : (
+              <>
+                <p className="text-center text-sm text-ink-neutral">
+                  Code sent to <span className="font-semibold text-foreground tabular-nums">+91 {phone}</span>
+                </p>
+                <OtpInput
+                  value={otp}
+                  onChange={value => {
+                    setOtp(value)
+                    if (otpError) setOtpError(false)
+                  }}
+                  onComplete={code => void handleVerifyOtp(undefined, code)}
+                  error={otpError}
+                  disabled={submitting}
+                />
+                <ButtonLoadingMorph type="submit" state={busy} icon={LogIn} size="lg" fullWidth loadingLabel="Verifying…">
+                  Verify &amp; sign in
+                </ButtonLoadingMorph>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtpSent(false)
+                    setOtp("")
+                    setOtpError(false)
+                  }}
+                  className="mx-auto flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-neutral hover:text-foreground"
+                >
+                  <Pencil className="size-4" aria-hidden /> Edit number
+                </button>
+              </>
+            )}
+          </motion.form>
+        )}
+      </AnimatePresence>
 
-      <div className="relative my-6">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border" />
-        </div>
-        <div className="relative flex justify-center text-xs">
-          <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
-        </div>
-      </div>
+      <AuthDivider label="or" />
 
-      <button
-        type="button"
-        onClick={handleGoogleLogin}
-        disabled={submitting}
-        className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        Continue with Google
-      </button>
-
-      <p className="mt-6 text-center text-xs text-muted-foreground">
-        Staff first time?{" "}
-        <Link to="/staff/verify-otp" className="font-semibold text-primary hover:text-primary/80">
-          Verify phone &amp; set password
-        </Link>
-      </p>
-
+      <ButtonLoadingMorph variant="outline" size="lg" fullWidth onClick={handleGoogleLogin} disabled={submitting}>
+        <GoogleLogo /> Continue with Google
+      </ButtonLoadingMorph>
     </AuthPageShell>
   )
 }

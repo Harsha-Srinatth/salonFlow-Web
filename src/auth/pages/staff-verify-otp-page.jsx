@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Phone, ShieldCheck } from "lucide-react"
+import { ArrowLeft, MessageSquareText, Pencil, Phone, ShieldCheck, Smartphone } from "lucide-react"
 import { toast } from "@/lib/notify";
 import { AuthPageShell } from "@/auth/components/auth-page-shell"
 import { isValidE164Phone, toE164Phone } from "@/auth/lib/phone"
@@ -13,7 +13,9 @@ import {
 } from "@/lib/otp-throttle"
 import { confirmStaffFirebasePhoneOtp, sendStaffFirebasePhoneOtp } from "@/lib/auth/auth-client"
 import { verifyStaffPhoneWithFirebaseIdToken } from "@/lib/staff-auth-client"
-import { InlineOrb } from "@/components/shared/loading-orb"
+import { ButtonLoadingMorph } from "@/components/kit/button-loading-morph"
+import { FloatingLabelInput } from "@/components/kit/floating-label-input"
+import { OtpInput } from "@/components/kit/otp-input"
 
 const SETUP_TOKEN_KEY = "staff_setup_token"
 
@@ -51,10 +53,10 @@ export default function StaffVerifyOtpPage() {
     }
   }
 
-  async function handleVerifyFirebase(event) {
-    event.preventDefault()
+  async function handleVerifyFirebase(event, code = otp) {
+    event?.preventDefault()
     const e164 = toE164Phone(phone)
-    if (!otp.trim()) {
+    if (!code.trim() || submitting) {
       toast.error("Enter the SMS code")
       return
     }
@@ -62,7 +64,7 @@ export default function StaffVerifyOtpPage() {
     setSubmitting(true)
     try {
       assertOtpVerifyNotLocked("staff", e164)
-      const idToken = await confirmStaffFirebasePhoneOtp(otp.trim())
+      const idToken = await confirmStaffFirebasePhoneOtp(code.trim())
       const setupToken = await verifyStaffPhoneWithFirebaseIdToken(idToken)
       clearOtpVerifyGuards("staff", e164)
       window.sessionStorage.setItem(SETUP_TOKEN_KEY, setupToken)
@@ -78,65 +80,47 @@ export default function StaffVerifyOtpPage() {
 
   return (
     <AuthPageShell
-      title="Verify phone (staff)"
+      title="Verify your phone"
       subtitle="Already verified?"
       subtitleLink="/auth/login"
-      subtitleLinkLabel="Back to sign in"
-      sideTitle="Staff onboarding"
-      sideDescription="Firebase sends the SMS code to the number your admin saved. Use the exact same phone."
+      subtitleLinkLabel="Sign in"
+      sideTitle="Staff setup"
+      sideDescription="Use the exact number your admin saved. We'll text you a code."
       sideCards={[
-        { icon: ShieldCheck, text: "Secure setup", sub: "One-time phone verification" },
-        { icon: Phone, text: "E.164 format", sub: "Example: +919876543210" },
+        { icon: ShieldCheck, text: "One-time check" },
+        { icon: Smartphone, text: "Same phone as admin record" },
       ]}
+      footer={
+        <Link to="/auth/login" className="inline-flex h-11 items-center gap-1.5 font-semibold text-ink-primary">
+          <ArrowLeft className="size-4" aria-hidden /> Back to sign in
+        </Link>
+      }
     >
       <form onSubmit={smsSent ? handleVerifyFirebase : handleSendSms} className="space-y-4">
-        <div>
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Phone Number
-          </label>
-          <div className="relative">
-            <div className="pointer-events-none absolute left-3 top-3.5 flex items-center gap-1.5 text-muted-foreground">
-              <span className="text-sm font-semibold">+91</span>
-              <Phone className="size-5" />
-            </div>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-              placeholder="9876543210"
-              maxLength={10}
-              disabled={smsSent}
-              autoComplete="tel"
-              className="w-full rounded-xl border border-border bg-card py-3 pl-20 pr-4 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
-            />
-          </div>
-        </div>
+        <FloatingLabelInput
+          label="Mobile number"
+          icon={Phone}
+          type="tel"
+          inputMode="numeric"
+          value={phone}
+          onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+          maxLength={10}
+          disabled={smsSent}
+          autoComplete="tel-national"
+          hint="+91 · 10 digits"
+          success={phone.length === 10}
+        />
 
         {smsSent ? (
-          <div>
-            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              SMS code
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={otp}
-              onChange={e => setOtp(e.target.value)}
-              placeholder="Enter code from SMS"
-              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20"
-            />
+          <div className="space-y-2">
+            <p className="text-center text-sm text-ink-neutral">Enter the code from the SMS</p>
+            <OtpInput value={otp} onChange={setOtp} onComplete={code => void handleVerifyFirebase(undefined, code)} disabled={submitting} />
           </div>
         ) : null}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {submitting ? <InlineOrb theme="light" /> : null}
-          {submitting ? "Please wait…" : smsSent ? "Verify & continue" : "Send SMS code"}
-        </button>
+        <ButtonLoadingMorph type="submit" state={submitting ? "loading" : "idle"} icon={smsSent ? ShieldCheck : MessageSquareText} size="lg" fullWidth loadingLabel="Please wait…">
+          {smsSent ? "Verify & continue" : "Send code"}
+        </ButtonLoadingMorph>
 
         {smsSent ? (
           <button
@@ -145,19 +129,12 @@ export default function StaffVerifyOtpPage() {
               setSmsSent(false)
               setOtp("")
             }}
-            className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="mx-auto flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-neutral hover:text-foreground"
           >
-            Use a different number
+            <Pencil className="size-4" aria-hidden /> Use a different number
           </button>
         ) : null}
       </form>
-
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        <Link to="/auth/login" className="font-semibold text-primary hover:text-primary/80">
-          Back to staff login
-        </Link>
-      </p>
-
     </AuthPageShell>
   )
 }

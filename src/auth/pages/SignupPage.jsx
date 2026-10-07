@@ -3,24 +3,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { AnimatePresence, motion } from "motion/react"
 import {
-  Award,
-  Check,
-  CheckCircle,
+  ArrowRight,
   CheckCircle2,
-  ChevronDown,
-  Eye,
-  EyeOff,
   Gift,
   Lock,
   Mail,
+  MailCheck,
+  MessageSquareText,
+  Pencil,
   Phone,
+  RotateCcw,
   Sparkles,
+  Star,
   User,
+  UserRound,
+  Users,
+  Wallet,
 } from "lucide-react"
 import { toast } from "@/lib/notify";
 import { useAuth } from "@/components/auth/auth-provider"
-import { AuthPageShell } from "@/auth/components/auth-page-shell"
-import { OtpCodeInput } from "@/auth/components/otp-code-input"
+import { AuthDivider, AuthPageShell, GoogleLogo } from "@/auth/components/auth-page-shell"
 import { getFirebaseAuthErrorMessage } from "@/auth/lib/auth-errors"
 import { isValidE164Phone, toE164Phone } from "@/auth/lib/phone"
 import { isValidFullName, mapGenderToApi } from "@/auth/lib/validation"
@@ -51,9 +53,18 @@ import {
   startEmailSignup,
   verifySignupPhoneOtp,
 } from "@/lib/auth/auth-client"
-import { InlineOrb } from "@/components/shared/loading-orb"
+import { spring, variants } from "@/components/motion/presets"
+import { AnimatedStepper } from "@/components/kit/animated-stepper"
+import { BrandDots } from "@/components/kit/brand-loader"
+import { ButtonLoadingMorph } from "@/components/kit/button-loading-morph"
+import { FloatingLabelInput } from "@/components/kit/floating-label-input"
+import { OtpInput } from "@/components/kit/otp-input"
 
-const genderOptions = ["Male", "Female", "Other"]
+const genderOptions = [
+  { value: "Male", icon: User },
+  { value: "Female", icon: UserRound },
+  { value: "Other", icon: Users },
+]
 
 /**
  * How often the page re-asks Firebase whether the emailed link has been opened.
@@ -86,58 +97,65 @@ function describeEmail(email) {
  */
 function VerificationRow({ icon: Icon, label, target, verified, children }) {
   return (
-    <div
-      className={`rounded-xl border p-4 transition-colors ${
-        verified ? "border-success/40 bg-success/5" : "border-border bg-card"
-      }`}
+    <motion.div
+      layout
+      transition={spring.soft}
+      className={`rounded-2xl p-4 ring-1 ring-inset transition-colors duration-300 ${verified ? "bg-success/10 ring-success/40" : "bg-card ring-border"}`}
     >
       <div className="flex items-start gap-3">
-        <div
-          className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-            verified ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-          }`}
-        >
-          {verified ? <CheckCircle2 className="size-5" /> : <Icon className="size-5" />}
-        </div>
+        <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${verified ? "bg-success/15 text-ink-success" : "bg-muted text-ink-neutral"}`}>
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span key={verified ? "ok" : "wait"} initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} exit={{ scale: 0 }} transition={spring.bouncy} className="grid">
+              {verified ? <CheckCircle2 className="size-5" aria-hidden /> : <Icon className="size-5" aria-hidden />}
+            </motion.span>
+          </AnimatePresence>
+        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground">{label}</p>
-            {verified ? (
-              <span className="shrink-0 text-xs font-semibold uppercase tracking-wider text-success">Verified</span>
-            ) : null}
+            <p className="text-sm font-semibold">{label}</p>
+            {verified ? <span className="shrink-0 text-micro font-bold tracking-wider text-ink-success uppercase">Verified</span> : null}
           </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{target}</p>
+          <p className="mt-0.5 truncate text-caption text-ink-neutral">{target}</p>
           {verified ? null : <div className="mt-3">{children}</div>}
         </div>
       </div>
+    </motion.div>
+  )
+}
+
+/** Required choice, nothing preselected (see the comment on `gender` state). */
+function GenderChoice({ value, onChange, disabled }) {
+  return (
+    <div>
+      <p id="gender-label" className="mb-2 px-1 text-caption font-semibold text-ink-neutral">
+        Gender
+      </p>
+      <div role="radiogroup" aria-labelledby="gender-label" className="grid grid-cols-3 gap-2">
+        {genderOptions.map(({ value: option, icon: Icon }) => {
+          const selected = value === option
+          return (
+            <button
+              key={option}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              disabled={disabled}
+              onClick={() => onChange(option)}
+              className={`relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-control text-sm font-semibold ring-1 ring-inset transition-colors disabled:opacity-55 ${selected ? "text-portal-foreground ring-transparent" : "bg-card ring-border hover:bg-muted"}`}
+            >
+              {selected ? <motion.span layoutId="signup-gender-pill" className="absolute inset-0 rounded-control bg-portal shadow-glow" transition={spring.snappy} /> : null}
+              <Icon className="relative size-4.5" aria-hidden />
+              <span className="relative">{option}</span>
+            </button>
+          )
+        })}
+      </div>
+      <p className="mt-1.5 px-1 text-caption text-ink-neutral">Shows you the right services and stylists.</p>
     </div>
   )
 }
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/
-
-function GoogleLogo({ className = "size-5" }) {
-  return (
-    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-      />
-      <path
-        fill="#4285F4"
-        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-      />
-      <path
-        fill="#34A853"
-        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-      />
-    </svg>
-  )
-}
 
 export default function SignupPage() {
   const navigate = useNavigate()
@@ -153,8 +171,6 @@ export default function SignupPage() {
   // Intentionally empty: a pre-selected value gets accepted without being read,
   // and the account's gender decides which services and stylists it is offered.
   const [gender, setGender] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [showGenderDropdown, setShowGenderDropdown] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [attemptedAccount, setAttemptedAccount] = useState(false)
   const [attemptedPhone, setAttemptedPhone] = useState(false)
@@ -179,6 +195,8 @@ export default function SignupPage() {
 
   const signupPhone = useMemo(() => toE164Phone(phone), [phone])
   const finishedRef = useRef(false)
+  // The OTP auto-submits on the sixth digit; a second confirm would burn one of the limited attempts.
+  const verifyingRef = useRef(false)
 
   useEffect(() => {
     if (loading || !appUser?.role) return
@@ -196,7 +214,7 @@ export default function SignupPage() {
   function getPasswordStrengthColor() {
     if (passwordStrength <= 1) return "bg-destructive"
     if (passwordStrength <= 2) return "bg-warning"
-    if (passwordStrength <= 3) return "bg-accent"
+    if (passwordStrength <= 3) return "bg-info"
     return "bg-success"
   }
 
@@ -439,7 +457,8 @@ export default function SignupPage() {
 
   const handleVerifyOtp = useCallback(
     async code => {
-      if (verifyingOtp || phoneVerified) return
+      if (verifyingRef.current || verifyingOtp || phoneVerified) return
+      verifyingRef.current = true
       setVerifyingOtp(true)
       setOtpInvalid(false)
       try {
@@ -452,6 +471,7 @@ export default function SignupPage() {
         setOtp("")
         toast.error(getFirebaseAuthErrorMessage(error))
       } finally {
+        verifyingRef.current = false
         setVerifyingOtp(false)
       }
     },
@@ -474,210 +494,104 @@ export default function SignupPage() {
     setAttemptedPhone(false)
   }
 
-  const inputClass =
-    "w-full rounded-xl border border-border bg-card py-3 pl-10 pr-10 text-foreground outline-none transition-all placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
-  const labelClass = "mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+  const stepIndex = step === "verify" ? 1 : 0
 
   return (
     <AuthPageShell
-      title={step === "verify" ? "Verify your phone" : "Create account"}
-      subtitle={step === "verify" ? "Last step, then you're in." : "Already have an account?"}
+      title={step === "verify" ? "Verify it's you" : "Create account"}
+      subtitle={step === "verify" ? "Last step, then you're in." : "Already a member?"}
       subtitleLink={step === "verify" ? undefined : "/auth/login"}
       subtitleLinkLabel={step === "verify" ? undefined : "Sign in"}
       sideTitle="Join Sahasra"
-      sideDescription="Book premium salon appointments and enjoy exclusive member benefits."
+      sideDescription="Book visits online, skip the guesswork and earn rewards."
       sideCards={[
-        { icon: Sparkles, text: "Luxury Experience", sub: "Premium salon services" },
-        { icon: CheckCircle, text: "Easy Booking", sub: "Book in 60 seconds" },
-        { icon: Award, text: "Refer & earn", sub: "Wallet credit for referrals" },
+        { icon: Star, text: GOOGLE_RATING.label },
+        { icon: Gift, text: "Refer & earn" },
+        { icon: Wallet, text: "Wallet credit" },
       ]}
-      sideFooter={
-        <div className="grid w-full max-w-xs grid-cols-2 gap-3 text-center">
-          {[
-            { num: GOOGLE_RATING.reviews, text: "Google reviews" },
-            { num: `${GOOGLE_RATING.value}/5`, text: "Google rating" },
-          ].map(stat => (
-            <div key={stat.text} className="rounded-lg border border-border bg-card/50 p-3 backdrop-blur-sm">
-              <p className="font-display text-lg font-bold text-primary">{stat.num}</p>
-              <p className="text-xs text-muted-foreground">{stat.text}</p>
-            </div>
-          ))}
-        </div>
-      }
     >
-      {/* Two steps, always both visible. */}
-      <div className="mb-6 flex items-center gap-3">
-        {["Account", "Verify phone"].map((label, index) => {
-          const state = step === "details" ? (index === 0 ? "current" : "upcoming") : index === 0 ? "done" : "current"
-          return (
-            <div key={label} className="flex flex-1 items-center gap-2">
-              <div
-                className={`flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-colors ${
-                  state === "done"
-                    ? "bg-success text-white"
-                    : state === "current"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
-                }`}
-              >
-                {state === "done" ? <Check className="size-3.5" /> : index + 1}
-              </div>
-              <span
-                className={`text-xs font-medium ${state === "upcoming" ? "text-muted-foreground" : "text-foreground"}`}
-              >
-                {label}
-              </span>
-              {index === 0 ? <div className="h-px flex-1 bg-border" /> : null}
-            </div>
-          )
-        })}
-      </div>
+      <AnimatedStepper
+        steps={[
+          { id: "account", label: "Account", icon: User },
+          { id: "verify", label: "Verify", icon: Phone },
+        ]}
+        current={stepIndex}
+        className="mb-6"
+      />
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="wait" initial={false}>
         {step === "verify" ? (
-          <motion.div
-            key="verify-step"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.25 }}
-            className="space-y-4"
-          >
-            {/* Which sign-in this account is being built on, and whether the email half is done */}
+          <motion.div key="verify-step" variants={variants.fadeUp} initial="hidden" animate="show" exit="exit" className="space-y-4">
             {isGoogleSignup ? (
-              <div className="flex items-center gap-3 rounded-xl border border-success/40 bg-success/5 p-4">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-card">
+              <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-4 ring-1 ring-inset ring-success/40">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-card">
                   <GoogleLogo className="size-5" />
-                </div>
+                </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-foreground">Signed in with Google</p>
-                  <p className="truncate text-xs text-muted-foreground">{describeEmail(email)}</p>
+                  <p className="text-sm font-semibold">Signed in with Google</p>
+                  <p className="truncate text-caption text-ink-neutral">{describeEmail(email)}</p>
                 </div>
-                <CheckCircle2 className="size-5 shrink-0 text-success" />
+                <CheckCircle2 className="size-5 shrink-0 text-ink-success" aria-hidden />
               </div>
             ) : (
-              <VerificationRow icon={Mail} label="Email address" target={describeEmail(email)} verified={emailVerified}>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2.5">
-                    <InlineOrb />
-                    <p className="text-xs text-muted-foreground">
-                      Open the link we emailed you. This page updates by itself.
-                    </p>
-                  </div>
+              <VerificationRow icon={Mail} label="Email" target={describeEmail(email)} verified={emailVerified}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="inline-flex items-center gap-2 text-caption text-ink-neutral">
+                    <BrandDots className="text-portal" size={5} /> Open the link we emailed you
+                  </p>
                   <button
                     type="button"
                     onClick={handleResendEmail}
                     disabled={resendingEmail}
-                    className="text-xs font-semibold text-accent transition-colors hover:text-accent/80 disabled:text-muted-foreground"
+                    className="inline-flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-primary disabled:text-ink-neutral"
                   >
-                    {resendingEmail ? "Sending…" : "Resend email"}
+                    <MailCheck className="size-4" aria-hidden />
+                    {resendingEmail ? "Sending…" : "Resend"}
                   </button>
                 </div>
               </VerificationRow>
             )}
 
             {phoneVerified ? (
-              <VerificationRow icon={Phone} label="Phone number" target={signupPhone} verified />
+              <VerificationRow icon={Phone} label="Phone" target={signupPhone} verified />
             ) : (
               <form onSubmit={handleSendOtp} className="space-y-4">
                 {needsName ? (
-                  <div>
-                    <label className={labelClass}>Full Name</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-                      <input
-                        type="text"
-                        value={fullName}
-                        onChange={e => setFullName(e.target.value)}
-                        placeholder="Priya Sharma"
-                        autoComplete="name"
-                        disabled={otpSent}
-                        className={inputClass}
-                      />
-                    </div>
-                  </div>
+                  <FloatingLabelInput
+                    label="Full name"
+                    icon={User}
+                    value={fullName}
+                    onChange={e => setFullName(e.target.value)}
+                    autoComplete="name"
+                    disabled={otpSent}
+                    success={isValidFullName(fullName)}
+                  />
                 ) : null}
 
-                <div>
-                  <label className={labelClass}>Phone</label>
-                  <div className="relative">
-                    <div className="pointer-events-none absolute left-3 top-3.5 flex items-center gap-1.5 text-muted-foreground">
-                      <span className="text-sm font-semibold">+91</span>
-                      <Phone className="size-5" />
-                    </div>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="9876543210"
-                      maxLength={10}
-                      autoComplete="tel"
-                      disabled={otpSent}
-                      className={`${inputClass} pl-20`}
-                    />
-                    {isValidE164Phone(signupPhone) ? (
-                      <CheckCircle2 className="absolute right-3 top-3.5 size-5 text-success" />
-                    ) : null}
-                  </div>
-                </div>
+                <FloatingLabelInput
+                  label="Mobile number"
+                  icon={Phone}
+                  type="tel"
+                  inputMode="numeric"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                  maxLength={10}
+                  autoComplete="tel-national"
+                  disabled={otpSent}
+                  hint="+91 · 10 digits"
+                  success={isValidE164Phone(signupPhone)}
+                />
 
-                <div>
-                  <label className={labelClass}>Gender</label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowGenderDropdown(value => !value)}
-                      disabled={otpSent}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-card px-4 py-3 text-left text-foreground outline-none transition-all focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-60"
-                    >
-                      <span className={gender ? "" : "text-muted-foreground"}>{gender || "Select gender"}</span>
-                      <ChevronDown
-                        className={`size-5 text-muted-foreground transition-transform ${showGenderDropdown ? "rotate-180" : ""}`}
-                      />
-                    </button>
-                    {showGenderDropdown ? (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="absolute top-full z-50 mt-1 w-full rounded-xl border border-border bg-card shadow-lg"
-                      >
-                        {genderOptions.map((option, index) => (
-                          <button
-                            key={option}
-                            type="button"
-                            onClick={() => {
-                              setGender(option)
-                              setShowGenderDropdown(false)
-                            }}
-                            className={`flex w-full items-center justify-between px-4 py-3 text-sm font-medium transition-all ${
-                              gender === option ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted"
-                            } ${index === 0 ? "rounded-t-xl" : ""} ${index === genderOptions.length - 1 ? "rounded-b-xl" : ""}`}
-                          >
-                            <span>{option}</span>
-                            {gender === option ? <Check className="size-4" /> : null}
-                          </button>
-                        ))}
-                      </motion.div>
-                    ) : null}
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Used to show you the right services, stylists and reward cards.
-                  </p>
-                </div>
+                <GenderChoice value={gender} onChange={setGender} disabled={otpSent} />
 
                 {!otpSent ? (
-                  <button
-                    type="submit"
-                    disabled={sendingOtp}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {sendingOtp ? <InlineOrb theme="light" /> : <Phone className="size-4" />}
-                    {sendingOtp ? "Sending code..." : "Send verification code"}
-                  </button>
+                  <ButtonLoadingMorph type="submit" state={sendingOtp ? "loading" : "idle"} icon={MessageSquareText} size="lg" fullWidth loadingLabel="Sending code…">
+                    Send code
+                  </ButtonLoadingMorph>
                 ) : (
-                  <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-                    <p className="text-sm font-semibold text-foreground">Enter the 6-digit code sent to {signupPhone}</p>
-                    <OtpCodeInput
+                  <motion.div variants={variants.scaleIn} initial="hidden" animate="show" className="space-y-3 rounded-2xl bg-card p-4 ring-1 ring-inset ring-border">
+                    <p className="text-center text-sm font-semibold">Enter the 6-digit code sent to {signupPhone}</p>
+                    <OtpInput
                       value={otp}
                       onChange={next => {
                         setOtp(next)
@@ -685,8 +599,13 @@ export default function SignupPage() {
                       }}
                       onComplete={handleVerifyOtp}
                       disabled={verifyingOtp}
-                      invalid={otpInvalid}
+                      error={otpInvalid ? "That code didn't match" : false}
                     />
+                    {verifyingOtp ? (
+                      <p className="flex items-center justify-center gap-2 text-caption text-ink-neutral" aria-live="polite">
+                        <BrandDots className="text-portal" size={5} /> Checking your code…
+                      </p>
+                    ) : null}
                     <div className="flex items-center justify-between gap-2">
                       <button
                         type="button"
@@ -695,35 +614,31 @@ export default function SignupPage() {
                           setOtp("")
                           setOtpError("")
                         }}
-                        className="text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                        className="inline-flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-neutral hover:text-foreground"
                       >
-                        Change number
+                        <Pencil className="size-4" aria-hidden /> Change number
                       </button>
                       <button
                         type="button"
                         onClick={handleResendSms}
                         disabled={resendWaitSeconds > 0 || sendingOtp}
-                        className="shrink-0 text-xs font-semibold text-accent transition-colors hover:text-accent/80 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                        className="inline-flex h-11 shrink-0 items-center gap-1.5 text-sm font-semibold text-ink-primary tabular-nums disabled:cursor-not-allowed disabled:text-ink-neutral"
                       >
-                        {resendWaitSeconds > 0 ? `Resend in ${resendWaitSeconds}s` : sendingOtp ? "Sending…" : "Resend code"}
+                        <RotateCcw className="size-4" aria-hidden />
+                        {resendWaitSeconds > 0 ? `Resend in ${resendWaitSeconds}s` : sendingOtp ? "Sending…" : "Resend"}
                       </button>
                     </div>
-                    {verifyingOtp ? (
-                      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <InlineOrb /> Checking your code…
-                      </p>
-                    ) : null}
-                  </div>
+                  </motion.div>
                 )}
 
                 {otpError ? (
-                  <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                  <p role="alert" className="rounded-2xl bg-destructive/10 px-3 py-2.5 text-sm text-ink-destructive">
                     {otpError}
                   </p>
                 ) : null}
 
                 {attemptedPhone && missingPhoneStep.length && !otpSent ? (
-                  <ul role="alert" className="space-y-1 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                  <ul role="alert" className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2.5 text-sm text-ink-destructive">
                     {missingPhoneStep.map(item => (
                       <li key={item}>{item}</li>
                     ))}
@@ -733,157 +648,83 @@ export default function SignupPage() {
             )}
 
             {creatingAccount ? (
-              <div className="flex items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-semibold text-foreground">
-                <InlineOrb />
-                Creating your account…
+              <div className="flex items-center justify-center gap-2 rounded-2xl bg-portal/10 px-4 py-3 text-sm font-semibold" aria-live="polite">
+                <BrandDots className="text-portal" /> Creating your account…
               </div>
             ) : phoneVerified && !emailVerified ? (
-              <p className="text-center text-xs text-muted-foreground">
-                Phone verified. Open the email link to finish creating your account.
-              </p>
+              <p className="text-center text-caption text-ink-neutral">Phone verified. Open the email link to finish.</p>
             ) : null}
 
             <button
               type="button"
               onClick={handleStartOver}
               disabled={creatingAccount}
-              className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+              className="mx-auto flex h-11 items-center gap-1.5 text-sm font-semibold text-ink-neutral hover:text-foreground disabled:opacity-50"
             >
-              Wrong details? Start over
+              <RotateCcw className="size-4" aria-hidden /> Wrong details? Start over
             </button>
           </motion.div>
         ) : (
-          <motion.form
-            key="details-step"
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -16 }}
-            transition={{ duration: 0.25 }}
-            onSubmit={handleSignup}
-            className="space-y-4"
-          >
+          <motion.form key="details-step" variants={variants.fadeUp} initial="hidden" animate="show" exit="exit" onSubmit={handleSignup} className="space-y-4">
             {referralCode ? (
-              <div className="flex items-center gap-2.5 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
-                <Gift className="size-4 shrink-0 text-accent" />
-                <p className="text-xs text-foreground/90">
-                  You were invited with code{" "}
-                  <span className="font-sans font-semibold tabular-nums text-accent">{referralCode}</span>. Sign up to
-                  unlock your welcome bonus.
+              <motion.div variants={variants.scaleIn} initial="hidden" animate="show" className="flex items-center gap-3 rounded-2xl bg-gold/12 px-4 py-3 ring-1 ring-inset ring-gold/40">
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gold/20 text-gold">
+                  <Gift className="size-5" aria-hidden />
+                </span>
+                <p className="text-sm">
+                  Invited with <span className="font-mono font-bold tracking-wider">{referralCode}</span>. Sign up to unlock your welcome bonus.
                 </p>
-              </div>
+              </motion.div>
             ) : null}
 
-            <button
-              type="button"
-              onClick={handleGoogleSignup}
-              disabled={submitting}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm font-semibold text-foreground transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              <GoogleLogo />
-              Continue with Google
-            </button>
+            <ButtonLoadingMorph variant="outline" size="lg" fullWidth onClick={handleGoogleSignup} disabled={submitting}>
+              <GoogleLogo /> Continue with Google
+            </ButtonLoadingMorph>
 
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-xs">
-                <span className="bg-background px-2 text-muted-foreground">Or sign up with email</span>
-              </div>
-            </div>
+            <AuthDivider label="or with email" />
 
+            <FloatingLabelInput label="Full name" icon={User} value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" success={isValidFullName(fullName)} />
+            <FloatingLabelInput
+              label="Email"
+              icon={Mail}
+              type="email"
+              inputMode="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoComplete="email"
+              hint="We'll email a link to confirm it"
+              success={EMAIL_RE.test(email.trim())}
+            />
             <div>
-              <label className={labelClass}>Full Name</label>
-              <div className="relative">
-                <User className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={e => setFullName(e.target.value)}
-                  placeholder="Priya Sharma"
-                  autoComplete="name"
-                  className={inputClass}
-                />
-                {isValidFullName(fullName) ? (
-                  <CheckCircle2 className="absolute right-3 top-3.5 size-5 text-success" />
-                ) : null}
-              </div>
-            </div>
-
-            <div>
-              <label className={labelClass}>Email</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="hello@sahasra.com"
-                  autoComplete="email"
-                  className={inputClass}
-                />
-                {EMAIL_RE.test(email.trim()) ? (
-                  <CheckCircle2 className="absolute right-3 top-3.5 size-5 text-success" />
-                ) : null}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                We'll email you a link to confirm this address. Use one you can open now.
-              </p>
-            </div>
-
-            <div>
-              <label className={labelClass}>Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3.5 size-5 text-muted-foreground" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  autoComplete="new-password"
-                  className={inputClass}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(value => !value)}
-                  className="absolute right-3 top-3.5 text-muted-foreground transition-colors hover:text-foreground"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
-                </button>
-              </div>
+              <FloatingLabelInput label="Password" icon={Lock} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" hint={password ? undefined : "8+ characters"} />
               {password ? (
-                <div className="mt-2 flex items-center gap-2 text-xs">
+                <div className="mt-2 flex items-center gap-2 px-1 text-caption">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={`h-full ${getPasswordStrengthColor()} transition-all`}
-                      style={{ width: `${(passwordStrength / 5) * 100}%` }}
+                      className={`h-full origin-left rounded-full ${getPasswordStrengthColor()} transition-transform duration-500 ease-[var(--ease-out-expo)]`}
+                      style={{ transform: `scaleX(${passwordStrength / 5})` }}
                     />
                   </div>
-                  <span className="text-muted-foreground">{getPasswordStrengthText()}</span>
+                  <span className="w-12 text-right font-semibold text-ink-neutral">{getPasswordStrengthText()}</span>
                 </div>
               ) : null}
             </div>
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? <InlineOrb theme="light" /> : null}
-              {submitting ? "Please wait..." : "Continue"}
-            </button>
+            <ButtonLoadingMorph type="submit" state={submitting ? "loading" : "idle"} size="lg" fullWidth loadingLabel="Please wait…">
+              Continue <ArrowRight className="size-4" aria-hidden />
+            </ButtonLoadingMorph>
 
             {attemptedAccount && missingAccount.length ? (
-              <ul role="alert" className="space-y-1 rounded-xl bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+              <ul role="alert" className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2.5 text-sm text-ink-destructive">
                 {missingAccount.map(item => (
                   <li key={item}>{item}</li>
                 ))}
               </ul>
             ) : null}
 
-            <p className="text-center text-xs text-muted-foreground">
-              By signing up, you agree to our Terms of Service and Privacy Policy. Next you'll verify your phone number.
+            <p className="flex items-start gap-2 text-center text-caption text-ink-neutral">
+              <Sparkles className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              By signing up you agree to our Terms of Service and Privacy Policy. Next, you'll verify your phone.
             </p>
           </motion.form>
         )}

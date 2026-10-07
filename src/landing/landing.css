@@ -1,0 +1,57 @@
+/* Landing-only styles (loaded with the landing chunk). Tokens and keyframes live in globals.css. */
+
+/* Lenis smooth scroll: it drives native scrolling, so CSS smooth-scroll must step aside. */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* Anchored sections land below the floating navbar. */
+.landing-root section[id] {
+  scroll-margin-top: calc(88px + var(--safe-top));
+}
+
+/* Infinite marquee: the track holds the list twice and slides by half its width (transform only). */
+@keyframes landing-marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+.landing-marquee {
+  animation: landing-marquee 42s linear infinite;
+  will-change: transform;
+}
+.landing-marquee-wrap:hover .landing-marquee {
+  animation-play-state: paused;
+}
+
+/* Scroll cue in the hero. */
+@keyframes landing-cue {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  60% { transform: translateY(8px); opacity: 0.2; }
+}
+.landing-cue {
+  animation: landing-cue 1.8s var(--ease-emphasized) infinite;
+}
+
+/* Fade-out edges for horizontal rails. */
+.landing-fade-x {
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-marquee,
+  .landing-cue {
+    animation: none !important;
+  }
+}

@@ -1,157 +1,68 @@
 import { Link } from "react-router-dom"
-import { motion } from "motion/react"
-import { useEffect, useState } from "react"
-import { Clock, Gift, Home, Moon, Scissors, Sparkles, Sun } from "lucide-react"
-import { useAppThemeToggle } from "@/components/theme-provider"
+import { Home } from "lucide-react"
+import { AuthLayout } from "@/components/kit/auth-layout"
+import { OfflineBanner } from "@/components/kit/offline-banner"
+import { LandingThemeToggle } from "@/components/kit-extra/landing-theme-toggle"
 
-const HEADER_TAGLINES = [
-  { icon: Sparkles, text: "Premium salon care for everyone" },
-  { icon: Clock, text: "Book your visit in under a minute" },
-  { icon: Gift, text: "Earn rewards on every visit" },
-]
-
-/** Rotating one-line highlights so the header is never just a logo and a toggle. */
-function HeaderTagline() {
-  const [index, setIndex] = useState(0)
-  useEffect(() => {
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined
-    const id = window.setInterval(() => setIndex(value => (value + 1) % HEADER_TAGLINES.length), 3200)
-    return () => window.clearInterval(id)
-  }, [])
-  const { icon: Icon, text } = HEADER_TAGLINES[index]
+/**
+ * Auth screens on the shared kit AuthLayout (aurora brand panel + glass form card). Keeps the
+ * props every auth page already passes: the side panel title/description/cards become the
+ * AuthLayout heading and icon highlights; the form card gets its own title and sign-in/up link.
+ * `sideFooter` is still accepted but no longer rendered (the highlights carry the same message).
+ */
+export function AuthPageShell({ title, subtitle, subtitleLink, subtitleLinkLabel, sideTitle, sideDescription, sideCards = [], children, footer }) {
   return (
-    <div className="hidden h-9 items-center overflow-hidden rounded-full border border-border bg-card/60 px-4 md:flex">
-      <div key={text} className="flex animate-tagline-in items-center gap-2 text-sm font-medium text-foreground">
-        <Icon className="size-4 text-primary" />
-        {text}
+    <div className="relative">
+      <OfflineBanner />
+      <div className="absolute top-[calc(0.75rem+var(--safe-top))] right-3 z-raised flex items-center gap-1 sm:right-4">
+        <Link to="/" aria-label="Home" className="grid size-11 place-items-center rounded-full transition-colors hover:bg-muted">
+          <Home className="size-5" aria-hidden />
+        </Link>
+        <LandingThemeToggle />
       </div>
+      <AuthLayout
+        title={sideTitle || title}
+        subtitle={sideDescription}
+        highlights={sideCards.map(({ icon, text }) => ({ icon, label: text }))}
+        footer={footer}
+      >
+        <div className="mb-6">
+          <h2 className="font-display text-title font-bold">{title}</h2>
+          {subtitle ? (
+            <p className="mt-1.5 text-sm text-ink-neutral">
+              {subtitle}{" "}
+              {subtitleLink && subtitleLinkLabel ? (
+                <Link to={subtitleLink} className="tap font-semibold text-ink-primary underline-offset-4 hover:underline">
+                  {subtitleLinkLabel}
+                </Link>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+        {children}
+      </AuthLayout>
     </div>
   )
 }
 
-export function AuthPageShell({
-  title,
-  subtitle,
-  subtitleLink,
-  subtitleLinkLabel,
-  sideTitle,
-  sideDescription,
-  sideCards = [],
-  sideFooter,
-  children,
-  footer,
-}) {
-  const { isDark, toggleTheme } = useAppThemeToggle()
-
+/** "or" divider between sign-in methods. */
+export function AuthDivider({ label = "or" }) {
   return (
-    <div className="min-h-screen text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <Link to="/" className="group flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-transform duration-300 group-hover:scale-110">
-              <Scissors className="size-4" />
-            </div>
-            <span className="font-display text-base font-bold tracking-wide text-foreground">Sahasra</span>
-          </Link>
-          <HeaderTagline />
-          <div className="flex items-center gap-2">
-            <Link
-              to="/"
-              className="hidden h-9 items-center gap-1.5 rounded-xl border border-border bg-card px-3 text-sm font-medium text-foreground sm:inline-flex"
-            >
-              <Home className="size-4" />
-              Home
-            </Link>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="inline-flex size-9 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition-all duration-200 hover:scale-105 hover:bg-muted hover:text-foreground"
-              aria-label="Toggle theme"
-            >
-              {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="grid min-h-[calc(100vh-73px)] lg:grid-cols-2">
-        <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/10 lg:block">
-          <div className="absolute -left-32 -top-32 size-96 rounded-full bg-primary/5 blur-3xl" />
-          <div className="absolute -right-32 bottom-0 size-80 rounded-full bg-accent/5 blur-3xl" />
-
-          <div className="relative flex h-full flex-col items-center justify-center px-8 py-12 text-center">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="mb-12"
-            >
-              <h2 className="font-display text-4xl font-bold text-foreground">{sideTitle}</h2>
-              <p className="mt-3 max-w-sm text-muted-foreground">{sideDescription}</p>
-            </motion.div>
-
-            {sideCards.length > 0 ? (
-              <motion.div
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.1 }}
-                className="w-full max-w-xs space-y-4"
-              >
-                {sideCards.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-3 rounded-xl border border-border bg-card/50 p-4 backdrop-blur-sm"
-                  >
-                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                      <item.icon className="size-5 text-primary" />
-                    </div>
-                    <div className="text-left">
-                      <p className="text-sm font-semibold text-foreground">{item.text}</p>
-                      <p className="text-xs text-muted-foreground">{item.sub}</p>
-                    </div>
-                  </div>
-                ))}
-              </motion.div>
-            ) : null}
-
-            {sideFooter ? (
-              <motion.div
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="mt-12 w-full max-w-xs"
-              >
-                {sideFooter}
-              </motion.div>
-            ) : null}
-          </div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex items-center justify-center px-4 py-12 sm:px-6 lg:px-12"
-        >
-          <div className="w-full max-w-md">
-            <div className="mb-8">
-              <h1 className="font-display text-3xl font-bold text-foreground">{title}</h1>
-              {subtitle ? (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {subtitle}{" "}
-                  {subtitleLink && subtitleLinkLabel ? (
-                    <Link to={subtitleLink} className="font-semibold text-accent hover:text-accent/80">
-                      {subtitleLinkLabel}
-                    </Link>
-                  ) : null}
-                </p>
-              ) : null}
-            </div>
-            {children}
-            {footer}
-          </div>
-        </motion.div>
-      </div>
+    <div className="my-5 flex items-center gap-3 text-caption text-ink-neutral" role="separator">
+      <span className="h-px flex-1 bg-border" />
+      {label}
+      <span className="h-px flex-1 bg-border" />
     </div>
+  )
+}
+
+export function GoogleLogo({ className = "size-5" }) {
+  return (
+    <svg viewBox="0 0 48 48" className={className} aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
   )
 }

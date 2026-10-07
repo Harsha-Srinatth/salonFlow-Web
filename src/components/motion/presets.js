@@ -88,6 +88,8 @@ export function haptic(kind = "tap") {
   try {
     if (typeof navigator === "undefined" || !navigator.vibrate) return;
     if (prefersReducedMotion()) return;
+    // Chrome blocks (and logs an error for) vibrate before the first user gesture, e.g. a toast on redirect.
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
     navigator.vibrate(haptics[kind] ?? haptics.tap);
   } catch {
     // Some browsers throw when vibrate is blocked by permissions policy.
