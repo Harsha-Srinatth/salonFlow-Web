@@ -6,9 +6,10 @@ import { AdminRealtimeBridge } from "./admin-realtime-bridge";
 import { useAdminFrame } from "./admin-frame-context";
 
 /**
- * Page wrapper. Inside the persistent `AdminFrame` it only reports the page title and portals the
- * page's header actions into the frame's header; outside it (the auth/chunk loading fallback) it
- * renders a complete shell so the chrome is still on screen.
+ * Page wrapper. Inside the persistent `AdminFrame` it reports the page title and portals the page's
+ * header actions into the top bar (≥640px); on phones the same actions render as a row above the
+ * page content, where they have room. Outside the frame (the auth/chunk loading fallback) it renders
+ * a complete shell so the chrome is still on screen.
  */
 export function AdminLayout({ pageTitle, description, actions, children }) {
   const frame = useAdminFrame();
@@ -28,8 +29,8 @@ export function AdminLayout({ pageTitle, description, actions, children }) {
 
   return (
     <>
-      {actions && frame.slots.desktop ? createPortal(actions, frame.slots.desktop) : null}
-      {actions && frame.slots.mobile ? createPortal(actions, frame.slots.mobile) : null}
+      {actions && frame.slot ? createPortal(actions, frame.slot) : null}
+      {actions ? <div className="mb-4 flex flex-wrap items-center justify-end gap-2 sm:hidden">{actions}</div> : null}
       {children}
     </>
   );

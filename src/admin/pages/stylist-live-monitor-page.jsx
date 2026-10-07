@@ -1,5 +1,6 @@
 "use client";
 
+import { selectAppointmentsList } from "@/admin/lib/selectors";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { EmptyState } from "@/admin/components/empty-state";
@@ -7,7 +8,7 @@ import { ErrorBanner } from "@/admin/components/error-banner";
 import { StatCard } from "@/admin/components/stat-card";
 import { StatusPill } from "@/admin/components/status-pill";
 import { AnimatePresence, motion } from "motion/react";
-import { fetchAdminBookings, selectAdminAppointments } from "@/store/admin-portal-slice";
+import { fetchAdminBookings } from "@/store/admin-portal-slice";
 import { Activity, AlertTriangle, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -24,7 +25,7 @@ function formatMs(ms) {
 export default function AdminStylistLiveMonitorPage() {
   const dispatch = useDispatch();
   const [nowMs, setNowMs] = useState(Date.now());
-  const appointments = useSelector(selectAdminAppointments);
+  const appointments = useSelector(selectAppointmentsList);
   const { realtimeConnected, appointmentsError } = useSelector((state) => state.adminPortal);
 
   useEffect(() => {
