@@ -1,20 +1,41 @@
 "use client";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  BadgePercent,
+  Ban,
+  CalendarClock,
+  CalendarX,
+  CreditCard,
+  Gift,
+  Percent,
+  Pencil,
+  ReceiptText,
+  RefreshCw,
+  Scissors,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  TriangleAlert,
+  UserRound,
+  Users,
+  Wallet,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CustomerServicePicker, iconForCategory } from "@/components/services/customer-service-picker";
 import { ServiceDetailsSheet } from "@/components/services/service-details-sheet";
-import { salonDateIso, salonHour, salonTimeLabel } from "@/lib/salon-date";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
-import { toApiUrl } from "@/lib/api-base";
+import { AnimatedStepper, Avatar, BrandDots, BrandLoader, DateStrip, EmptyState, SlideToConfirm, TimeSlotPicker } from "@/components/kit";
+import { haptic, interaction, spring } from "@/components/motion/presets";
+import { UserPriceBreakdown } from "@/components/kit-extra/user-price-breakdown";
+import { salonDateIso, salonRelativeDayLabel, salonTimeLabel } from "@/lib/salon-date";
+import { formatMoney } from "@/lib/format";
 import { authedRequest } from "@/lib/payments-api";
-import {
-  clearPendingPayment,
-  isTerminalState,
-  pollPaymentStatus,
-  readPendingPayment,
-  runRazorpayPayment,
-} from "@/lib/razorpay-checkout";
+import { clearPendingPayment, isTerminalState, pollPaymentStatus, readPendingPayment, runRazorpayPayment } from "@/lib/razorpay-checkout";
 import {
   createCustomerBookingAsync,
   fetchCustomerBookings,
@@ -32,65 +53,19 @@ import {
 import { resolveServicePrice } from "@/lib/service-pricing";
 import { cn } from "@/lib/utils";
 import { describeCancellationWindows } from "@/lib/cancellation-policy";
-import {
-  ArrowLeft,
-  ArrowRight,
-  CalendarCheck,
-  CalendarClock,
-  CalendarX,
-  Check,
-  CheckCircle2,
-  Clock,
-  CreditCard,
-  Gift,
-  History,
-  Loader2,
-  Moon,
-  ShoppingBag,
-  Info,
-  Pencil,
-  RefreshCw,
-  Scissors,
-  Sparkles,
-  Sun,
-  Sunset,
-  Ban,
-  BadgePercent,
-  Percent,
-  ShieldCheck,
-  Ticket,
-  TriangleAlert,
-  User,
-  Wallet,
-  X,
-} from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-
-async function authedJson(path) {
-  const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl(path), {
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  const data = await res.json().catch(() => ({}));
-  return res.ok ? data : null;
-}
-
-async function fetchLoyaltySnapshot() {
-  const data = await authedJson("/api/customer/loyalty");
-  return {
-    walletBalance: Number(data?.walletBalance ?? 0),
-    isFirstTimeCustomer: Boolean(data?.isFirstTimeCustomer),
-    firstBookingDiscountPercent: Number(data?.firstBookingDiscountPercent ?? 0),
-  };
-}
+import { useInvite } from "../portal/user-frame-context";
+import { loadLoyalty, useLoyalty } from "../lib/use-loyalty";
+import { fetchRewardVault } from "../lib/user-api";
+import { StylistPicker } from "../components/booking/stylist-picker";
+import { ToggleRow } from "../components/booking/toggle-row";
+import { BookingSuccess } from "../components/booking/booking-success";
+import { BookingAside, CartBar } from "../components/booking/booking-summary";
+import { SectionHeading } from "../components/section-heading";
 
 async function fetchUnclaimedVouchers() {
-  const data = await authedJson("/api/customer/loyalty/vault");
+  const data = await fetchRewardVault().catch(() => null);
   const map = new Map();
   for (const win of data?.wins ?? []) {
     if (win.status === "UNCLAIMED" && !map.has(win.serviceId)) map.set(win.serviceId, win.serviceName);
@@ -99,164 +74,65 @@ async function fetchUnclaimedVouchers() {
 }
 
 const STEPS = [
-  { label: "Services", icon: Scissors },
-  { label: "Date & time", icon: CalendarClock },
-  { label: "Review", icon: CreditCard },
+  { id: "services", label: "Services", icon: Scissors },
+  { id: "stylist", label: "Stylist", icon: Users },
+  { id: "time", label: "Time", icon: CalendarClock },
+  { id: "review", label: "Review", icon: ReceiptText },
+  { id: "pay", label: "Pay", icon: CreditCard },
 ];
+const NEXT_LABEL = ["Choose stylist", "Pick a time", "Review", "Continue to pay"];
 
 const REFUND_META = {
-  FULL: { icon: ShieldCheck, tone: "bg-success/10 text-success" },
-  PARTIAL: { icon: Percent, tone: "bg-warning/20 text-foreground" },
-  NONE: { icon: Ban, tone: "bg-destructive/10 text-destructive" },
+  FULL: { icon: ShieldCheck, tone: "bg-success/12 text-ink-success" },
+  PARTIAL: { icon: Percent, tone: "bg-warning/14 text-ink-warning" },
+  NONE: { icon: Ban, tone: "bg-destructive/12 text-ink-destructive" },
 };
 
-const rupees = (value) => `₹${(Math.round(Number(value) * 100) / 100).toLocaleString("en-IN")}`;
-const timeLabel = (iso) => salonTimeLabel(iso);
-const dayLabel = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+const money = (value) => formatMoney(value);
+const dayLabel = (iso) => salonRelativeDayLabel(iso);
 
-function Stepper({ step, maxStep, onJump }) {
+function StepPanel({ stepKey, direction, children }) {
+  const reduce = useReducedMotion();
   return (
-    <ol className="flex items-center gap-2" aria-label="Booking steps">
-      {STEPS.map(({ label, icon: Icon }, index) => {
-        const done = index < step;
-        const active = index === step;
-        const reachable = index <= maxStep;
-        return (
-          <li key={label} className="flex flex-1 items-center gap-2 last:flex-none sm:last:flex-1">
-            <button
-              type="button"
-              disabled={!reachable}
-              onClick={() => onJump(index)}
-              aria-current={active ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-sm font-semibold",
-                active ? "bg-primary text-primary-foreground" : done ? "bg-secondary text-foreground" : "bg-card text-muted-foreground"
-              )}
-            >
-              <span
-                className={cn(
-                  "grid size-7 place-items-center rounded-full",
-                  active ? "bg-primary-foreground/20" : done ? "bg-primary text-primary-foreground" : "bg-muted"
-                )}
-              >
-                {done ? <Check className="size-4" /> : <Icon className="size-4" />}
-              </span>
-              <span className={cn(active ? "inline" : "hidden sm:inline")}>{label}</span>
-            </button>
-            {index < STEPS.length - 1 ? (
-              <span className={cn("h-0.5 flex-1 rounded-full", done ? "bg-primary" : "bg-muted")} />
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function SectionTitle({ icon: Icon, children }) {
-  return (
-    <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
-      <Icon className="size-5 text-primary" />
-      {children}
-    </h2>
-  );
-}
-
-function SlotGroups({ slots, value, onPick }) {
-  const groups = useMemo(() => {
-    const buckets = [
-      { key: "morning", label: "Morning", icon: Sun, items: [] },
-      { key: "afternoon", label: "Afternoon", icon: Sunset, items: [] },
-      { key: "evening", label: "Evening", icon: Moon, items: [] },
-    ];
-    for (const slot of slots) {
-      const hour = salonHour(slot.startsAt);
-      buckets[hour < 12 ? 0 : hour < 17 ? 1 : 2].items.push(slot);
-    }
-    return buckets.filter((bucket) => bucket.items.length);
-  }, [slots]);
-
-  return (
-    <div className="space-y-4">
-      {groups.map(({ key, label, icon: Icon, items }) => (
-        <div key={key}>
-          <p className="mb-2 flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-            <Icon className="size-4" />
-            {label}
-          </p>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            {items.map((slot) => (
-              <button
-                key={slot.startsAt}
-                type="button"
-                aria-pressed={value === slot.startsAt}
-                onClick={() => onPick(slot.startsAt)}
-                className={cn(
-                  "h-11 rounded-xl text-sm font-semibold",
-                  value === slot.startsAt ? "bg-primary text-primary-foreground" : "bg-card"
-                )}
-              >
-                {timeLabel(slot.startsAt)}
-              </button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ToggleRow({ icon: Icon, title, hint, checked, onChange, amount }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center gap-3 rounded-2xl bg-secondary p-3 text-left"
+    <motion.section
+      key={stepKey}
+      custom={direction}
+      initial={reduce ? { opacity: 0 } : { opacity: 0, x: direction * 32 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={reduce ? { opacity: 0 } : { opacity: 0, x: direction * -24, transition: { duration: 0.16 } }}
+      transition={spring.sheet}
+      className="min-w-0"
     >
-      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-card text-accent">
-        <Icon className="size-5" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{title}</span>
-        <span className="block truncate text-xs text-muted-foreground">{hint}</span>
-      </span>
-      {checked && amount > 0 ? <span className="text-sm font-bold text-success">-{rupees(amount)}</span> : null}
-      <span className={cn("flex h-6 w-11 shrink-0 items-center rounded-full p-0.5", checked ? "bg-primary" : "bg-muted-foreground/30")}>
-        <span className={cn("size-5 rounded-full bg-white transition-transform", checked ? "translate-x-5" : "translate-x-0")} />
-      </span>
-    </button>
+      {children}
+    </motion.section>
   );
 }
 
-function Row({ label, value, tone }) {
+function EditRow({ icon: Icon, children, onClick, label }) {
   return (
-    <div className={cn("flex items-center justify-between gap-3 text-sm", tone === "good" && "text-success")}>
-      <span className={tone === "good" ? "" : "text-muted-foreground"}>{label}</span>
-      <span className="font-semibold">{value}</span>
-    </div>
+    <button type="button" onClick={onClick} aria-label={label} className="flex w-full items-center gap-3 rounded-2xl p-2 text-left text-sm transition-colors hover:bg-muted">
+      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal/12 text-portal">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1 truncate font-medium">{children}</span>
+      <Pencil className="size-4 text-ink-neutral" aria-hidden />
+    </button>
   );
 }
 
 export default function UserAppointmentsPage() {
   const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
-  const {
-    stylists,
-    services,
-    servicesLoading,
-    slots,
-    slotsLoading,
-    recommendedStylists,
-    bookingForm,
-    priceSummary,
-    offers,
-    mutating,
-    error,
-  } = useSelector((state) => state.customerBookings);
+  const reduce = useReducedMotion();
+  const openInvite = useInvite();
+  const { stylists, services, servicesLoading, slots, slotsLoading, recommendedStylists, bookingForm, priceSummary, offers, mutating, error } = useSelector(
+    (state) => state.customerBookings
+  );
   const [step, setStep] = useState(0);
   const [maxStep, setMaxStep] = useState(0);
+  const [direction, setDirection] = useState(1);
+  // "" = any stylist. Kept locally because choosing a time resets the store's stylistId.
+  const [preferredStylistId, setPreferredStylistId] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWalletCredit, setUseWalletCredit] = useState(false);
   const [isFirstTimeCustomer, setIsFirstTimeCustomer] = useState(false);
@@ -274,6 +150,7 @@ export default function UserAppointmentsPage() {
   const snapshotRef = useRef(null);
 
   const isUser = appUser?.role === "USER";
+  const { referralLink } = useLoyalty({ enabled: isUser });
   // Salon-local dates (not UTC), re-checked when the tab comes back so a page left open past
   // midnight does not keep offering yesterday.
   const [todayIso, setTodayIso] = useState(() => salonDateIso(0));
@@ -323,16 +200,14 @@ export default function UserAppointmentsPage() {
   }, [location.state, navigate, setSearchParams]);
 
   const effectiveBookingDate = bookingForm.bookingDate || todayIso;
-  const selectedSlot = useMemo(
-    () => slots.find((slot) => slot.startsAt === bookingForm.startsAt) ?? null,
-    [slots, bookingForm.startsAt]
-  );
+  const selectedSlot = useMemo(() => slots.find((slot) => slot.startsAt === bookingForm.startsAt) ?? null, [slots, bookingForm.startsAt]);
   const stylistOptions = useMemo(() => {
     if (selectedSlot?.stylists?.length) return selectedSlot.stylists;
     if (recommendedStylists.length) return recommendedStylists;
     return stylists;
   }, [selectedSlot, recommendedStylists, stylists]);
   const selectedStylist = stylistOptions.find((item) => item.id === bookingForm.stylistId) ?? null;
+  const preferredStylist = stylists.find((item) => item.id === preferredStylistId) ?? null;
   // Each pick as the customer will be charged for it: chosen size/length in the name, member rate for
   // member plans, and that option's own duration.
   const selectedServices = useMemo(
@@ -342,19 +217,36 @@ export default function UserAppointmentsPage() {
         .map((service) => {
           const { variant, price } = resolveServicePrice(service, bookingForm.variantSelections?.[service.id], appUser?.membershipSegment);
           if (!variant) return { ...service, basePrice: price };
-          return {
-            ...service,
-            name: `${service.name} (${variant.name})`,
-            basePrice: price,
-            duration: Number(variant.duration) > 0 ? variant.duration : service.duration,
-          };
+          return { ...service, name: `${service.name} (${variant.name})`, basePrice: price, duration: Number(variant.duration) > 0 ? variant.duration : service.duration };
         }),
     [services, bookingForm.serviceIds, bookingForm.variantSelections, appUser?.membershipSegment]
   );
-  const detailService = useMemo(
-    () => (detailsServiceId ? services.find((service) => service.id === detailsServiceId) ?? null : null),
-    [services, detailsServiceId]
+  const detailService = useMemo(() => (detailsServiceId ? services.find((service) => service.id === detailsServiceId) ?? null : null), [services, detailsServiceId]);
+
+  // Slots seen through the chosen stylist: times they are not free are shown as unavailable with the
+  // reason, and a time with a single free stylist left is "filling fast". Both come from slot.stylists.
+  const slotsForPicker = useMemo(
+    () =>
+      slots.map((slot) => {
+        if (!Array.isArray(slot.stylists)) return slot;
+        if (preferredStylistId && !slot.stylists.some((s) => s.id === preferredStylistId)) {
+          return { ...slot, availability: "unavailable", reason: `${preferredStylist?.name?.split(" ")[0] ?? "Your stylist"} is busy` };
+        }
+        if (!slot.stylists.length) return { ...slot, availability: "busy" };
+        return !preferredStylistId && slot.stylists.length === 1 ? { ...slot, availability: "limited", seatsLeft: 1 } : slot;
+      }),
+    [slots, preferredStylistId, preferredStylist]
   );
+  const freeCounts = useMemo(() => {
+    if (!slots.length || !slots.some((slot) => Array.isArray(slot.stylists))) return null;
+    const byId = {};
+    let any = 0;
+    for (const slot of slots) {
+      if (slot.stylists?.length) any += 1;
+      for (const s of slot.stylists ?? []) byId[s.id] = (byId[s.id] ?? 0) + 1;
+    }
+    return { any, byId };
+  }, [slots]);
 
   // Keep the chosen day valid: an old date (restored cart, page left open overnight) resets to today.
   useEffect(() => {
@@ -364,19 +256,25 @@ export default function UserAppointmentsPage() {
     }
   }, [bookingForm.bookingDate, dispatch, isUser, todayIso, tomorrowIso]);
 
-  // Load everything once. (Previously this re-ran on every date change and refetched the catalog.)
+  const refreshLoyaltySnapshot = useCallback(() => {
+    void loadLoyalty({ force: true })
+      .then((data) => {
+        setWalletBalance(Number(data?.walletBalance ?? 0));
+        setIsFirstTimeCustomer(Boolean(data?.isFirstTimeCustomer));
+        setFirstBookingDiscountPercent(Number(data?.firstBookingDiscountPercent ?? 0));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  // Load everything once.
   useEffect(() => {
     if (!isUser) return;
     void dispatch(fetchCustomerStylists());
     void dispatch(fetchCustomerServices());
     void dispatch(fetchCustomerOffers());
-    void fetchLoyaltySnapshot().then((snapshot) => {
-      setWalletBalance(snapshot.walletBalance);
-      setIsFirstTimeCustomer(snapshot.isFirstTimeCustomer);
-      setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
-    });
+    refreshLoyaltySnapshot();
     void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
-  }, [dispatch, isUser]);
+  }, [dispatch, isUser, refreshLoyaltySnapshot]);
 
   useEffect(() => {
     if (error) notify.error(error);
@@ -387,38 +285,30 @@ export default function UserAppointmentsPage() {
       dispatch(setCustomerRecommendedStylists([]));
       return;
     }
-    void dispatch(
-      fetchRecommendedStylists({
-        serviceIds: bookingForm.serviceIds,
-        startsAt: bookingForm.startsAt,
-        variantSelections: bookingForm.variantSelections,
-      })
-    );
+    void dispatch(fetchRecommendedStylists({ serviceIds: bookingForm.serviceIds, startsAt: bookingForm.startsAt, variantSelections: bookingForm.variantSelections }));
   }, [bookingForm.startsAt, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
 
-  useEffect(() => {
-    if (!bookingForm.serviceIds.length || !effectiveBookingDate) return;
-    void dispatch(
-      fetchCustomerSlots({
-        serviceIds: bookingForm.serviceIds,
-        date: effectiveBookingDate,
-        variantSelections: bookingForm.variantSelections,
-      })
-    );
+  const loadSlots = useCallback(() => {
+    if (!bookingForm.serviceIds.length || !effectiveBookingDate) return undefined;
+    return dispatch(fetchCustomerSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate, variantSelections: bookingForm.variantSelections }));
   }, [effectiveBookingDate, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
+  useEffect(() => {
+    void loadSlots();
+  }, [loadSlots]);
 
   // The member rate depends on the customer's plan; keep the store's price estimate in step with it.
   useEffect(() => {
     dispatch(setCustomerMembershipSegment(appUser?.membershipSegment ?? "FREE"));
   }, [appUser?.membershipSegment, dispatch]);
 
-  // Always keep a valid stylist once a time is chosen, so the form can never look complete yet stay blocked.
+  // Always keep a valid stylist once a time is chosen (the preferred one when they are free), so the
+  // form can never look complete yet stay blocked.
   useEffect(() => {
     if (!selectedSlot || !stylistOptions.length) return;
-    if (!stylistOptions.some((item) => item.id === bookingForm.stylistId)) {
-      dispatch(setCustomerBookingField({ field: "stylistId", value: stylistOptions[0].id }));
-    }
-  }, [bookingForm.stylistId, dispatch, selectedSlot, stylistOptions]);
+    if (stylistOptions.some((item) => item.id === bookingForm.stylistId)) return;
+    const preferred = stylistOptions.find((item) => item.id === preferredStylistId);
+    dispatch(setCustomerBookingField({ field: "stylistId", value: (preferred ?? stylistOptions[0]).id }));
+  }, [bookingForm.stylistId, dispatch, selectedSlot, stylistOptions, preferredStylistId]);
 
   // Stable identity (reads the latest ids from a ref) so memoised service cards don't all re-render on each tap.
   const serviceIdsRef = useRef(bookingForm.serviceIds);
@@ -431,10 +321,9 @@ export default function UserAppointmentsPage() {
     },
     [dispatch]
   );
+  const selectVariant = useCallback((serviceId, variant) => dispatch(setCustomerVariantSelection({ serviceId, variant })), [dispatch]);
 
-  const firstBookingDiscountAmount = isFirstTimeCustomer
-    ? Math.round(priceSummary.payableAmount * (firstBookingDiscountPercent / 100) * 100) / 100
-    : 0;
+  const firstBookingDiscountAmount = isFirstTimeCustomer ? Math.round(priceSummary.payableAmount * (firstBookingDiscountPercent / 100) * 100) / 100 : 0;
   const afterFirstBookingDiscount = Math.max(0, priceSummary.payableAmount - firstBookingDiscountAmount);
 
   // Not offered alongside a combo — see the matching guard in createCustomerBooking on the backend.
@@ -442,10 +331,7 @@ export default function UserAppointmentsPage() {
   const voucherServiceName = voucherServiceId ? unclaimedVouchers.get(voucherServiceId) : null;
   const voucherPriced = voucherServiceId ? (offers?.pricedServices ?? []).find((item) => item.serviceId === voucherServiceId) : null;
   const voucherService = voucherServiceId ? services.find((item) => item.id === voucherServiceId) : null;
-  const voucherDiscountAmount =
-    voucherServiceId && useVoucher
-      ? Math.min(afterFirstBookingDiscount, Number(voucherPriced?.finalPrice ?? voucherService?.basePrice ?? 0))
-      : 0;
+  const voucherDiscountAmount = voucherServiceId && useVoucher ? Math.min(afterFirstBookingDiscount, Number(voucherPriced?.finalPrice ?? voucherService?.basePrice ?? 0)) : 0;
   const afterVoucherDiscount = Math.max(0, afterFirstBookingDiscount - voucherDiscountAmount);
   const walletRedeemAmount = useWalletCredit ? Math.min(walletBalance, afterVoucherDiscount) : 0;
   const finalPayableAmount = Math.max(0, afterVoucherDiscount - walletRedeemAmount);
@@ -455,15 +341,12 @@ export default function UserAppointmentsPage() {
     dispatch(resetCustomerBookingForm());
     dispatch(setCustomerBookingField({ field: "bookingDate", value: todayIso }));
     setUseWalletCredit(false);
+    setPreferredStylistId("");
     setStep(0);
     setMaxStep(0);
     void dispatch(fetchCustomerBookings());
     void fetchUnclaimedVouchers().then(setUnclaimedVouchers);
-    void fetchLoyaltySnapshot().then((snapshot) => {
-      setWalletBalance(snapshot.walletBalance);
-      setIsFirstTimeCustomer(snapshot.isFirstTimeCustomer);
-      setFirstBookingDiscountPercent(snapshot.firstBookingDiscountPercent);
-    });
+    refreshLoyaltySnapshot();
   }
 
   function applyPaymentResult(status) {
@@ -555,67 +438,25 @@ export default function UserAppointmentsPage() {
   }, [isUser]);
 
   function goTo(next) {
+    setDirection(next >= step ? 1 : -1);
     setStep(next);
     setMaxStep((current) => Math.max(current, next));
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    haptic("tap");
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   }
 
   if (loading) {
     return (
       <UserLayout pageTitle="Book">
-        <Skeleton className="h-96 rounded-3xl" />
+        <BrandLoader className="py-24" label="Loading" />
       </UserLayout>
-    );
-  }
-
-  if (!isUser) {
-    return (
-      <div className="mx-auto max-w-md space-y-4 p-6">
-        <p>Sign in as a customer to book appointments.</p>
-        <Button asChild>
-          <Link to="/auth/login">Customer login</Link>
-        </Button>
-      </div>
     );
   }
 
   if (confirmed) {
     return (
-      <UserLayout pageTitle="">
-        <div className="mx-auto flex max-w-lg flex-col items-center gap-5 rounded-3xl bg-card p-8 text-center">
-          <span className="grid size-20 place-items-center rounded-full bg-success/15 text-success">
-            <CheckCircle2 className="size-10" />
-          </span>
-          <div>
-            <h1 className="font-display text-2xl font-bold">You're booked</h1>
-            {confirmed.startsAt ? (
-              <p className="mt-1 text-muted-foreground">
-                {dayLabel(confirmed.startsAt.slice(0, 10))} · {timeLabel(confirmed.startsAt)}
-                {confirmed.stylist ? ` · ${confirmed.stylist}` : ""}
-              </p>
-            ) : null}
-          </div>
-          {confirmed.services?.length ? (
-            <ul className="w-full space-y-2 rounded-2xl bg-secondary p-4 text-left text-sm">
-              {confirmed.services.map((name) => (
-                <li key={name} className="flex items-center gap-2 font-medium">
-                  <Scissors className="size-4 text-primary" />
-                  {name}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="flex w-full flex-col gap-3 sm:flex-row">
-            <Button asChild className="h-12 flex-1 rounded-full">
-              <Link to="/user-dashboard/booking-history">
-                <History /> My bookings
-              </Link>
-            </Button>
-            <Button variant="secondary" className="h-12 flex-1 rounded-full" onClick={() => setConfirmed(null)}>
-              <CalendarCheck /> Book another
-            </Button>
-          </div>
-        </div>
+      <UserLayout pageTitle="Booked">
+        <BookingSuccess booked={confirmed} canInvite={Boolean(referralLink)} onInvite={openInvite} onBookAnother={() => setConfirmed(null)} />
       </UserLayout>
     );
   }
@@ -625,510 +466,398 @@ export default function UserAppointmentsPage() {
   const busy = mutating || payPhase !== "idle" || watching;
   const slotGone = Boolean(bookingForm.startsAt) && !selectedSlot && !slotsLoading;
   const timeReady = Boolean(selectedSlot) && Boolean(selectedStylist);
+  const whenLabel = bookingForm.startsAt ? `${dayLabel(effectiveBookingDate)} · ${salonTimeLabel(bookingForm.startsAt)}` : "";
 
   // One place decides whether "continue" is enabled and, if not, says why.
   let blocker = null;
   if (step === 0 && !bookingForm.serviceIds.length) blocker = "Pick at least one service";
-  else if (step === 1 && !timeReady) blocker = slotGone ? "That time was just taken. Pick another" : "Choose a time";
-  else if (step === 2 && !timeReady) blocker = "Choose a time first";
+  else if (step === 2 && !timeReady) blocker = slotGone ? "That time was just taken. Pick another" : "Choose a time";
+  else if (step >= 3 && !timeReady) blocker = "Choose a time first";
 
-  const stepBack = step > 0 && !busy;
-  const payLabel =
-    payPhase === "verifying"
-      ? "Verifying payment"
-      : payPhase === "checkout"
-        ? "Finish paying in the window"
-        : "Preparing payment";
+  const payLabel = payPhase === "verifying" ? "Verifying payment" : payPhase === "checkout" ? "Finish paying in the window" : watching && payPhase === "idle" ? "Checking payment" : "Preparing payment";
 
   const unitPrice = (service) => {
     const priced = (offers?.pricedServices ?? []).find((item) => item.serviceId === service.id);
     const percent = Number(priced?.appliedPercent ?? 0);
-    return Math.max(0, Math.round((Number(service.basePrice ?? 0) * (1 - percent / 100)) * 100) / 100);
+    return Math.max(0, Math.round(Number(service.basePrice ?? 0) * (1 - percent / 100) * 100) / 100);
   };
-  const nextLabel = step === 0 ? "Pick a time" : "Review";
 
-  const actions = (
-    <div className="flex items-center gap-2">
-      {stepBack ? (
-        <Button
+  const breakdownLines = [
+    { id: "subtotal", label: "Subtotal", amount: priceSummary.totalAmount, icon: ReceiptText },
+    priceSummary.discountAmount > 0 && { id: "offer", label: priceSummary.offerLabel ?? "Offer", amount: priceSummary.discountAmount, icon: BadgePercent, tone: "saving" },
+    firstBookingDiscountAmount > 0 && { id: "first", label: "First booking", amount: firstBookingDiscountAmount, icon: Sparkles, tone: "saving" },
+    voucherDiscountAmount > 0 && { id: "voucher", label: "Voucher", amount: voucherDiscountAmount, icon: Ticket, tone: "saving" },
+    walletRedeemAmount > 0 && { id: "wallet", label: "Wallet", amount: walletRedeemAmount, icon: Wallet, tone: "saving" },
+  ].filter(Boolean);
+
+  const backButton =
+    step > 0 && !busy ? (
+      <motion.button type="button" whileTap={reduce ? undefined : interaction.press} aria-label="Back" onClick={() => goTo(step - 1)} className="grid size-12 shrink-0 place-items-center rounded-control bg-secondary">
+        <ArrowLeft className="size-5" aria-hidden />
+      </motion.button>
+    ) : null;
+
+  const actions =
+    step < 4 ? (
+      <div className="flex items-center gap-2">
+        {backButton}
+        <motion.button
           type="button"
-          variant="secondary"
-          size="icon"
-          aria-label="Back"
-          className="size-12 shrink-0 rounded-full"
-          onClick={() => goTo(step - 1)}
-        >
-          <ArrowLeft />
-        </Button>
-      ) : null}
-      {step < 2 ? (
-        <Button
-          type="button"
-          className="h-12 flex-1 rounded-full px-6 text-base"
+          whileTap={reduce || blocker ? undefined : interaction.press}
           disabled={Boolean(blocker)}
           onClick={() => goTo(step + 1)}
+          className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-control bg-portal px-5 font-semibold text-portal-foreground shadow-soft transition-opacity hover:shadow-glow disabled:opacity-45"
         >
-          {nextLabel} <ArrowRight />
-        </Button>
-      ) : (
-        <Button
-          type="button"
-          className="h-12 flex-1 rounded-full px-6 text-base"
-          disabled={busy || Boolean(blocker)}
-          onClick={() => void createBooking()}
-        >
-          {busy ? (
-            <>
-              <Loader2 className="animate-spin" />
-              {watching && payPhase === "idle" ? "Checking" : payLabel}
-            </>
-          ) : finalPayableAmount > 0 ? (
-            <>
-              <CreditCard /> Pay {rupees(finalPayableAmount)}
-            </>
-          ) : (
-            <>
-              <CheckCircle2 /> Confirm
-            </>
-          )}
-        </Button>
-      )}
-    </div>
-  );
+          {NEXT_LABEL[step]} <ArrowRight className="size-5" aria-hidden />
+        </motion.button>
+      </div>
+    ) : (
+      <div className="flex items-center gap-2">
+        {backButton}
+        {busy ? (
+          <div role="status" className="flex h-[3.75rem] flex-1 items-center justify-center gap-3 rounded-full bg-portal/10 text-sm font-semibold text-portal">
+            <BrandDots /> {payLabel}
+          </div>
+        ) : (
+          <SlideToConfirm
+            key={`${finalPayableAmount}-${bookingForm.startsAt}`}
+            className="flex-1"
+            disabled={Boolean(blocker)}
+            label={finalPayableAmount > 0 ? `Slide to pay ${money(finalPayableAmount)}` : "Slide to confirm"}
+            confirmedLabel={finalPayableAmount > 0 ? "Opening payment" : "Booking"}
+            icon={finalPayableAmount > 0 ? CreditCard : undefined}
+            onConfirm={() => createBooking()}
+          />
+        )}
+      </div>
+    );
+
+  const cartChips =
+    step === 0 && selectedServices.length ? (
+      <ul aria-label="Selected services" className="no-scrollbar -mx-1 flex gap-1.5 overflow-x-auto px-1">
+        <AnimatePresence initial={false} mode="popLayout">
+          {selectedServices.map((service) => (
+            <motion.li
+              key={service.id}
+              layout={!reduce}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6 }}
+              transition={spring.bouncy}
+              className="flex shrink-0 items-center gap-1 rounded-full bg-portal/12 py-1 pr-1 pl-3 text-caption font-semibold text-portal"
+            >
+              <span className="max-w-[9rem] truncate">{service.name}</span>
+              <button type="button" aria-label={`Remove ${service.name}`} onClick={() => toggleService(service.id, false)} className="tap grid size-6 place-items-center rounded-full bg-card">
+                <X className="size-3.5" aria-hidden />
+              </button>
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+    ) : null;
 
   return (
-    <UserLayout pageTitle="Book">
+    <UserLayout pageTitle="Book" subtitle={STEPS[step].label}>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-6 pb-40 lg:pb-0">
-          <Stepper step={step} maxStep={maxStep} onJump={goTo} />
+        <div className={cn("min-w-0 space-y-6 lg:pb-0", selectedServices.length || step > 0 ? "pb-56" : "pb-4")}>
+          <AnimatedStepper steps={STEPS} current={step} onStepClick={(i) => i <= maxStep && goTo(i)} />
 
-          {bookingForm.comboId ? (
-            <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-medium text-success">
-              <Gift className="size-5 shrink-0" />
-              {priceSummary.offerLabel ?? "Combo offer applied"}
-            </div>
-          ) : null}
+          <AnimatePresence>
+            {bookingForm.comboId ? (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring.soft} className="flex items-center gap-3 rounded-card bg-success/12 p-3 text-sm font-semibold text-ink-success">
+                <Gift className="size-5 shrink-0" aria-hidden />
+                {priceSummary.offerLabel ?? "Combo offer applied"}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
-          {step === 0 ? (
-            <section>
-              <SectionTitle icon={Scissors}>What would you like?</SectionTitle>
-              <CustomerServicePicker
-                services={services}
-                loading={servicesLoading}
-                selectedIds={bookingForm.serviceIds}
-                pricedServices={offers?.pricedServices}
-                variantSelections={bookingForm.variantSelections}
-                membershipSegment={appUser?.membershipSegment}
-                onSelectVariant={(serviceId, variant) => dispatch(setCustomerVariantSelection({ serviceId, variant }))}
-                onToggle={toggleService}
-                onOpenDetails={openServiceDetails}
-              />
-            </section>
-          ) : null}
+          <AnimatePresence mode="wait" initial={false} custom={direction}>
+            {step === 0 ? (
+              <StepPanel stepKey="services" direction={direction}>
+                <CustomerServicePicker
+                  services={services}
+                  loading={servicesLoading}
+                  selectedIds={bookingForm.serviceIds}
+                  pricedServices={offers?.pricedServices}
+                  variantSelections={bookingForm.variantSelections}
+                  membershipSegment={appUser?.membershipSegment}
+                  expandedId={detailsServiceId}
+                  onSelectVariant={selectVariant}
+                  onToggle={toggleService}
+                  onOpenDetails={openServiceDetails}
+                />
+              </StepPanel>
+            ) : null}
 
-          {step === 1 ? (
-            <section className="space-y-8">
-              <div>
-                <SectionTitle icon={CalendarClock}>Day</SectionTitle>
-                <div className="grid grid-cols-2 gap-3">
-                  {[todayIso, tomorrowIso].map((iso, index) => (
-                    <button
-                      key={iso}
-                      type="button"
-                      aria-pressed={effectiveBookingDate === iso}
-                      onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: iso }))}
-                      className={cn(
-                        "flex flex-col items-start rounded-2xl p-4 text-left",
-                        effectiveBookingDate === iso ? "bg-primary text-primary-foreground" : "bg-card"
-                      )}
-                    >
-                      <span className="text-xs font-semibold uppercase tracking-wide opacity-80">
-                        {index === 0 ? "Today" : "Tomorrow"}
-                      </span>
-                      <span className="text-lg font-bold">{dayLabel(iso)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {step === 1 ? (
+              <StepPanel stepKey="stylist" direction={direction}>
+                <SectionHeading icon={Users} title="Who would you like?" />
+                <StylistPicker
+                  stylists={stylists}
+                  value={preferredStylistId}
+                  loading={!stylists.length}
+                  freeCounts={freeCounts}
+                  dayLabel={effectiveBookingDate === todayIso ? "today" : "tomorrow"}
+                  onChange={(id) => {
+                    setPreferredStylistId(id);
+                    // A different stylist may not be free at the time already picked.
+                    if (bookingForm.startsAt && id && !selectedSlot?.stylists?.some((s) => s.id === id)) {
+                      dispatch(setCustomerBookingField({ field: "startsAt", value: "" }));
+                    } else if (bookingForm.startsAt && id) {
+                      dispatch(setCustomerBookingField({ field: "stylistId", value: id }));
+                    }
+                  }}
+                />
+              </StepPanel>
+            ) : null}
 
-              <div>
-                <SectionTitle icon={Clock}>Time</SectionTitle>
-                {slotsLoading && !slots.length ? (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                    {Array.from({ length: 12 }, (_, i) => (
-                      <Skeleton key={i} className="h-11" />
-                    ))}
-                  </div>
-                ) : slots.length ? (
-                  <SlotGroups
-                    slots={slots}
-                    value={bookingForm.startsAt}
-                    onPick={(value) => dispatch(setCustomerBookingField({ field: "startsAt", value }))}
+            {step === 2 ? (
+              <StepPanel stepKey="time" direction={direction}>
+                <div className="space-y-6">
+                  <DateStrip
+                    value={effectiveBookingDate}
+                    onChange={(iso) => dispatch(setCustomerBookingField({ field: "bookingDate", value: iso }))}
+                    days={2}
+                    minDate={todayIso}
+                    maxDate={tomorrowIso}
+                    expandable={false}
+                    label="Day"
                   />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 rounded-2xl bg-card py-10 text-center">
-                    <CalendarX className="size-8 text-muted-foreground" />
-                    <p className="font-semibold">No free times this day</p>
-                    {effectiveBookingDate === todayIso ? (
-                      <button
-                        type="button"
-                        className="text-sm font-medium text-primary underline"
-                        onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: tomorrowIso }))}
-                      >
-                        Try tomorrow
-                      </button>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-
-              {selectedSlot && stylistOptions.length ? (
-                <div>
-                  <SectionTitle icon={User}>Stylist</SectionTitle>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {stylistOptions.map((stylist) => {
-                      const active = stylist.id === bookingForm.stylistId;
-                      return (
-                        <button
-                          key={stylist.id}
-                          type="button"
-                          aria-pressed={active}
-                          onClick={() => dispatch(setCustomerBookingField({ field: "stylistId", value: stylist.id }))}
-                          className={cn(
-                            "flex items-center gap-3 rounded-2xl p-3 text-left ring-2",
-                            active ? "bg-primary/10 ring-primary" : "bg-card ring-transparent"
-                          )}
-                        >
-                          <span className="grid size-11 shrink-0 place-items-center rounded-full bg-accent text-base font-bold text-accent-foreground">
-                            {`${stylist.name ?? "?"}`.charAt(0).toUpperCase()}
+                  <div>
+                    <SectionHeading
+                      icon={CalendarClock}
+                      title="Time"
+                      trailing={
+                        preferredStylist ? (
+                          <span className="inline-flex max-w-[45%] items-center gap-1.5 truncate rounded-full bg-muted px-2.5 py-1 text-caption font-semibold">
+                            <Avatar name={preferredStylist.name} size="xs" /> <span className="truncate">{preferredStylist.name}</span>
                           </span>
-                          <span className="min-w-0 flex-1 truncate font-semibold">{stylist.name}</span>
-                          {active ? <Check className="size-5 text-primary" /> : null}
-                        </button>
+                        ) : null
+                      }
+                    />
+                    <TimeSlotPicker
+                      slots={slotsForPicker}
+                      value={bookingForm.startsAt}
+                      onChange={(value) => dispatch(setCustomerBookingField({ field: "startsAt", value }))}
+                      loading={slotsLoading}
+                      empty={
+                        <EmptyState
+                          illustration="calendar"
+                          title="No free times"
+                          compact
+                          action={
+                            effectiveBookingDate === todayIso ? (
+                              <button type="button" onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: tomorrowIso }))} className="inline-flex h-11 items-center gap-2 rounded-control bg-portal px-5 text-sm font-semibold text-portal-foreground">
+                                <CalendarX className="size-4" aria-hidden /> Try tomorrow
+                              </button>
+                            ) : null
+                          }
+                        />
+                      }
+                    />
+                  </div>
+
+                  <AnimatePresence>
+                    {selectedSlot && stylistOptions.length > 1 ? (
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring.soft}>
+                        <SectionHeading icon={UserRound} title="Free at this time" />
+                        <div role="radiogroup" aria-label="Stylist at this time" className="no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-1">
+                          {stylistOptions.map((stylist) => {
+                            const active = stylist.id === bookingForm.stylistId;
+                            return (
+                              <button
+                                key={stylist.id}
+                                type="button"
+                                role="radio"
+                                aria-checked={active}
+                                onClick={() => {
+                                  haptic("tap");
+                                  dispatch(setCustomerBookingField({ field: "stylistId", value: stylist.id }));
+                                }}
+                                className={cn("flex h-12 shrink-0 items-center gap-2 rounded-full pr-4 pl-1.5 text-sm font-semibold ring-1 ring-inset transition-colors", active ? "bg-portal/12 text-portal ring-2 ring-portal" : "bg-card ring-border/70")}
+                              >
+                                <Avatar name={stylist.name} size="sm" />
+                                {stylist.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              </StepPanel>
+            ) : null}
+
+            {step === 3 ? (
+              <StepPanel stepKey="review" direction={direction}>
+                <div className="space-y-4">
+                  <div className="space-y-1 rounded-card bg-card p-4 ring-1 ring-inset ring-border/60">
+                    {selectedServices.map((service) => {
+                      const original = Number(service.basePrice ?? 0);
+                      const final = unitPrice(service);
+                      const Icon = iconForCategory(service.category ?? "");
+                      return (
+                        <div key={service.id} className="flex items-center gap-3 p-2">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal/12 text-portal">
+                            <Icon className="size-4" aria-hidden />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold">{service.name}</span>
+                            <span className="block text-caption text-ink-neutral">{service.duration} min</span>
+                          </span>
+                          <span className="flex shrink-0 items-baseline gap-1.5 text-sm font-semibold tabular-nums">
+                            {final < original ? <span className="text-caption font-normal text-ink-neutral line-through">{money(original)}</span> : null}
+                            {money(final)}
+                          </span>
+                        </div>
                       );
                     })}
+                    <div className="my-1 border-t border-dashed border-border" />
+                    <EditRow icon={CalendarClock} onClick={() => goTo(2)} label="Change date and time">
+                      {whenLabel || "Pick a time"}
+                    </EditRow>
+                    <EditRow icon={UserRound} onClick={() => goTo(1)} label="Change stylist">
+                      {selectedStylist?.name ?? "Any stylist"}
+                    </EditRow>
                   </div>
+
+                  {isFirstTimeCustomer && firstBookingDiscountPercent > 0 ? (
+                    <div className="flex items-center gap-3 rounded-card bg-success/12 p-4 text-sm font-semibold text-ink-success">
+                      <Sparkles className="size-5 shrink-0" aria-hidden />
+                      {firstBookingDiscountPercent}% off your first booking
+                    </div>
+                  ) : null}
+                  {voucherServiceId ? (
+                    <ToggleRow icon={Ticket} tone="gold" title="Free-service voucher" hint={voucherServiceName} checked={useVoucher} onChange={setUseVoucher} amount={voucherDiscountAmount} />
+                  ) : null}
+                  {walletBalance > 0 && afterVoucherDiscount > 0 ? (
+                    <ToggleRow icon={Wallet} title="Wallet credit" hint={`${money(walletBalance)} available`} checked={useWalletCredit} onChange={setUseWalletCredit} amount={walletRedeemAmount} />
+                  ) : null}
+
+                  <UserPriceBreakdown lines={breakdownLines} total={finalPayableAmount} totalLabel={totalSavings > 0 ? `Total · you save ${money(totalSavings)}` : "Total"} />
                 </div>
-              ) : null}
-            </section>
-          ) : null}
-
-          {step === 2 ? (
-            <section className="space-y-4">
-              <div className="space-y-1 rounded-3xl bg-card p-5">
-              {selectedServices.map((service) => {
-                const original = Number(service.basePrice ?? 0);
-                const final = unitPrice(service);
-                return (
-                  <div key={service.id} className="flex items-center justify-between gap-3 py-1.5">
-                    <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                      <Scissors className="size-4 shrink-0 text-primary" />
-                      <span className="truncate">{service.name}</span>
-                      <span className="shrink-0 text-xs font-normal text-muted-foreground">{service.duration} min</span>
-                    </span>
-                    <span className="flex shrink-0 items-baseline gap-1.5 text-sm font-semibold">
-                      {final < original ? (
-                        <span className="text-xs font-normal text-muted-foreground line-through">{rupees(original)}</span>
-                      ) : null}
-                      {rupees(final)}
-                    </span>
-                  </div>
-                );
-              })}
-                <div className="my-3 h-px bg-border" />
-                <button type="button" onClick={() => goTo(1)} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
-                  <CalendarClock className="size-4 shrink-0 text-primary" />
-                  <span className="flex-1 font-medium">
-                    {dayLabel(effectiveBookingDate)} · {bookingForm.startsAt ? timeLabel(bookingForm.startsAt) : "-"}
-                  </span>
-                  <Pencil className="size-4 text-muted-foreground" />
-                </button>
-                <button type="button" onClick={() => goTo(1)} className="flex w-full items-center gap-3 py-1.5 text-left text-sm">
-                  <User className="size-4 shrink-0 text-primary" />
-                  <span className="flex-1 font-medium">{selectedStylist?.name ?? "-"}</span>
-                  <Pencil className="size-4 text-muted-foreground" />
-                </button>
-              </div>
-
-              {isFirstTimeCustomer && firstBookingDiscountPercent > 0 ? (
-                <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-medium text-success">
-                  <Sparkles className="size-5 shrink-0" />
-                  {firstBookingDiscountPercent}% off your first booking
-                </div>
-              ) : null}
-
-              {voucherServiceId ? (
-                <ToggleRow
-                  icon={Ticket}
-                  title="Free-service voucher"
-                  hint={voucherServiceName}
-                  checked={useVoucher}
-                  onChange={setUseVoucher}
-                  amount={voucherDiscountAmount}
-                />
-              ) : null}
-              {walletBalance > 0 && afterVoucherDiscount > 0 ? (
-                <ToggleRow
-                  icon={Wallet}
-                  title="Wallet credit"
-                  hint={`${rupees(walletBalance)} available`}
-                  checked={useWalletCredit}
-                  onChange={setUseWalletCredit}
-                  amount={walletRedeemAmount}
-                />
-              ) : null}
-
-            {totalSavings > 0 ? (
-              <div className="flex items-center gap-3 rounded-2xl bg-success/10 p-3 text-sm font-semibold text-success">
-                <BadgePercent className="size-5 shrink-0" />
-                You save {rupees(totalSavings)} on this booking
-              </div>
+              </StepPanel>
             ) : null}
 
-            <div className="space-y-2.5 rounded-3xl bg-card p-5">
-              <Row label="Subtotal" value={rupees(priceSummary.totalAmount)} />
-                {priceSummary.discountAmount > 0 ? (
-                  <Row label={priceSummary.offerLabel ?? "Offer"} value={`-${rupees(priceSummary.discountAmount)}`} tone="good" />
-                ) : null}
-                {firstBookingDiscountAmount > 0 ? (
-                  <Row label="First booking" value={`-${rupees(firstBookingDiscountAmount)}`} tone="good" />
-                ) : null}
-                {voucherDiscountAmount > 0 ? <Row label="Voucher" value={`-${rupees(voucherDiscountAmount)}`} tone="good" /> : null}
-                {walletRedeemAmount > 0 ? <Row label="Wallet" value={`-${rupees(walletRedeemAmount)}`} tone="good" /> : null}
-                <div className="flex items-center justify-between border-t border-border pt-3">
-                  <span className="font-semibold">Total</span>
-                  <span className="font-display text-2xl font-bold text-primary">{rupees(finalPayableAmount)}</span>
-                </div>
-              </div>
-
-            <div className="space-y-3 rounded-3xl bg-card p-5">
-              <h3 className="flex items-center gap-2 font-display text-base font-semibold">
-                <ShieldCheck className="size-5 text-primary" />
-                Cancellation and refunds
-              </h3>
-              <ul className="space-y-2">
-                {cancellation.tiers.map((tier) => {
-                  const meta = REFUND_META[tier.key];
-                  const Icon = meta.icon;
-                  const isCurrent = tier.key === cancellation.current;
-                  return (
-                    <li
-                      key={tier.key}
-                      className={cn(
-                        "flex items-start gap-3 rounded-2xl p-3",
-                        isCurrent ? meta.tone : "bg-secondary",
-                        !tier.available && "opacity-50"
-                      )}
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-card">
-                        <Icon className="size-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2 text-sm font-semibold">
-                          {tier.title}
-                          {isCurrent ? (
-                            <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-bold uppercase">Applies now</span>
-                          ) : null}
-                        </span>
-                        <span className="block text-xs text-muted-foreground">{tier.when}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              <p className="text-xs text-muted-foreground">
-                Refunds are based on what you paid. The exact amount is shown before you confirm a cancellation, and you can
-                cancel from History.
-              </p>
-            </div>
-
-            {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" ? (
-                <div
-                  role="status"
-                  className={cn(
-                    "flex items-start gap-3 rounded-2xl p-4 text-sm",
-                    ["FAILED", "EXPIRED", "REFUNDING", "REFUNDED"].includes(payStatus.state) ? "bg-destructive/10" : "bg-secondary"
-                  )}
-                >
-                  {watching ? (
-                    <Loader2 className="mt-0.5 size-5 shrink-0 animate-spin" />
-                  ) : (
-                    <TriangleAlert className="mt-0.5 size-5 shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="font-semibold">
-                      {payStatus.state === "PENDING" || payStatus.state === "PROCESSING"
-                        ? watching
-                          ? "Checking your payment…"
-                          : "Payment not confirmed yet"
-                        : payStatus.state === "CANCELLED"
-                          ? "Payment cancelled"
-                          : payStatus.state === "FAILED"
-                            ? "Payment failed"
-                            : payStatus.state === "EXPIRED"
-                              ? "Payment timed out"
-                              : "Payment received, booking not made"}
-                    </p>
-                    {payStatus.message ? <p className="mt-0.5 text-muted-foreground">{payStatus.message}</p> : null}
-                    {(payStatus.state === "PENDING" || payStatus.state === "PROCESSING") && !watching ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => payStatus.orderId && void watchPayment(payStatus.orderId)}
-                        >
-                          <RefreshCw /> Check again
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => {
-                            clearPendingPayment();
-                            setPayStatus(null);
-                          }}
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
+            {step === 4 ? (
+              <StepPanel stepKey="pay" direction={direction}>
+                <div className="space-y-4">
+                  <div className="aurora grain relative isolate overflow-hidden rounded-card bg-card p-6 text-center ring-1 ring-inset ring-border/60">
+                    <p className="relative z-[2] text-caption font-semibold text-ink-neutral">{finalPayableAmount > 0 ? "To pay now" : "Nothing to pay"}</p>
+                    <p className="relative z-[2] mt-1 font-display text-display-xl leading-none font-bold text-gradient-portal tabular-nums">{money(finalPayableAmount)}</p>
+                    <p className="relative z-[2] mt-3 text-sm font-medium">{whenLabel}{selectedStylist ? ` · ${selectedStylist.name}` : ""}</p>
+                    {finalPayableAmount > 0 ? (
+                      <p className="relative z-[2] mt-3 inline-flex items-center gap-1.5 rounded-full bg-card/80 px-3 py-1 text-caption font-semibold text-ink-neutral">
+                        <ShieldCheck className="size-3.5 text-ink-success" aria-hidden /> UPI, cards and netbanking via Razorpay
+                      </p>
                     ) : null}
                   </div>
-                </div>
-              ) : null}
-            </section>
-          ) : null}
 
-        </div>
+                  <div className="space-y-2 rounded-card bg-card p-4 ring-1 ring-inset ring-border/60">
+                    <h3 className="flex items-center gap-2 px-1 text-sm font-semibold">
+                      <ShieldCheck className="size-4 text-portal" aria-hidden /> If plans change
+                    </h3>
+                    <ul className="space-y-1.5">
+                      {cancellation.tiers.map((tier) => {
+                        const meta = REFUND_META[tier.key];
+                        const Icon = meta.icon;
+                        const isCurrent = tier.key === cancellation.current;
+                        return (
+                          <li key={tier.key} className={cn("flex items-start gap-3 rounded-2xl p-3", isCurrent ? meta.tone : "bg-muted/50", !tier.available && "opacity-50")}>
+                            <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-2 text-sm font-semibold">
+                                {tier.title}
+                                {isCurrent ? <span className="rounded-full bg-card px-2 py-0.5 text-micro font-bold uppercase">Now</span> : null}
+                              </span>
+                              <span className="block text-caption opacity-90">{tier.when}</span>
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
 
-        {/* Desktop: live summary beside the steps, with the action buttons inside it */}
-        <aside className="hidden lg:block" aria-label="Your booking">
-          <div className="sticky top-28 space-y-4 rounded-3xl bg-card p-5">
-            <h2 className="flex items-center gap-2 font-display text-lg font-semibold">
-              <ShoppingBag className="size-5 text-primary" />
-              Your booking
-            </h2>
-
-            {selectedServices.length ? (
-              <ul className="space-y-2">
-                {selectedServices.map((service) => (
-                  <li key={service.id} className="flex items-center gap-2 text-sm">
-                    <Scissors className="size-4 shrink-0 text-primary" />
-                    <span className="min-w-0 flex-1 truncate font-medium">{service.name}</span>
-                    <span className="font-semibold">{rupees(unitPrice(service))}</span>
-                    {step === 0 ? (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${service.name}`}
-                        onClick={() => toggleService(service.id, false)}
-                        className="grid size-6 place-items-center rounded-full bg-muted"
+                  <AnimatePresence>
+                    {payStatus && payStatus.state !== "CONFIRMED" && payStatus.state !== "AWAITING_PAYMENT" ? (
+                      <motion.div
+                        role="status"
+                        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={spring.soft}
+                        className={cn("flex items-start gap-3 rounded-card p-4 text-sm", ["FAILED", "EXPIRED", "REFUNDING", "REFUNDED"].includes(payStatus.state) ? "bg-destructive/12" : "bg-muted")}
                       >
-                        <X className="size-3.5" />
-                      </button>
+                        {watching ? <BrandDots className="mt-1" /> : <TriangleAlert className="mt-0.5 size-5 shrink-0" aria-hidden />}
+                        <div className="flex-1">
+                          <p className="font-semibold">
+                            {payStatus.state === "PENDING" || payStatus.state === "PROCESSING"
+                              ? watching
+                                ? "Checking your payment…"
+                                : "Payment not confirmed yet"
+                              : payStatus.state === "CANCELLED"
+                                ? "Payment cancelled"
+                                : payStatus.state === "FAILED"
+                                  ? "Payment failed"
+                                  : payStatus.state === "EXPIRED"
+                                    ? "Payment timed out"
+                                    : "Payment received, booking not made"}
+                          </p>
+                          {payStatus.message ? <p className="mt-0.5 text-ink-neutral">{payStatus.message}</p> : null}
+                          {(payStatus.state === "PENDING" || payStatus.state === "PROCESSING") && !watching ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <button type="button" onClick={() => payStatus.orderId && void watchPayment(payStatus.orderId)} className="inline-flex h-10 items-center gap-1.5 rounded-control bg-card px-3.5 text-sm font-semibold">
+                                <RefreshCw className="size-4" aria-hidden /> Check again
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  clearPendingPayment();
+                                  setPayStatus(null);
+                                }}
+                                className="inline-flex h-10 items-center rounded-control px-3.5 text-sm font-semibold hover:bg-card"
+                              >
+                                Dismiss
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      </motion.div>
                     ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="rounded-2xl bg-secondary p-4 text-sm text-muted-foreground">No services picked yet</p>
-            )}
-
-            {bookingForm.startsAt ? (
-              <div className="space-y-2 border-t border-border pt-3 text-sm">
-                <p className="flex items-center gap-2 font-medium">
-                  <CalendarClock className="size-4 text-primary" />
-                  {dayLabel(effectiveBookingDate)} · {timeLabel(bookingForm.startsAt)}
-                </p>
-                {selectedStylist ? (
-                  <p className="flex items-center gap-2 font-medium">
-                    <User className="size-4 text-primary" />
-                    {selectedStylist.name}
-                  </p>
-                ) : null}
-              </div>
+                  </AnimatePresence>
+                </div>
+              </StepPanel>
             ) : null}
-
-            {totalSavings > 0 || walletRedeemAmount > 0 ? (
-              <div className="space-y-1.5 border-t border-border pt-3 text-sm">
-                <p className="flex justify-between text-muted-foreground">
-                  <span>Subtotal</span>
-                  <span>{rupees(priceSummary.totalAmount)}</span>
-                </p>
-                {totalSavings > 0 ? (
-                  <p className="flex justify-between font-medium text-success">
-                    <span className="flex items-center gap-1.5">
-                      <BadgePercent className="size-4" /> Offers and discounts
-                    </span>
-                    <span>-{rupees(totalSavings)}</span>
-                  </p>
-                ) : null}
-                {walletRedeemAmount > 0 ? (
-                  <p className="flex justify-between font-medium text-success">
-                    <span className="flex items-center gap-1.5">
-                      <Wallet className="size-4" /> Wallet credit
-                    </span>
-                    <span>-{rupees(walletRedeemAmount)}</span>
-                  </p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {bookingForm.startsAt && cancellation.current !== "NONE" ? (
-              <p className="flex items-start gap-2 rounded-2xl bg-secondary px-3 py-2 text-xs text-muted-foreground">
-                <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                {cancellation.current === "FULL" ? "Full refund" : "50% refund"} if you{" "}
-                {cancellation.tiers.find((tier) => tier.key === cancellation.current)?.when.replace("Cancel before", "cancel before")}
-              </p>
-            ) : null}
-
-            <div className="flex items-center justify-between border-t border-border pt-3">
-              <span className="text-sm text-muted-foreground">Total</span>
-              <span className="font-display text-2xl font-bold text-primary">{rupees(finalPayableAmount)}</span>
-            </div>
-
-            {blocker ? (
-              <p className="flex items-center gap-2 rounded-2xl bg-secondary px-3 py-2 text-sm text-muted-foreground">
-                <Info className="size-4 shrink-0" />
-                {blocker}
-              </p>
-            ) : null}
-            {actions}
-          </div>
-        </aside>
-      </div>
-
-      {/* Phone and tablet: compact bar above the bottom tabs */}
-      <div className="fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-30 px-3 lg:hidden">
-        <div className="mx-auto max-w-xl space-y-2 rounded-3xl bg-card p-3 shadow-xl shadow-black/10">
-          {step === 0 && selectedServices.length ? (
-            <ul aria-label="Selected services" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none]">
-              {selectedServices.map((service) => (
-                <li key={service.id} className="flex shrink-0 items-center gap-1 rounded-full bg-primary/10 py-1 pl-3 pr-1 text-xs font-semibold text-primary">
-                  <span className="max-w-[9rem] truncate">{service.name}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${service.name}`}
-                    onClick={() => toggleService(service.id, false)}
-                    className="grid size-6 place-items-center rounded-full bg-card"
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="flex items-center justify-between gap-3 px-1">
-            <p className="min-w-0 truncate text-sm text-muted-foreground">
-              {blocker ??
-                `${bookingForm.serviceIds.length} service${bookingForm.serviceIds.length === 1 ? "" : "s"}${
-                  step > 0 && bookingForm.startsAt ? ` · ${timeLabel(bookingForm.startsAt)}` : ""
-                }`}
-            </p>
-            <p className="shrink-0 font-display text-lg font-bold">{rupees(finalPayableAmount)}</p>
-          </div>
-          {actions}
+          </AnimatePresence>
         </div>
+
+        <BookingAside
+          services={selectedServices}
+          priceOf={unitPrice}
+          canRemove={step === 0}
+          onRemove={(id) => toggleService(id, false)}
+          when={whenLabel}
+          stylist={selectedStylist?.name ?? (preferredStylist?.name || null)}
+          savings={totalSavings}
+          wallet={walletRedeemAmount}
+          total={finalPayableAmount}
+          blocker={blocker}
+          refundNote={bookingForm.startsAt && cancellation.current !== "NONE" ? cancellation.tiers.find((t) => t.key === cancellation.current)?.when : null}
+          actions={actions}
+        />
       </div>
+
+      <CartBar
+        visible={selectedServices.length > 0 || step > 0}
+        count={selectedServices.length}
+        total={finalPayableAmount}
+        caption={`${selectedServices.length} service${selectedServices.length === 1 ? "" : "s"}${step > 1 && bookingForm.startsAt ? ` · ${salonTimeLabel(bookingForm.startsAt)}` : ""}`}
+        blocker={blocker}
+        chips={cartChips}
+        actions={actions}
+      />
+
       <ServiceDetailsSheet
         open={Boolean(detailsServiceId)}
         state={detailService ? "ready" : servicesLoading || (!services.length && !error) ? "loading" : "missing"}
@@ -1136,7 +865,11 @@ export default function UserAppointmentsPage() {
         selected={detailService ? bookingForm.serviceIds.includes(detailService.id) : false}
         priced={detailService ? (offers?.pricedServices ?? []).find((item) => item.serviceId === detailService.id) : null}
         fallbackIcon={detailService ? iconForCategory(detailService.category ?? "") : undefined}
+        variant={detailService ? bookingForm.variantSelections?.[detailService.id] : undefined}
+        membershipSegment={appUser?.membershipSegment}
+        layoutId={detailService && step === 0 ? `service-card-${detailService.id}` : undefined}
         onToggle={toggleService}
+        onSelectVariant={selectVariant}
         onClose={closeServiceDetails}
       />
     </UserLayout>

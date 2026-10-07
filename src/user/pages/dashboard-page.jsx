@@ -1,189 +1,344 @@
 "use client";
-import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { normalizeBookingStatus } from "@/lib/booking-pending-status";
-import { fetchCustomerBookings } from "@/store/customer-bookings-slice";
+import { motion, useReducedMotion } from "motion/react";
 import {
   ArrowRight,
+  CalendarCheck2,
   CalendarPlus,
+  Clock,
   Crown,
   Gift,
-  History,
   Hourglass,
+  RefreshCw,
+  Scissors,
+  Sparkles,
   Tag,
+  UserRound,
+  Users,
+  Wallet,
+  Zap,
 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/components/auth/auth-provider";
+import { IconButton, ProgressRing, PullToRefresh, QueuePosition, ReferralShareCard, StatCard, StatusChip } from "@/components/kit";
+import { SkeletonCard, SkeletonShimmer } from "@/components/motion/skeleton-shimmer";
+import { Stagger, StaggerItem } from "@/components/motion/stagger";
+import { interaction, spring } from "@/components/motion/presets";
+import { UserCountdown } from "@/components/kit-extra/user-countdown";
+import { UserCarousel } from "@/components/kit-extra/user-carousel";
+import { formatMoney } from "@/lib/format";
+import { salonDateOf, salonRelativeDayLabel, salonTimeLabel } from "@/lib/salon-date";
+import { formatWaitLabel } from "@/lib/queue-utils";
+import { normalizeBookingStatus } from "@/lib/booking-pending-status";
+import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
+import { applyCustomerComboOffer, fetchCustomerBookings, fetchCustomerOffers } from "@/store/customer-bookings-slice";
+import { fetchMyQueueStatus, fetchQueueBoard } from "@/store/queue-slice";
 import { UserLayout } from "../portal/user-layout";
+import { useInvite } from "../portal/user-frame-context";
+import { useLoyalty } from "../lib/use-loyalty";
+import { nextUpcoming } from "../lib/bookings";
+import { SectionHeading } from "../components/section-heading";
+import { ComboCard, DealCard, GlobalDiscountCard } from "../components/offer-cards";
 
-const UPCOMING = new Set(["PENDING", "CONFIRMED"]);
+const money = (n) => formatMoney(n);
+const count = (n) => Math.round(n).toLocaleString("en-IN");
 
-const shortcuts = [
-  { label: "Live queue", hint: "See your place in line", href: "/user-dashboard/queue", icon: Hourglass },
-  { label: "Offers", hint: "Deals and combos", href: "/user-dashboard/offers", icon: Tag },
-  { label: "Membership", hint: "Unlock member prices", href: "/user-dashboard/membership", icon: Crown },
-  { label: "Refer & Earn", hint: "Win free services", href: "/user-dashboard/loyalty", icon: Gift },
-  { label: "History", hint: "Past bookings and reviews", href: "/user-dashboard/booking-history", icon: History },
+const QUICK = [
+  { label: "Book", href: "/user-dashboard/appointments", icon: CalendarPlus, tone: "bg-portal text-portal-foreground shadow-glow" },
+  { label: "Queue", href: "/user-dashboard/queue", icon: Hourglass },
+  { label: "Bookings", href: "/user-dashboard/booking-history", icon: CalendarCheck2 },
+  { label: "Offers", href: "/user-dashboard/offers", icon: Tag },
+  { label: "Rewards", href: "/user-dashboard/loyalty", icon: Gift },
+  { label: "Plans", href: "/user-dashboard/membership", icon: Crown },
 ];
 
 function greeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
-function Stat({ value, label, loading }) {
+function NextVisitCard({ booking, loading }) {
+  const reduce = useReducedMotion();
+  if (loading) return <SkeletonShimmer className="h-56 rounded-card" />;
+  if (!booking) {
+    return (
+      <div className="aurora grain relative isolate flex h-full min-h-56 flex-col justify-between gap-6 overflow-hidden rounded-card bg-card p-6 ring-1 ring-inset ring-border/60">
+        <div className="relative z-[2]">
+          <p className="flex items-center gap-1.5 text-caption font-semibold text-ink-neutral">
+            <CalendarPlus className="size-4" aria-hidden /> No visit booked
+          </p>
+          <p className="mt-2 max-w-sm font-display text-title font-bold">Treat yourself this week</p>
+        </div>
+        <motion.div whileTap={reduce ? undefined : interaction.press} className="relative z-[2] w-fit">
+          <Link to="/user-dashboard/appointments" className="inline-flex h-12 items-center gap-2 rounded-control bg-portal px-6 font-semibold text-portal-foreground shadow-glow">
+            <CalendarPlus className="size-5" aria-hidden /> Book now
+          </Link>
+        </motion.div>
+      </div>
+    );
+  }
+  const dayIso = salonDateOf(booking.startsAt);
   return (
-    <div className="rounded-2xl bg-card p-5">
-      {loading ? <Skeleton className="h-9 w-16" /> : <p className="font-display text-3xl font-bold text-primary">{value}</p>}
-      <p className="mt-1 text-sm text-muted-foreground">{label}</p>
+    <div className="relative isolate flex h-full min-h-56 flex-col justify-between gap-5 overflow-hidden rounded-card p-6 text-white shadow-float">
+      <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--ink-info))_130%)]" />
+      <div aria-hidden className="absolute inset-0 -z-[1] hidden bg-[hsl(222_45%_6%/0.55)] dark:block" />
+      <div aria-hidden className="grain absolute inset-0 -z-[1]" />
+      <motion.div aria-hidden className="absolute -right-12 -bottom-16 -z-[1] size-56 rounded-blob bg-white/12 blur-2xl" animate={reduce ? undefined : { rotate: 360 }} transition={{ duration: 40, repeat: Infinity, ease: "linear" }} />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-caption font-semibold opacity-90">
+            <CalendarCheck2 className="size-4" aria-hidden /> Next visit
+          </p>
+          <p className="mt-1.5 line-clamp-2 font-display text-title leading-tight font-bold">{booking.service ?? "Appointment"}</p>
+        </div>
+        <StatusChip status={booking.status} booking={booking} audience="customer" className="bg-white/90! text-[hsl(222_45%_14%)]! ring-white/0!" />
+      </div>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1.5 text-sm">
+          <p className="flex items-center gap-2 font-semibold">
+            <Clock className="size-4 opacity-80" aria-hidden />
+            {salonRelativeDayLabel(dayIso)} · {salonTimeLabel(booking.startsAt)}
+          </p>
+          <p className="flex items-center gap-2 opacity-90">
+            <UserRound className="size-4 opacity-80" aria-hidden />
+            {booking.stylistName ?? "Stylist to be assigned"}
+          </p>
+        </div>
+        <UserCountdown to={booking.startsAt} className="text-[1.6rem]" />
+      </div>
+      <Link to="/user-dashboard/booking-history" className="absolute inset-0 rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" aria-label="Manage your next visit" />
     </div>
+  );
+}
+
+function QueueWidget() {
+  const { board, mine, boardLoading, mineLoading } = useSelector((state) => state.queue);
+  const entry = mine?.current ?? null;
+  const summary = board?.summary ?? mine?.summary ?? null;
+  if ((boardLoading || mineLoading) && !board && !mine) return <SkeletonShimmer className="h-40 rounded-card" />;
+  if (entry) {
+    return (
+      <Link to="/user-dashboard/queue" className="block rounded-card focus-visible:outline-2 focus-visible:outline-portal" aria-label="Open live queue">
+        <QueuePosition
+          position={entry.positionInLane ?? entry.salonPosition ?? 1}
+          peopleAhead={entry.peopleAhead}
+          waitMinutes={entry.status === "STARTED" ? entry.remainingMinutes : entry.waitMinutes}
+          status={entry.status}
+          ticket={entry.ticket}
+        />
+      </Link>
+    );
+  }
+  const next = summary?.nextWalkInWaitMinutes;
+  return (
+    <Link
+      to="/user-dashboard/queue"
+      className="group flex h-full items-center gap-4 rounded-card bg-card p-5 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift"
+    >
+      <span className="relative grid size-14 shrink-0 place-items-center rounded-2xl bg-info/12 text-ink-info">
+        <span aria-hidden className="kit-live-ping absolute inset-0 rounded-2xl bg-info/20" />
+        <Hourglass className="relative size-6" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-caption font-semibold text-ink-neutral">Salon right now</span>
+        <span className="mt-0.5 block font-display text-headline font-bold">
+          {next == null ? "Live queue" : next === 0 ? "A stylist is free" : `Next free in ${formatWaitLabel(next)}`}
+        </span>
+        {summary ? (
+          <span className="mt-1 flex gap-3 text-caption text-ink-neutral">
+            <span className="inline-flex items-center gap-1">
+              <Users className="size-3.5" aria-hidden /> {summary.waitingCount ?? 0} waiting
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Scissors className="size-3.5" aria-hidden /> {summary.inServiceCount ?? 0} in chair
+            </span>
+          </span>
+        ) : null}
+      </span>
+      <ArrowRight className="size-5 text-ink-neutral transition-transform group-hover:translate-x-1" aria-hidden />
+    </Link>
   );
 }
 
 export default function UserDashboardPage() {
   const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
-  const { bookings, loading: bookingsLoading } = useSelector((state) => state.customerBookings);
+  const navigate = useNavigate();
+  const reduce = useReducedMotion();
+  const openInvite = useInvite();
+  const { bookings, loading: bookingsLoading, offers, offersLoading, bookingForm } = useSelector((state) => state.customerBookings);
   const isUser = appUser?.role === "USER";
-  const isFreeMember = `${appUser?.membershipSegment ?? "FREE"}`.toUpperCase() === "FREE";
+  const { overview, loading: loyaltyLoading, reload: reloadLoyalty, referralCode, referralLink } = useLoyalty({ enabled: isUser });
+  const segment = `${appUser?.membershipSegment ?? "FREE"}`.toUpperCase();
+  const isMember = segment !== "FREE";
+
+  const loadAll = useCallback(
+    () =>
+      Promise.allSettled([
+        dispatch(fetchCustomerBookings()),
+        dispatch(fetchCustomerOffers()),
+        dispatch(fetchMyQueueStatus()),
+        dispatch(fetchQueueBoard()),
+        reloadLoyalty(),
+      ]),
+    [dispatch, reloadLoyalty]
+  );
 
   useEffect(() => {
-    if (isUser) void dispatch(fetchCustomerBookings());
+    if (!isUser) return;
+    void dispatch(fetchCustomerBookings());
+    void dispatch(fetchCustomerOffers());
+    void dispatch(fetchMyQueueStatus());
+    void dispatch(fetchQueueBoard());
   }, [dispatch, isUser]);
 
-  const { next, upcomingCount, visits, saved } = useMemo(() => {
-    const now = Date.now();
-    const upcoming = bookings
-      .filter((b) => UPCOMING.has(normalizeBookingStatus(b.status)) && new Date(b.startsAt).getTime() >= now)
-      .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
+  const { next, visits, saved } = useMemo(() => {
     const done = bookings.filter((b) => normalizeBookingStatus(b.status) === "COMPLETED");
     return {
-      next: upcoming[0] ?? null,
-      upcomingCount: upcoming.length,
+      next: nextUpcoming(bookings),
       visits: done.length,
       saved: done.reduce((sum, b) => sum + Number(b.discountAmount ?? 0), 0),
     };
   }, [bookings]);
 
-  if (!loading && !isUser) {
-    return (
-      <div className="mx-auto max-w-md space-y-4 p-6">
-        <p>Sign in as a customer to view this page.</p>
-        <Button asChild>
-          <Link to="/auth/login">Customer login</Link>
-        </Button>
-      </div>
-    );
-  }
-
   const statsLoading = loading || (bookingsLoading && bookings.length === 0);
   const firstName = appUser?.name?.split(" ")[0] ?? "there";
+  const invited = Number(overview?.totalReferred ?? 0);
+  const rewarded = Number(overview?.totalRewarded ?? 0);
+
+  const offerSlides = useMemo(() => {
+    const slides = [];
+    if (offers?.globalDiscount) slides.push({ key: "global", kind: "global", data: offers.globalDiscount });
+    for (const combo of offers?.combos ?? []) slides.push({ key: `c-${combo.id}`, kind: "combo", data: combo });
+    for (const offer of offers?.membershipOffers ?? []) slides.push({ key: `m-${offer.id}`, kind: "member", data: offer });
+    for (const offer of offers?.serviceOffers ?? []) slides.push({ key: `s-${offer.id}`, kind: "deal", data: offer });
+    return slides.slice(0, 8);
+  }, [offers]);
+
+  const applyCombo = (combo) => {
+    dispatch(applyCustomerComboOffer(combo));
+    notify.success("Combo added", { description: "Pick a time to finish booking." });
+    navigate("/user-dashboard/appointments");
+  };
 
   return (
-    <UserLayout pageTitle="">
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Hero: greeting + the one thing to do next */}
-        <section className="flex flex-col justify-between gap-8 rounded-3xl bg-primary p-6 text-primary-foreground sm:p-8 lg:col-span-2">
-          <div>
-            <p className="text-sm font-medium opacity-80">{greeting()}</p>
-            <h1 className="mt-1 font-display text-3xl font-bold sm:text-4xl">{firstName}</h1>
-          </div>
+    <UserLayout
+      pageTitle={`Hi, ${firstName}`}
+      subtitle={greeting()}
+      actions={<IconButton icon={RefreshCw} label="Refresh" className="hidden sm:inline-grid" onClick={() => void loadAll()} />}
+    >
+      <PullToRefresh onRefresh={loadAll}>
+        <Stagger className="grid grid-cols-1 gap-4 lg:grid-cols-12 [&>*]:min-w-0" gap={0.07}>
+          {/* Next visit */}
+          <StaggerItem className="lg:col-span-7">
+            <NextVisitCard booking={next} loading={statsLoading} />
+          </StaggerItem>
 
-          {statsLoading ? (
-            <Skeleton className="h-20 w-full max-w-md bg-primary-foreground/15" />
-          ) : next ? (
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Your next visit</p>
-              <p className="mt-1 text-xl font-semibold sm:text-2xl">{next.service ?? "Appointment"}</p>
-              <p className="mt-0.5 text-sm opacity-90">
-                {new Date(next.startsAt).toLocaleDateString([], { weekday: "long", day: "numeric", month: "short" })}
-                {" · "}
-                {new Date(next.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                {next.stylistName ? ` · with ${next.stylistName}` : ""}
-              </p>
-            </div>
-          ) : (
-            <p className="max-w-md text-base opacity-90">
-              Nothing booked yet. Pick a service and a time that suits you. It takes about a minute.
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-3">
-            <Button
-              asChild
-              size="lg"
-              className="h-12 rounded-full bg-card px-6 text-base text-primary customer:hover:bg-card!"
+          {/* Stats */}
+          <StaggerItem className="grid grid-cols-2 gap-3 sm:gap-4 lg:col-span-5">
+            <StatCard icon={Wallet} label="Wallet" value={Number(overview?.walletBalance ?? 0)} format={money} loading={loyaltyLoading} onClick={() => navigate("/user-dashboard/loyalty")} />
+            <StatCard icon={Sparkles} label="Saved" value={saved} format={money} tone="success" loading={statsLoading} />
+            <StatCard icon={Scissors} label="Visits" value={visits} format={count} tone="info" loading={statsLoading} />
+            <motion.button
+              type="button"
+              onClick={() => navigate("/user-dashboard/loyalty")}
+              whileHover={reduce ? undefined : interaction.cardHover}
+              whileTap={reduce ? undefined : interaction.press}
+              transition={spring.soft}
+              className="flex items-center gap-3 rounded-card border border-border/60 bg-card p-4 text-left shadow-soft transition-shadow hover:shadow-lift"
             >
-              <Link to="/user-dashboard/appointments">
-                <CalendarPlus /> {next ? "Book another" : "Book now"}
-              </Link>
-            </Button>
-            {next ? (
-              <Button
-                asChild
-                size="lg"
-                variant="ghost"
-                className="h-12 rounded-full px-5 text-base text-primary-foreground customer:hover:text-primary-foreground!"
-              >
-                <Link to="/user-dashboard/appointments">
-                  Manage <ArrowRight />
-                </Link>
-              </Button>
+              <ProgressRing value={rewarded} max={Math.max(1, invited)} size={60} stroke={7} tone="gold" label="Friends rewarded" showValue={false}>
+                <Gift className="size-5 text-ink-warning" aria-hidden />
+              </ProgressRing>
+              <span className="min-w-0">
+                <span className="block font-display text-[1.4rem] leading-none font-bold tabular-nums">
+                  {rewarded}
+                  <span className="text-sm text-ink-neutral">/{invited}</span>
+                </span>
+                <span className="mt-1 block text-caption font-semibold text-ink-neutral">Rewarded</span>
+              </span>
+            </motion.button>
+          </StaggerItem>
+
+          {/* Quick actions */}
+          <StaggerItem className="lg:col-span-12">
+            <nav aria-label="Quick actions" className="grid grid-cols-3 gap-2.5 sm:grid-cols-6 sm:gap-3">
+              {QUICK.map(({ label, href, icon: Icon, tone }) => (
+                <motion.div key={href} whileHover={reduce ? undefined : interaction.cardHover} whileTap={reduce ? undefined : interaction.press} transition={spring.soft}>
+                  <Link to={href} className="flex flex-col items-center gap-2 rounded-card bg-card px-2 py-3.5 text-center shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift">
+                    <span className={cn("grid size-12 place-items-center rounded-2xl bg-portal/12 text-portal", tone)}>
+                      <Icon className="size-[22px]" aria-hidden />
+                    </span>
+                    <span className="text-caption font-semibold">{label}</span>
+                  </Link>
+                </motion.div>
+              ))}
+            </nav>
+          </StaggerItem>
+
+          {/* Invite */}
+          <StaggerItem className="lg:col-span-5">
+            {loyaltyLoading ? (
+              <SkeletonCard className="h-full min-h-56" />
+            ) : referralCode ? (
+              <ReferralShareCard
+                className="h-full"
+                code={referralCode}
+                link={referralLink}
+                walletBalance={Number(overview?.walletBalance ?? 0)}
+                pendingCredit={Number(overview?.pendingCredit ?? 0)}
+                progress={invited > 0 ? { current: rewarded, target: invited, label: "Friends rewarded" } : undefined}
+                onInvite={openInvite}
+              />
             ) : null}
-          </div>
-        </section>
+          </StaggerItem>
 
-        {/* Membership */}
-        <section className="flex flex-col justify-between gap-6 rounded-3xl bg-card p-6 sm:p-8">
-          <div>
-            <span className="grid size-11 place-items-center rounded-2xl bg-accent/15 text-accent">
-              <Crown className="size-6" />
-            </span>
-            <h2 className="mt-4 font-display text-xl font-bold">
-              {isFreeMember ? "Go premium" : "You're a member"}
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {isFreeMember
-                ? "Up to 40% off services, member-only combos and priority booking."
-                : "Your member prices and perks apply automatically at booking."}
-            </p>
-          </div>
-          <Button asChild variant={isFreeMember ? "default" : "secondary"} className="h-11 w-full rounded-full">
-            <Link to="/user-dashboard/membership">
-              {isFreeMember ? "See plans" : "View my plan"} <ArrowRight />
-            </Link>
-          </Button>
-        </section>
-      </div>
+          {/* Live queue */}
+          <StaggerItem className="lg:col-span-7">
+            <SectionHeading icon={Hourglass} title="Live queue" to="/user-dashboard/queue" linkLabel="Open" />
+            <QueueWidget />
+            {!isMember ? (
+              <Link
+                to="/user-dashboard/membership"
+                className="mt-4 flex items-center gap-3 rounded-card bg-card p-4 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift shine"
+              >
+                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/16 text-ink-warning">
+                  <Crown className="size-5" aria-hidden />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">Member prices</span>
+                  <span className="block truncate text-caption text-ink-neutral">Combos and priority booking</span>
+                </span>
+                <ArrowRight className="size-5 text-ink-neutral" aria-hidden />
+              </Link>
+            ) : null}
+          </StaggerItem>
 
-      {/* Numbers */}
-      <div className="mt-4 grid grid-cols-3 gap-3 sm:gap-4">
-        <Stat value={upcomingCount} label="Upcoming" loading={statsLoading} />
-        <Stat value={visits} label="Visits" loading={statsLoading} />
-        <Stat value={`₹${Math.round(saved)}`} label="Saved" loading={statsLoading} />
-      </div>
-
-      {/* Shortcuts */}
-      <h2 className="mb-3 mt-8 font-display text-xl font-semibold">Quick links</h2>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 xl:grid-cols-5">
-        {shortcuts.map(({ label, hint, href, icon: Icon }) => (
-          <Link
-            key={href}
-            to={href}
-            className="group flex min-h-28 flex-col justify-between rounded-2xl bg-card p-4 transition-transform hover:-translate-y-0.5"
-          >
-            <Icon className="size-6 text-primary" />
-            <span>
-              <span className="block text-sm font-semibold">{label}</span>
-              <span className="block text-xs text-muted-foreground">{hint}</span>
-            </span>
-          </Link>
-        ))}
-      </div>
+          {/* Offers */}
+          {offersLoading && !offers ? (
+            <StaggerItem className="lg:col-span-12">
+              <SkeletonShimmer className="h-40 rounded-card" />
+            </StaggerItem>
+          ) : offerSlides.length ? (
+            <StaggerItem className="lg:col-span-12">
+              <SectionHeading icon={Zap} title="Offers for you" to="/user-dashboard/offers" />
+              <UserCarousel label="Offers">
+                {offerSlides.map((slide) =>
+                  slide.kind === "global" ? (
+                    <GlobalDiscountCard key={slide.key} discount={slide.data} />
+                  ) : slide.kind === "combo" ? (
+                    <ComboCard key={slide.key} combo={slide.data} applied={bookingForm.comboId === slide.data.id} onApply={applyCombo} />
+                  ) : (
+                    <DealCard key={slide.key} offer={slide.data} member={slide.kind === "member"} onClick={() => navigate("/user-dashboard/appointments")} />
+                  )
+                )}
+              </UserCarousel>
+            </StaggerItem>
+          ) : null}
+        </Stagger>
+      </PullToRefresh>
     </UserLayout>
   );
 }
