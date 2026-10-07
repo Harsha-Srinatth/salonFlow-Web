@@ -191,23 +191,24 @@ export function AdminInsightsPanel() {
               </div>
             ) : null}
           </div>
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              send(input);
-            }}
-          >
+          {/* Not a <form>: this panel also renders inside the Settings form. */}
+          <div className="flex items-center gap-2">
             <input
               value={input}
               maxLength={1000}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Why were bookings down?"
               aria-label="Question about your business"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  send(input);
+                }
+              }}
               className="h-11 min-w-0 flex-1 rounded-control bg-muted/60 px-3.5 text-sm outline-none placeholder:text-ink-neutral focus-visible:ring-2 focus-visible:ring-portal"
             />
-            <IconButton type="submit" icon={ArrowUp} label="Ask" variant="solid" disabled={!input.trim() || pending} />
-          </form>
+            <IconButton icon={ArrowUp} label="Ask" variant="solid" disabled={!input.trim() || pending} onClick={() => send(input)} />
+          </div>
           <p className="text-[11px] text-ink-neutral">Aggregates only. Check key figures in Revenue.</p>
         </div>
       ) : null}

@@ -150,7 +150,7 @@ export default function AdminFeedbackPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0 }}
                   transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }}
-                  className="flex flex-col gap-3 rounded-card border border-border/60 bg-card p-4 shadow-soft"
+                  className="flex min-w-0 flex-col gap-3 rounded-card border border-border/60 bg-card p-4 shadow-soft"
                 >
                   <div className="flex items-start gap-3">
                     <AvatarBadge name={item.customerName} />

@@ -107,7 +107,7 @@ function PlanEditor({ segment, icon: Icon, saved, form, onChange, onSave }) {
           </AnimatePresence>
         </div>
 
-        <AnimatedTabBar fullWidth size="sm" label="Membership period" items={DURATIONS.map((d) => ({ value: `${d.value}`, label: d.label }))} value={`${form.durationMonths}`} onChange={(v) => onChange({ ...form, durationMonths: Number(v) })} />
+        <AnimatedTabBar fullWidth size="sm" label="Membership period" items={DURATIONS.map((d) => ({ value: `${d.value}`, label: d.value === 12 ? "1 yr" : `${d.value} mo` }))} value={`${form.durationMonths}`} onChange={(v) => onChange({ ...form, durationMonths: Number(v) })} />
 
         <div className="grid gap-3">
           <FloatingLabelInput label="Plan name" icon={Tag} value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
