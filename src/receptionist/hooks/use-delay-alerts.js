@@ -24,7 +24,7 @@ export function useDelayAlerts(bookings = []) {
     for (const booking of criticalStarted) {
       if (alertedRef.current.has(booking.id)) continue;
       alertedRef.current.add(booking.id);
-      toast.error(`Delay alert: ${booking.customer} (${booking.service}) exceeded 10 minutes.`);
+      toast.error(`Over time: ${booking.customer}`, { description: `${booking.service} · 10+ min past planned` });
       try {
         const context = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = context.createOscillator();
