@@ -204,7 +204,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
         type="button"
         aria-label="Help and questions"
         className={cn(
-          "grid size-10 shrink-0 place-items-center rounded-full text-muted-foreground outline-none hover:bg-secondary focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          "grid size-11 shrink-0 place-items-center rounded-2xl text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50",
           triggerClassName
         )}
       >
@@ -224,7 +224,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
         }}
       >
         <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-          <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
+          <span className="grid size-10 place-items-center rounded-2xl bg-portal/12 text-portal">
             <Bot className="size-5" />
           </span>
           <div className="min-w-0 flex-1">
@@ -243,7 +243,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
         <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4" aria-live="polite">
           {!messages.length ? (
             <div className="space-y-4 py-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-ink-neutral">
                 Hi! Ask about services, prices, offers, timings, availability or our policies.
                 {isCustomer ? " I can also check your bookings." : ""}
               </p>
@@ -253,7 +253,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
                     key={suggestion}
                     type="button"
                     onClick={() => send(suggestion)}
-                    className="rounded-2xl bg-secondary px-3.5 py-2 text-left text-sm font-medium hover:bg-secondary/70"
+                    className="rounded-2xl bg-card px-3.5 py-2.5 text-left text-sm font-medium ring-1 ring-inset ring-border/70 transition-colors hover:ring-portal/50"
                   >
                     {suggestion}
                   </button>
@@ -267,7 +267,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
               <div
                 className={cn(
                   "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-6",
-                  message.role === "user" ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-secondary text-foreground"
+                  message.role === "user" ? "rounded-br-md bg-portal text-portal-foreground shadow-soft" : "rounded-bl-md bg-muted text-foreground"
                 )}
               >
                 <MessageText text={message.content} />
@@ -282,9 +282,9 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
 
           {pending ? (
             <div className="flex justify-start" role="status" aria-label="Assistant is typing">
-              <div className="flex gap-1 rounded-2xl rounded-bl-md bg-secondary px-4 py-3.5">
+              <div className="flex gap-1 rounded-2xl rounded-bl-md bg-muted px-4 py-3.5">
                 {[0, 150, 300].map((delay) => (
-                  <span key={delay} className="size-2 animate-bounce rounded-full bg-muted-foreground/60" style={{ animationDelay: `${delay}ms` }} />
+                  <span key={delay} className="size-2 animate-bounce rounded-full bg-portal/60 motion-reduce:animate-none" style={{ animationDelay: `${delay}ms` }} />
                 ))}
               </div>
             </div>
@@ -312,7 +312,7 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
             send(input);
           }}
         >
-          <div className="flex items-end gap-2 rounded-3xl bg-secondary p-1.5 pl-4">
+          <div className="flex items-end gap-2 rounded-3xl bg-muted p-1.5 pl-4 ring-1 ring-inset ring-transparent transition-shadow focus-within:shadow-glow focus-within:ring-portal/40">
             <textarea
               ref={inputRef}
               rows={1}
@@ -333,12 +333,12 @@ export function SupportAssistant({ variant = "portal", isCustomer = false, trigg
               type="submit"
               disabled={!input.trim() || pending}
               aria-label="Send"
-              className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground disabled:opacity-40"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-portal text-portal-foreground transition-transform active:scale-95 disabled:opacity-40"
             >
               <ArrowUp className="size-5" />
             </button>
           </div>
-          <p className="mt-1.5 px-2 text-[11px] text-muted-foreground">
+          <p className="mt-1.5 px-2 text-[11px] text-ink-neutral">
             Automated answers from salon information. For anything it can't answer, please contact the salon.
           </p>
         </form>

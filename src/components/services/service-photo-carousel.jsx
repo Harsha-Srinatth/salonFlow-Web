@@ -1,6 +1,5 @@
 "use client";
 
-import { PixelImage } from "@/components/fx/pixel-image";
 import { ServicePhotoViewer } from "@/components/services/service-photo-viewer";
 import { serviceImageUrl } from "@/lib/service-image";
 import { cn } from "@/lib/utils";
@@ -105,14 +104,14 @@ export function ServicePhotoCarousel({ images, alt, fallbackIcon: FallbackIcon, 
               </div>
             ) : (
               <button type="button" aria-label={`View photo ${i + 1} full screen`} onClick={() => openViewer(i)} className="block h-full w-full cursor-zoom-in">
-                <PixelImage
+                <img
                   src={serviceImageUrl(url, 1200, 900)}
                   alt={i === 0 ? alt : `${alt}, photo ${i + 1}`}
                   loading={i === 0 ? "eager" : "lazy"}
+                  decoding="async"
                   draggable={false}
-                  className="h-full w-full"
-                  imgClassName="select-none"
-                  fallback={<div className="grid h-full w-full place-items-center text-muted-foreground"><ImageOff className="size-10" /></div>}
+                  onError={() => setFailed((prev) => new Set(prev).add(url))}
+                  className="h-full w-full select-none object-cover"
                 />
               </button>
             )}
@@ -146,7 +145,7 @@ export function ServicePhotoCarousel({ images, alt, fallbackIcon: FallbackIcon, 
                 aria-label={`Show photo ${i + 1}`}
                 aria-current={i === index}
                 onClick={() => goTo(i)}
-                className={cn("h-2 rounded-full transition-all", i === index ? "w-5 bg-white" : "w-2 bg-white/60")}
+                className={cn("tap h-2 w-5 rounded-full transition-transform duration-300", i === index ? "scale-x-100 bg-white" : "scale-x-40 bg-white/60")}
               />
             ))}
           </div>

@@ -1,134 +1,121 @@
 "use client";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ArrowDownLeft, ArrowUpRight, Gift, Hourglass, PartyPopper, RefreshCw, Sparkles, Ticket, Trophy, UserRound, Users, Wallet } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { ButtonLoadingMorph, EmptyState, ErrorState, IconButton, PullToRefresh, ReferralShareCard, RewardReveal, StatusChip, useAsyncAction } from "@/components/kit";
+import { AnimatedCounter } from "@/components/motion/animated-counter";
+import { SkeletonCard, SkeletonList, SkeletonShimmer } from "@/components/motion/skeleton-shimmer";
+import { haptic, spring } from "@/components/motion/presets";
 import { saveCustomerGender } from "@/lib/customer-profile";
-import { toApiUrl } from "@/lib/api-base";
-import { animate, stagger } from "animejs";
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  Check,
-  CheckCircle2,
-  Copy,
-  Gift,
-  Hourglass,
-  Link2,
-  Loader2,
-  PartyPopper,
-  Share2,
-  Sparkles,
-  Ticket,
-  Trophy,
-  UserRound,
-  Users,
-  Wallet,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { formatMoney } from "@/lib/format";
+import { formatIsoDate, salonDateOf } from "@/lib/salon-date";
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { UserLayout } from "../portal/user-layout";
+import { useInvite } from "../portal/user-frame-context";
+import { useLoyalty } from "../lib/use-loyalty";
+import { drawRewardCard, fetchRewardVault } from "../lib/user-api";
+import { SectionHeading } from "../components/section-heading";
 
-async function authGet(path) {
-  const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl(path), {
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
-  return data;
-}
+const money = (n) => formatMoney(n);
+const shortDate = (iso) => (iso ? formatIsoDate(salonDateOf(iso), { day: "numeric", month: "short" }) : "");
+const FAN = [-14, -7, 0, 7, 14];
 
-async function fetchLoyaltyOverview() {
-  return authGet("/api/customer/loyalty");
-}
-
-async function fetchRewardVault() {
-  return authGet("/api/customer/loyalty/vault");
-}
-
-async function drawRewardCard(referralId) {
-  const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl("/api/customer/loyalty/vault/draw"), {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({ referralId }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Could not draw a reward");
-  return data;
-}
-
-const CARD_ROTATIONS = [-14, -7, 0, 7, 14];
-
-function prefersReducedMotion() {
-  if (typeof window === "undefined") return true;
-  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
-}
-
-const NEUTRAL_TONE = "bg-muted text-muted-foreground";
-const WAITING_TONE = "bg-accent/15 text-accent";
-const PROGRESS_TONE = "bg-primary/10 text-primary";
-const DONE_TONE = "bg-success/15 text-success";
-
-/**
- * Every state a referral can be in, in the order it moves through them. The
- * customer sees plain language; the backend's `statusLabel` is used when present
- * so the two never drift apart.
- */
-const REFERRAL_STATUS_META = {
-  PENDING: { label: "Waiting", tone: WAITING_TONE },
-  FIRST_ACTION_DONE: { label: "Visited", tone: PROGRESS_TONE },
-  COOLING: { label: "Verifying", tone: PROGRESS_TONE },
-  APPROVED: { label: "Approved", tone: PROGRESS_TONE },
-  REWARDED: { label: "Rewarded", tone: DONE_TONE },
-  REJECTED: { label: "Rejected", tone: NEUTRAL_TONE },
-};
-
-function formatCoolingCountdown(coolingUntil) {
+function coolingLabel(coolingUntil) {
   if (!coolingUntil) return null;
-  const remainingMs = new Date(coolingUntil).getTime() - Date.now();
-  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "any moment now";
-  const hours = Math.floor(remainingMs / 3600000);
-  const minutes = Math.round((remainingMs % 3600000) / 60000);
-  if (hours >= 1) return `in about ${hours}h ${minutes}m`;
-  return `in about ${Math.max(1, minutes)} min`;
+  const ms = new Date(coolingUntil).getTime() - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "any moment now";
+  const h = Math.floor(ms / 3600e3);
+  const m = Math.round((ms % 3600e3) / 60e3);
+  return h >= 1 ? `in ${h}h ${m}m` : `in ${Math.max(1, m)} min`;
+}
+
+/** Fanned deck of the possible prizes; shuffles while a draw is in flight. */
+function CardFan({ cards, drawing }) {
+  const reduce = useReducedMotion();
+  return (
+    <div className="relative mx-auto flex h-44 max-w-md items-end justify-center overflow-hidden px-6" aria-label={`${cards.length} possible rewards`}>
+      {cards.slice(0, 5).map((card, i) => {
+        const rot = FAN[i] ?? 0;
+        return (
+          <motion.div
+            key={card.id}
+            initial={reduce ? false : { opacity: 0, y: 30, rotate: 0 }}
+            animate={
+              drawing && !reduce
+                ? { rotate: [rot, rot * 1.8, -rot, rot], y: [0, -14, -4, 0], opacity: 1, transition: { duration: 0.9, repeat: Infinity, ease: "easeInOut" } }
+                : { opacity: 1, y: 0, rotate: rot, transition: { ...spring.soft, delay: i * 0.06 } }
+            }
+            style={{ transformOrigin: "50% 120%", zIndex: i }}
+            className="-mx-4 flex h-36 w-[5.5rem] shrink-0 sm:-mx-5 sm:h-40 sm:w-32 flex-col items-center justify-center gap-1.5 rounded-2xl bg-card p-3 text-center shadow-lift ring-1 ring-inset ring-border/60 sm:w-32"
+          >
+            <span className="grid size-10 place-items-center rounded-xl bg-gold/16 text-ink-warning">
+              <Ticket className="size-5" aria-hidden />
+            </span>
+            <p className="line-clamp-3 text-micro leading-tight font-semibold">{card.serviceName}</p>
+            <p className="text-micro text-ink-neutral">{money(card.serviceBasePrice)}</p>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
+function VoucherCard({ win, index }) {
+  const reduce = useReducedMotion();
+  const used = win.status === "USED";
+  return (
+    <motion.li
+      initial={reduce ? false : { opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(index, 8) * 0.06 }}
+      className={cn(
+        "relative isolate flex items-stretch overflow-hidden rounded-card ring-1 ring-inset",
+        used ? "bg-muted/60 ring-border/60" : "shine shine-auto bg-[linear-gradient(120deg,hsl(var(--gold)/0.22),hsl(var(--card))_60%)] ring-gold/40"
+      )}
+    >
+      <div className={cn("grid w-16 shrink-0 place-items-center border-r-2 border-dashed", used ? "border-border text-ink-neutral" : "border-gold/40 text-ink-warning")}>
+        <Ticket className="size-6" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1 p-4">
+        <p className={cn("truncate font-semibold", used && "text-ink-neutral line-through decoration-1")}>{win.serviceName}</p>
+        <p className="text-caption text-ink-neutral">Won {shortDate(win.wonAt)}</p>
+      </div>
+      <div className="flex items-center pr-4">
+        <span className={cn("rounded-full px-2.5 py-1 text-micro font-bold", used ? "bg-muted text-ink-neutral" : "bg-gold/20 text-ink-warning")}>{used ? "Used" : "Free · Ready"}</span>
+      </div>
+    </motion.li>
+  );
 }
 
 export default function UserLoyaltyPage() {
-  const { appUser, loading, refresh } = useAuth();
-  const [overview, setOverview] = useState(null);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-  const [vault, setVault] = useState({ cards: [], pendingDraws: [], wins: [], needsGender: false });
+  const { appUser, refresh } = useAuth();
+  const isUser = appUser?.role === "USER";
+  const openInvite = useInvite();
+  const reduce = useReducedMotion();
+  const { overview, loading, error, reload, referralCode, referralLink } = useLoyalty({ enabled: isUser });
+  const [vault, setVault] = useState({ cards: [], pendingDraws: [], wins: [], needsGender: false, loaded: false });
   const [savingGender, setSavingGender] = useState(false);
   const [drawing, setDrawing] = useState(false);
-  const [revealedCard, setRevealedCard] = useState(null);
-  const balanceRef = useRef(null);
-  const listRef = useRef(null);
-  const cardFanRef = useRef(null);
-  const prevBalance = useRef(0);
+  const [prize, setPrize] = useState(null);
+  const draw = useAsyncAction({ successMs: 600 });
 
-  async function loadVault() {
+  const loadVault = useCallback(async () => {
     try {
       const data = await fetchRewardVault();
-      setVault({
-        cards: data.cards ?? [],
-        pendingDraws: data.pendingDraws ?? [],
-        wins: data.wins ?? [],
-        needsGender: Boolean(data.needsGender),
-      });
+      setVault({ cards: data.cards ?? [], pendingDraws: data.pendingDraws ?? [], wins: data.wins ?? [], needsGender: Boolean(data.needsGender), loaded: true });
     } catch {
-      // Vault is a bonus layer on top of the core wallet/referral view — a failed load shouldn't block the page.
+      // The vault is a bonus layer on top of wallet/referrals: a failed load shouldn't block the page.
+      setVault((v) => ({ ...v, loaded: true }));
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    if (isUser) void loadVault();
+  }, [isUser, loadVault]);
+
+  const reloadAll = useCallback(() => Promise.allSettled([reload(), loadVault()]), [reload, loadVault]);
 
   async function handleSetGender(value) {
     setSavingGender(true);
@@ -137,412 +124,255 @@ export default function UserLoyaltyPage() {
       await refresh();
       await loadVault();
       notify.success("Saved");
-    } catch (error) {
-      notify.error("Couldn't save", { description: error.message });
+    } catch (err) {
+      notify.error("Couldn't save", { description: err.message });
     } finally {
       setSavingGender(false);
     }
   }
 
-  useEffect(() => {
-    if (!appUser || appUser.role !== "USER") return;
-    void fetchLoyaltyOverview()
-      .then(setOverview)
-      .catch((error) => notify.error("Couldn't load rewards", { description: error.message }))
-      .finally(() => setPageLoading(false));
-    void loadVault();
-  }, [appUser]);
-
-  useEffect(() => {
-    if (!balanceRef.current || !overview) return;
-    const target = Number(overview.walletBalance ?? 0);
-    if (prefersReducedMotion()) {
-      balanceRef.current.textContent = target.toLocaleString();
-      prevBalance.current = target;
-      return;
-    }
-    const from = { n: prevBalance.current };
-    animate(from, {
-      n: target,
-      duration: 900,
-      ease: "outExpo",
-      onUpdate: () => {
-        if (balanceRef.current) balanceRef.current.textContent = Math.round(from.n).toLocaleString();
-      },
-    });
-    prevBalance.current = target;
-  }, [overview]);
-
-  useEffect(() => {
-    if (!listRef.current || !overview || prefersReducedMotion()) return;
-    const rows = listRef.current.querySelectorAll("[data-loyalty-row]");
-    if (!rows.length) return;
-    animate(rows, {
-      opacity: [0, 1],
-      translateY: [12, 0],
-      delay: stagger(50),
-      duration: 420,
-      ease: "outQuart",
-    });
-  }, [overview]);
-
-  const referralLink = overview?.referralCode
-    ? `${typeof window !== "undefined" ? window.location.origin : ""}/auth/signup?ref=${overview.referralCode}`
-    : "";
-
-  async function handleCopyLink() {
-    if (!referralLink) return;
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopied(true);
-      notify.success("Link copied");
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      notify.error("Couldn't copy the link");
-    }
-  }
-
-  async function handleShare() {
-    if (!referralLink) return;
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: "Join me at Sahasra Salon",
-          text: "Book your next salon visit with my referral link and we both earn rewards!",
-          url: referralLink,
-        });
-        return;
-      } catch {
-        // User cancelled the native share sheet — fall through to copy.
-      }
-    }
-    void handleCopyLink();
-  }
-
-  async function handleWithdrawReward() {
+  async function handleDraw() {
     const nextDraw = vault.pendingDraws[0];
     if (!nextDraw || drawing) return;
     setDrawing(true);
-    setRevealedCard(null);
-    const cardEls = cardFanRef.current ? Array.from(cardFanRef.current.querySelectorAll("[data-reward-card]")) : [];
-    const reduceMotion = prefersReducedMotion();
-    if (cardEls.length && !reduceMotion) {
-      animate(cardEls, {
-        translateY: [0, -10, 0, -6, 0],
-        rotate: (_el, i) => [`${CARD_ROTATIONS[i] ?? 0}deg`, `${(CARD_ROTATIONS[i] ?? 0) * 1.6}deg`, `${CARD_ROTATIONS[i] ?? 0}deg`],
-        duration: 900,
-        loop: 2,
-        ease: "inOutSine",
-      });
-    }
+    setPrize(null);
+    haptic("tap");
     try {
-      const [result] = await Promise.all([
-        drawRewardCard(nextDraw.referralId),
-        new Promise((resolve) => window.setTimeout(resolve, reduceMotion ? 0 : 1300)),
-      ]);
-      setRevealedCard(result.card);
+      const [result] = await Promise.all([drawRewardCard(nextDraw.referralId), new Promise((r) => setTimeout(r, reduce ? 0 : 1200))]);
+      setPrize(result.card);
       await loadVault();
-      notify.success(`You won ${result.card.serviceName}`);
-      window.requestAnimationFrame(() => {
-        const winEl = cardFanRef.current?.querySelector(`[data-reward-card="${result.card.id}"]`);
-        if (winEl && !reduceMotion) {
-          animate(winEl, {
-            scale: [1, 1.25, 1.1],
-            duration: 520,
-            ease: "outElastic(1, .6)",
-          });
-        }
-      });
-    } catch (error) {
-      notify.error("Couldn't draw a reward", { description: error.message });
+    } catch (err) {
+      notify.error("Couldn't draw a reward", { description: err.message });
+      throw err;
     } finally {
       setDrawing(false);
     }
   }
 
-  if (loading || pageLoading) {
-    return (
-      <UserLayout pageTitle="Refer & Earn">
-        <div className="max-w-4xl space-y-4">
-          <Skeleton className="h-56 rounded-3xl" />
-          <Skeleton className="h-72 rounded-3xl" />
-        </div>
-      </UserLayout>
-    );
-  }
-
-  if (!appUser || appUser.role !== "USER") {
-    return (
-      <div className="mx-auto max-w-md space-y-4 p-6">
-        <p>Sign in as a customer to view your rewards.</p>
-        <Button asChild>
-          <Link to="/auth/login">Customer login</Link>
-        </Button>
-      </div>
-    );
-  }
-
-  const drawLabel = drawing
-    ? "Revealing"
-    : vault.needsGender
-      ? "Add gender to draw"
-      : vault.pendingDraws.length
-        ? "Draw reward"
-        : "No draws yet";
+  const invited = Number(overview?.totalReferred ?? 0);
+  const rewarded = Number(overview?.totalRewarded ?? 0);
+  const drawsReady = vault.pendingDraws.length;
 
   return (
-    <UserLayout pageTitle="Refer & Earn" width="lg">
-      <div className="space-y-4">
-        {/* Wallet + invite */}
-        <section className="space-y-6 rounded-3xl bg-primary p-6 text-primary-foreground sm:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-2 text-sm font-medium opacity-80">
-                <Wallet className="size-4" /> Wallet
-              </p>
-              <p className="font-display text-5xl font-bold">
-                ₹<span ref={balanceRef}>0</span>
-              </p>
-              {overview?.pendingCredit > 0 ? (
-                <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary-foreground/15 px-3 py-1 text-xs font-semibold">
-                  <Hourglass className="size-3.5" />₹{Number(overview.pendingCredit).toLocaleString()} verifying
-                </p>
+    <UserLayout pageTitle="Rewards" width="lg" actions={<IconButton icon={RefreshCw} label="Refresh" className="hidden sm:inline-grid" onClick={() => void reloadAll()} />}>
+      <PullToRefresh onRefresh={reloadAll}>
+        <div className="space-y-6">
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <SkeletonCard className="min-h-56" />
+              <SkeletonCard className="min-h-56" />
+            </div>
+          ) : error && !overview ? (
+            <ErrorState title="Couldn't load rewards" onRetry={reloadAll} />
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {/* Wallet */}
+              <section className="aurora grain relative isolate flex flex-col justify-between gap-5 overflow-hidden rounded-card bg-card p-6 ring-1 ring-inset ring-border/60" aria-label="Wallet">
+                <div className="relative z-[2]">
+                  <p className="flex items-center gap-2 text-caption font-semibold text-ink-neutral">
+                    <Wallet className="size-4" aria-hidden /> Wallet balance
+                  </p>
+                  <AnimatedCounter value={Number(overview?.walletBalance ?? 0)} format={money} className="mt-1 block font-display text-display-xl leading-none font-bold text-gradient-portal" />
+                  {Number(overview?.pendingCredit ?? 0) > 0 ? (
+                    <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-card/80 px-3 py-1 text-caption font-semibold">
+                      <Hourglass className="size-3.5 text-ink-info" aria-hidden /> {money(overview.pendingCredit)} verifying
+                    </p>
+                  ) : null}
+                </div>
+                <div className="relative z-[2] grid grid-cols-3 gap-2">
+                  {[
+                    { icon: Users, value: invited, label: "Invited" },
+                    { icon: Hourglass, value: Number(overview?.totalPending ?? 0), label: "Pending" },
+                    { icon: Trophy, value: rewarded, label: "Rewarded" },
+                  ].map(({ icon: Icon, value, label }) => (
+                    <div key={label} className="rounded-2xl bg-card/80 p-3 text-center ring-1 ring-inset ring-border/50">
+                      <Icon className="mx-auto size-4 text-portal" aria-hidden />
+                      <AnimatedCounter value={value} className="mt-1 block font-display text-xl font-bold" />
+                      <p className="text-micro text-ink-neutral">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {referralCode ? (
+                <ReferralShareCard
+                  code={referralCode}
+                  link={referralLink}
+                  pendingCredit={Number(overview?.pendingCredit ?? 0)}
+                  progress={invited > 0 ? { current: rewarded, target: invited, label: "Friends rewarded" } : undefined}
+                  onInvite={openInvite}
+                />
               ) : null}
             </div>
-            <div className="grid w-full grid-cols-3 gap-2 sm:w-auto">
-              {[
-                { icon: Users, value: overview?.totalReferred ?? 0, label: "Invited" },
-                { icon: Hourglass, value: overview?.totalPending ?? 0, label: "Pending" },
-                { icon: Trophy, value: overview?.totalRewarded ?? 0, label: "Rewarded" },
-              ].map(({ icon: Icon, value, label }) => (
-                <div key={label} className="rounded-2xl bg-primary-foreground/10 p-3 text-center sm:min-w-[84px]">
-                  <Icon className="mx-auto size-4 opacity-80" />
-                  <p className="mt-1 font-display text-xl font-bold tabular-nums">{value}</p>
-                  <p className="text-[11px] opacity-80">{label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3 rounded-2xl bg-primary-foreground/10 p-4">
-            <p className="flex items-center gap-2 text-sm font-semibold">
-              <Gift className="size-4" /> Invite a friend
-            </p>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-card px-3 py-2.5 font-mono text-sm text-foreground">
-                <Link2 className="size-4 shrink-0 text-muted-foreground" />
-                <span className="truncate">{referralLink}</span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => void handleCopyLink()}
-                  className="h-11 flex-1 rounded-full sm:flex-none"
-                >
-                  {copied ? <Check className="text-success" /> : <Copy />}
-                  {copied ? "Copied" : "Copy"}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => void handleShare()}
-                  className="h-11 flex-1 rounded-full bg-card text-primary customer:hover:bg-card! sm:flex-none"
-                >
-                  <Share2 /> Share
-                </Button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Reward vault */}
-        <section className="space-y-5 rounded-3xl bg-card p-6 sm:p-8">
-          <div className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-2xl bg-accent/15 text-accent">
-              <Gift className="size-6" />
-            </span>
-            <div>
-              <h2 className="font-display text-xl font-bold">Reward vault</h2>
-              <p className="text-sm text-muted-foreground">1 friend's first visit = 1 free-service draw</p>
-            </div>
-          </div>
-
-          {vault.needsGender ? (
-            <div className="space-y-3 rounded-2xl bg-accent/10 p-4">
-              <p className="flex items-center gap-2 text-sm font-semibold">
-                <UserRound className="size-4 text-accent" /> Pick your gender to unlock all cards
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { value: "MALE", label: "Male" },
-                  { value: "FEMALE", label: "Female" },
-                  { value: "OTHER", label: "Other" },
-                ].map((option) => (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    variant="secondary"
-                    className="rounded-full"
-                    disabled={savingGender}
-                    onClick={() => void handleSetGender(option.value)}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {vault.pendingDraws.length > 0 ? (
-            <p className="flex items-center gap-2 rounded-2xl bg-success/10 p-3 text-sm font-semibold text-success">
-              <PartyPopper className="size-5 shrink-0" />
-              {vault.pendingDraws.length} draw{vault.pendingDraws.length > 1 ? "s" : ""} ready
-            </p>
-          ) : null}
-
-          {vault.cards.length ? (
-            <div ref={cardFanRef} className="flex flex-wrap items-end justify-center gap-3 py-4">
-              {vault.cards.map((card, index) => {
-                const isRevealed = revealedCard?.id === card.id;
-                const rotation = CARD_ROTATIONS[index] ?? 0;
-                return (
-                  <div
-                    key={card.id}
-                    data-reward-card={card.id}
-                    style={{ transform: `rotate(${rotation}deg)` }}
-                    className={cn(
-                      "flex h-40 w-28 shrink-0 flex-col items-center justify-center gap-1.5 rounded-2xl bg-secondary p-3 text-center shadow-md sm:h-44 sm:w-32",
-                      isRevealed && "bg-accent/15 shadow-lg ring-2 ring-accent"
-                    )}
-                  >
-                    <Ticket className={cn("size-6", isRevealed ? "text-accent" : "text-muted-foreground/60")} />
-                    <p className="line-clamp-3 text-[11px] font-semibold leading-tight">{card.serviceName}</p>
-                    <p className="text-[10px] text-muted-foreground">₹{card.serviceBasePrice.toFixed(0)}</p>
-                    {isRevealed ? (
-                      <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-foreground">FREE</span>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-              <Hourglass className="size-4" /> Cards coming soon
-            </p>
           )}
 
-          <Button
-            type="button"
-            className="mx-auto flex h-12 rounded-full px-10"
-            disabled={!vault.pendingDraws.length || !vault.cards.length || drawing || vault.needsGender}
-            onClick={() => void handleWithdrawReward()}
-          >
-            {drawing ? <Loader2 className="animate-spin" /> : <Gift />}
-            {drawLabel}
-          </Button>
-        </section>
-
-        {vault.wins.length ? (
-          <section className="rounded-3xl bg-card p-5 sm:p-6">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
-              <Ticket className="size-5 text-accent" /> My vouchers
-            </h2>
-            <ul className="space-y-2">
-              {vault.wins.map((win) => (
-                <li key={win.id} className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
-                  {win.status === "USED" ? (
-                    <CheckCircle2 className="size-5 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <Gift className="size-5 shrink-0 text-accent" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{win.serviceName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(win.wonAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded-full px-2.5 py-1 text-xs font-bold",
-                      win.status === "USED" ? "bg-muted text-muted-foreground" : "bg-accent/15 text-accent"
-                    )}
-                  >
-                    {win.status === "USED" ? "Used" : "Ready"}
+          {/* Reward vault */}
+          <section className="space-y-4 rounded-card bg-card p-5 ring-1 ring-inset ring-border/60 sm:p-6" aria-label="Reward vault">
+            <SectionHeading
+              icon={Gift}
+              title="Reward vault"
+              className="mb-0"
+              trailing={
+                drawsReady ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-gold/16 px-3 py-1 text-caption font-bold text-ink-warning">
+                    <PartyPopper className="size-3.5" aria-hidden /> {drawsReady} ready
                   </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+                ) : null
+              }
+            />
+            <p className="text-caption text-ink-neutral">1 friend's first visit = 1 free-service draw</p>
 
-        <div ref={listRef} className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-3xl bg-card p-5 sm:p-6">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
-              <Users className="size-5 text-primary" /> Referrals
-            </h2>
-            {!overview?.referrals?.length ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-                <Sparkles className="size-8" />
-                No referrals yet
+            {vault.needsGender ? (
+              <div className="space-y-3 rounded-2xl bg-portal/8 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold">
+                  <UserRound className="size-4 text-portal" aria-hidden /> Pick your gender to unlock every card
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    ["MALE", "Male"],
+                    ["FEMALE", "Female"],
+                    ["OTHER", "Other"],
+                  ].map(([value, label]) => (
+                    <button key={value} type="button" disabled={savingGender} onClick={() => void handleSetGender(value)} className="h-11 rounded-full bg-card px-5 text-sm font-semibold ring-1 ring-inset ring-border hover:ring-portal/50 disabled:opacity-50">
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
+            ) : null}
+
+            {!vault.loaded ? (
+              <SkeletonShimmer className="h-44 rounded-card" />
+            ) : prize ? (
+              <div className="flex flex-col items-center gap-3 py-2">
+                <RewardReveal reward={{ title: prize.serviceName, subtitle: `Free · worth ${money(prize.serviceBasePrice)}`, icon: Sparkles }} onReveal={() => notify.success(`You won ${prize.serviceName}`, { description: "Saved to your vouchers" })} />
+                <button type="button" onClick={() => setPrize(null)} className="h-11 rounded-full px-4 text-sm font-semibold text-portal hover:bg-portal/10">
+                  Done
+                </button>
+              </div>
+            ) : vault.cards.length ? (
+              <CardFan cards={vault.cards} drawing={drawing} />
             ) : (
-              <ul className="space-y-2">
-                {overview.referrals.map((referral) => {
-                  const meta = REFERRAL_STATUS_META[referral.status] ?? REFERRAL_STATUS_META.PENDING;
-                  const countdown = referral.status === "COOLING" ? formatCoolingCountdown(referral.coolingUntil) : null;
-                  return (
-                    <li key={referral.id} data-loyalty-row className="flex items-center justify-between gap-3 rounded-2xl bg-secondary p-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold">{referral.referredName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(referral.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                          {countdown ? ` · ${countdown}` : ""}
-                        </p>
-                      </div>
-                      <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold", meta.tone)}>
-                        {meta.label}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <EmptyState illustration="gift" title="Cards coming soon" compact className="bg-transparent" />
             )}
+
+            {!prize ? (
+              <div className="flex justify-center">
+                <ButtonLoadingMorph
+                  state={draw.state}
+                  icon={Gift}
+                  variant={drawsReady && !vault.needsGender ? "gold" : "secondary"}
+                  size="lg"
+                  disabled={!drawsReady || !vault.cards.length || vault.needsGender || drawing}
+                  loadingLabel="Shuffling…"
+                  successLabel="Scratch it!"
+                  onClick={() => draw.run(handleDraw)}
+                >
+                  {vault.needsGender ? "Add gender to draw" : drawsReady ? "Draw reward" : "No draws yet"}
+                </ButtonLoadingMorph>
+              </div>
+            ) : null}
           </section>
 
-          <section className="rounded-3xl bg-card p-5 sm:p-6">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-semibold">
-              <Wallet className="size-5 text-primary" /> Wallet activity
-            </h2>
-            {!overview?.transactions?.length ? (
-              <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-                <Wallet className="size-8" />
-                Nothing yet
-              </div>
-            ) : (
-              <ul className="space-y-2">
-                {overview.transactions.map((tx) => (
-                  <li key={tx.id} data-loyalty-row className="flex items-center gap-3 rounded-2xl bg-secondary p-3">
-                    {tx.type === "CREDIT" ? (
-                      <ArrowUpCircle className="size-5 shrink-0 text-success" />
-                    ) : (
-                      <ArrowDownCircle className="size-5 shrink-0 text-muted-foreground" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{tx.description || tx.source}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(tx.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                      </p>
-                    </div>
-                    <p className={cn("shrink-0 text-sm font-bold", tx.type === "CREDIT" && "text-success")}>
-                      {tx.type === "CREDIT" ? "+" : "-"}₹{tx.amount}
-                    </p>
-                  </li>
+          {/* Vouchers */}
+          {vault.wins.length ? (
+            <section aria-label="My vouchers">
+              <SectionHeading icon={Ticket} title="My vouchers" />
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {vault.wins.map((win, i) => (
+                  <VoucherCard key={win.id} win={win} index={i} />
                 ))}
               </ul>
-            )}
-          </section>
+            </section>
+          ) : null}
+
+          {/* Referrals + activity */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <section aria-label="Referrals">
+              <SectionHeading icon={Users} title="Referrals" />
+              {loading ? (
+                <SkeletonList rows={3} />
+              ) : !overview?.referrals?.length ? (
+                <EmptyState
+                  illustration="gift"
+                  title="No referrals yet"
+                  compact
+                  action={
+                    referralLink ? (
+                      <button type="button" onClick={openInvite} className="inline-flex h-11 items-center gap-2 rounded-control bg-portal px-5 text-sm font-semibold text-portal-foreground shadow-soft">
+                        <Gift className="size-4" aria-hidden /> Invite a friend
+                      </button>
+                    ) : null
+                  }
+                />
+              ) : (
+                <ul className="space-y-2">
+                  <AnimatePresence initial={false}>
+                    {overview.referrals.map((referral, i) => {
+                      const countdown = referral.status === "COOLING" ? coolingLabel(referral.coolingUntil) : null;
+                      return (
+                        <motion.li
+                          key={referral.id}
+                          initial={reduce ? false : { opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(i, 8) * 0.05 }}
+                          className="flex items-center gap-3 rounded-2xl bg-card p-3 ring-1 ring-inset ring-border/60"
+                        >
+                          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-portal/12 font-semibold text-portal">{`${referral.referredName ?? "?"}`.charAt(0).toUpperCase()}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{referral.referredName}</p>
+                            <p className="text-caption text-ink-neutral">
+                              {shortDate(referral.createdAt)}
+                              {countdown ? ` · ${countdown}` : ""}
+                            </p>
+                          </div>
+                          <StatusChip status={referral.status} audience="customer" size="sm" />
+                        </motion.li>
+                      );
+                    })}
+                  </AnimatePresence>
+                </ul>
+              )}
+            </section>
+
+            <section aria-label="Wallet activity">
+              <SectionHeading icon={Wallet} title="Wallet activity" />
+              {loading ? (
+                <SkeletonList rows={3} />
+              ) : !overview?.transactions?.length ? (
+                <EmptyState illustration="bag" title="Nothing yet" compact />
+              ) : (
+                <ul className="space-y-2">
+                  {overview.transactions.map((tx, i) => {
+                    const credit = tx.type === "CREDIT";
+                    return (
+                      <motion.li
+                        key={tx.id}
+                        initial={reduce ? false : { opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(i, 8) * 0.05 }}
+                        className="flex items-center gap-3 rounded-2xl bg-card p-3 ring-1 ring-inset ring-border/60"
+                      >
+                        <span className={cn("grid size-10 shrink-0 place-items-center rounded-xl", credit ? "bg-success/12 text-ink-success" : "bg-muted text-ink-neutral")}>
+                          {credit ? <ArrowDownLeft className="size-5" aria-hidden /> : <ArrowUpRight className="size-5" aria-hidden />}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{tx.description || tx.source}</p>
+                          <p className="text-caption text-ink-neutral">{shortDate(tx.createdAt)}</p>
+                        </div>
+                        <p className={cn("shrink-0 text-sm font-bold tabular-nums", credit && "text-ink-success")}>
+                          {credit ? "+" : "−"}
+                          {money(tx.amount)}
+                        </p>
+                      </motion.li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          </div>
         </div>
-      </div>
+      </PullToRefresh>
     </UserLayout>
   );
 }

@@ -1,20 +1,16 @@
 "use client";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { CalendarCheck2, CalendarPlus, Clock, History, Info, RefreshCw, Trash2, Wifi, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/shared/empty-state";
+import { AnimatedTabBar, ConfirmSheet, EmptyState, ErrorState, IconButton, PullToRefresh } from "@/components/kit";
+import { SkeletonCard } from "@/components/motion/skeleton-shimmer";
+import { spring } from "@/components/motion/presets";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { StarRating } from "@/components/ui/star-rating";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
-import { toApiUrl } from "@/lib/api-base";
+import { notify } from "@/lib/notify";
+import { normalizeBookingStatus } from "@/lib/booking-pending-status";
 import {
   cancelCustomerBookingAsync,
   clearCustomerCancellationPreview,
@@ -22,578 +18,307 @@ import {
   disconnectCustomerRealtime,
   fetchCustomerBookings,
   fetchCustomerCancellationPreviewAsync,
+  fetchCustomerServices,
   removeCustomerBookingFromHistoryAsync,
+  setCustomerBookingField,
 } from "@/store/customer-bookings-slice";
-import { animate } from "animejs";
-import {
-  Ban,
-  CalendarCheck,
-  CalendarClock,
-  CalendarPlus,
-  CheckCircle2,
-  ChevronDown,
-  Clock,
-  Download,
-  Flag,
-  History,
-  Info,
-  Loader2,
-  MessageSquareHeart,
-  ShieldAlert,
-  Trash2,
-  User,
-  Wallet,
-  XCircle,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useDispatch, useSelector } from "react-redux";
-import { Link } from "react-router-dom";
-import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import {
-  formatCountdownMs,
-  getBookingDisplayStatus,
-  getPendingAutoCompleteCountdownMs,
-  isNoShowBooking,
-  isStartedPendingAutoComplete,
-  normalizeBookingStatus,
-} from "@/lib/booking-pending-status";
+import { fetchCustomerFeedback, sendBookingFeedback } from "../lib/user-api";
+import { UPCOMING_STATUSES, rebookServiceIds } from "../lib/bookings";
+import { BookingCard } from "../components/bookings/booking-card";
+import { CancelBookingSheet } from "../components/bookings/cancel-booking-sheet";
+import { ReviewSheet } from "../components/bookings/review-sheet";
+import { InvoiceSheet } from "../components/bookings/invoice-sheet";
 
-async function feedbackAuthFetch(path, init) {
-  const token = await getFirebaseIdToken().catch(() => null);
-  const res = await fetch(toApiUrl(path), {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers ?? {}),
-    },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
-  return data;
-}
-
-const CANCELLATION_POLICY_SUMMARY = [
-  { condition: "24h+ before", refund: "100% back", tone: "bg-success/15 text-success" },
-  { condition: "30 min to 24h", refund: "50% back", tone: "bg-warning/20 text-warning" },
-  { condition: "Under 30 min", refund: "No refund", tone: "bg-destructive/15 text-destructive" },
+const POLICY = [
+  { condition: "24h+ before", refund: "100% back", tone: "bg-success/12 text-ink-success" },
+  { condition: "30 min – 24h", refund: "50% back", tone: "bg-warning/14 text-ink-warning" },
+  { condition: "Under 30 min", refund: "No refund", tone: "bg-destructive/12 text-ink-destructive" },
 ];
 
-function normalizeStatus(status) {
-  return normalizeBookingStatus(status);
-}
-
-function canCancelBooking(status) {
-  const s = normalizeStatus(status);
-  return s === "PENDING" || s === "CONFIRMED";
-}
-
-function canRemoveFromHistory(status) {
-  const s = normalizeStatus(status);
-  return s === "COMPLETED" || s === "CANCELLED" || s === "NO-SHOW";
-}
-
-function canReviewBooking(status) {
-  return normalizeStatus(status) === "COMPLETED";
-}
-
-const STATUS_STYLE = {
-  CONFIRMED: { tone: "bg-primary/10 text-primary", icon: CalendarCheck, label: "Confirmed" },
-  PENDING: { tone: "bg-accent/15 text-accent", icon: Clock, label: "Pending" },
-  COMPLETED: { tone: "bg-success/15 text-success", icon: CheckCircle2, label: "Done" },
-  CANCELLED: { tone: "bg-destructive/10 text-destructive", icon: XCircle, label: "Cancelled" },
-  "NO-SHOW": { tone: "bg-warning/20 text-warning", icon: ShieldAlert, label: "Missed" },
-};
-const UPCOMING_STATUSES = new Set(["PENDING", "CONFIRMED", "STARTED"]);
-
 export default function UserBookingHistoryPage() {
-  const { appUser, loading } = useAuth();
+  const { appUser } = useAuth();
   const dispatch = useDispatch();
-  const {
-    bookings,
-    realtimeConnected,
-    deletingBookingId,
-    cancellingBookingId,
-    cancellationPreview,
-    cancellationPreviewLoading,
-    error,
-  } = useSelector((state) => state.customerBookings);
+  const navigate = useNavigate();
+  const reduce = useReducedMotion();
+  const { bookings, services, loading: bookingsLoading, realtimeConnected, deletingBookingId, cancellationPreview, cancellationPreviewLoading, error } = useSelector(
+    (state) => state.customerBookings
+  );
+  const isUser = appUser?.role === "USER";
 
   const [tab, setTab] = useState("upcoming");
   const [showPolicy, setShowPolicy] = useState(false);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [cancelTargetId, setCancelTargetId] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null); // { booking, mode: "cancel" | "reschedule" }
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [invoiceTarget, setInvoiceTarget] = useState(null);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [loadedOnce, setLoadedOnce] = useState(false);
 
   const [feedbackByBooking, setFeedbackByBooking] = useState({});
-  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewIsComplaint, setReviewIsComplaint] = useState(false);
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const reviewedBadgeRefs = useRef({});
+  const [justReviewed, setJustReviewed] = useState(null);
+  const reviewedRefs = useRef({});
 
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    if (!appUser || appUser.role !== "USER") return;
-    void dispatch(fetchCustomerBookings());
-    void dispatch(connectCustomerRealtime());
-    void loadFeedback();
-    return () => {
-      void dispatch(disconnectCustomerRealtime());
-    };
-  }, [appUser, dispatch]);
-
-  useEffect(() => {
-    if (error) notify.error(error);
-  }, [error]);
-
-  async function loadFeedback() {
+  const loadFeedback = useCallback(async () => {
     try {
-      const data = await feedbackAuthFetch("/api/customer/feedback");
+      const data = await fetchCustomerFeedback();
       const map = {};
       for (const item of data.feedback ?? []) map[item.bookingId] = item;
       setFeedbackByBooking(map);
     } catch {
       // Non-critical: review badges just won't be pre-populated.
     }
-  }
+  }, []);
 
-  function closeCancelDialog() {
-    setCancelDialogOpen(false);
-    setCancelTargetId(null);
-    dispatch(clearCustomerCancellationPreview());
-  }
+  const reload = useCallback(async () => {
+    await Promise.allSettled([dispatch(fetchCustomerBookings()), loadFeedback()]);
+    setLoadedOnce(true);
+  }, [dispatch, loadFeedback]);
 
-  function openReviewDialog(booking) {
+  useEffect(() => {
+    if (!isUser) return undefined;
+    void reload();
+    void dispatch(fetchCustomerServices());
+    void dispatch(connectCustomerRealtime());
+    return () => {
+      void dispatch(disconnectCustomerRealtime());
+    };
+  }, [isUser, dispatch, reload]);
+
+  useEffect(() => {
+    if (error && loadedOnce) notify.error(error);
+  }, [error, loadedOnce]);
+
+  function openReview(booking) {
     setReviewTarget(booking);
     setReviewRating(0);
     setReviewComment("");
     setReviewIsComplaint(false);
-    setReviewDialogOpen(true);
-  }
-
-  function closeReviewDialog() {
-    setReviewDialogOpen(false);
-    setReviewTarget(null);
   }
 
   async function submitReview() {
     if (!reviewTarget) return;
-    if (reviewRating < 1) {
-      notify.error("Pick a star rating");
-      return;
-    }
-    setSubmittingReview(true);
     try {
-      const data = await feedbackAuthFetch(`/api/customer/bookings/${reviewTarget.id}/feedback`, {
-        method: "POST",
-        body: JSON.stringify({
-          rating: reviewRating,
-          comment: reviewComment,
-          type: reviewIsComplaint ? "COMPLAINT" : "FEEDBACK",
-        }),
-      });
-      const reviewedBookingId = reviewTarget.id;
-      setFeedbackByBooking((prev) => ({ ...prev, [reviewedBookingId]: data.feedback }));
+      const data = await sendBookingFeedback(reviewTarget.id, { rating: reviewRating, comment: reviewComment, type: reviewIsComplaint ? "COMPLAINT" : "FEEDBACK" });
+      const id = reviewTarget.id;
+      setFeedbackByBooking((prev) => ({ ...prev, [id]: data.feedback ?? { rating: reviewRating } }));
+      setJustReviewed(id);
       notify.success("Thanks for your review");
-      closeReviewDialog();
-      window.requestAnimationFrame(() => {
-        const el = reviewedBadgeRefs.current[reviewedBookingId];
-        if (!el) return;
-        animate(el, {
-          scale: [0.5, 1.2, 1],
-          rotate: ["-10deg", "6deg", "0deg"],
-          duration: 560,
-          ease: "outElastic(1, .6)",
-        });
-      });
-    } catch (error) {
-      notify.error("Couldn't send your review", { description: error.message });
-    } finally {
-      setSubmittingReview(false);
+      setTimeout(() => setReviewTarget(null), 650);
+    } catch (err) {
+      notify.error("Couldn't send your review", { description: err.message });
+      throw err;
     }
   }
 
-  async function openCancelDialog(booking) {
-    setCancelTargetId(booking.id);
-    setCancelDialogOpen(true);
+  async function openCancel(booking, mode) {
+    setCancelTarget({ booking, mode });
     await dispatch(fetchCustomerCancellationPreviewAsync(booking.id));
   }
 
-  async function confirmCancelBooking() {
-    if (!cancelTargetId) return;
-    const result = await dispatch(cancelCustomerBookingAsync(cancelTargetId));
-    if (cancelCustomerBookingAsync.rejected.match(result)) {
-      notify.error(result.payload ?? "Could not cancel booking");
-      return;
-    }
-    const refundMsg = result.payload?.refund?.message;
-    notify.success("Booking cancelled", { description: refundMsg });
-    closeCancelDialog();
+  function closeCancel() {
+    setCancelTarget(null);
+    dispatch(clearCustomerCancellationPreview());
   }
 
-  async function handleRemoveFromHistory(booking) {
-    if (!window.confirm("Remove this booking from your history?")) return;
-    const result = await dispatch(removeCustomerBookingFromHistoryAsync(booking.id));
+  async function confirmCancel() {
+    if (!cancelTarget) return;
+    const { booking, mode } = cancelTarget;
+    const result = await dispatch(cancelCustomerBookingAsync(booking.id));
+    if (cancelCustomerBookingAsync.rejected.match(result)) {
+      notify.error(result.payload ?? "Could not cancel booking");
+      throw new Error("cancel failed");
+    }
+    notify.success("Booking cancelled", { description: result.payload?.refund?.message });
+    setTimeout(() => {
+      closeCancel();
+      if (mode === "reschedule") rebook(booking, "Pick a new time");
+    }, 700);
+  }
+
+  async function confirmRemove() {
+    if (!removeTarget) return;
+    const result = await dispatch(removeCustomerBookingFromHistoryAsync(removeTarget.id));
     if (removeCustomerBookingFromHistoryAsync.rejected.match(result)) {
       notify.error(result.payload ?? "Could not remove booking");
-      return;
+      throw new Error("remove failed");
     }
     notify.success("Removed from history");
   }
 
+  function rebook(booking, message = "Added to your booking") {
+    const ids = rebookServiceIds(booking, services);
+    if (!ids.length) {
+      notify.info("Pick your services", { description: "That service isn't on the menu any more." });
+      navigate("/user-dashboard/appointments");
+      return;
+    }
+    dispatch(setCustomerBookingField({ field: "serviceIds", value: ids }));
+    notify.success(message, { description: booking.service });
+    navigate("/user-dashboard/appointments");
+  }
+
+  // The rating badge pops once after a review lands.
+  useEffect(() => {
+    if (!justReviewed || reduce) return;
+    const el = reviewedRefs.current[justReviewed];
+    el?.animate?.([{ transform: "scale(0.5) rotate(-10deg)" }, { transform: "scale(1.15) rotate(4deg)" }, { transform: "scale(1)" }], { duration: 520, easing: "cubic-bezier(.34,1.56,.64,1)" });
+  }, [justReviewed, feedbackByBooking, reduce]);
+
   const preview = cancellationPreview?.preview;
-  const previewBooking = cancellationPreview?.booking;
-  const policyRules = cancellationPreview?.policyRules ?? CANCELLATION_POLICY_SUMMARY;
-  const isCancelling = Boolean(cancelTargetId && cancellingBookingId === cancelTargetId);
-
-  const sorted = useMemo(
-    () => [...bookings].sort((x, y) => new Date(y.startsAt) - new Date(x.startsAt)),
-    [bookings]
-  );
-  const upcoming = sorted.filter((b) => UPCOMING_STATUSES.has(normalizeStatus(b.status))).reverse();
-  const past = sorted.filter((b) => !UPCOMING_STATUSES.has(normalizeStatus(b.status)));
+  const sorted = useMemo(() => [...bookings].sort((x, y) => new Date(y.startsAt) - new Date(x.startsAt)), [bookings]);
+  const upcoming = sorted.filter((b) => UPCOMING_STATUSES.has(normalizeBookingStatus(b.status))).reverse();
+  const past = sorted.filter((b) => !UPCOMING_STATUSES.has(normalizeBookingStatus(b.status)));
   const visible = tab === "upcoming" ? upcoming : past;
-
-  if (loading) {
-    return (
-      <UserLayout pageTitle="History">
-        <Skeleton className="h-96 max-w-4xl rounded-3xl" />
-      </UserLayout>
-    );
-  }
-
-  if (!appUser || appUser.role !== "USER") {
-    return (
-      <div className="mx-auto max-w-md space-y-4 p-6">
-        <p>Sign in as a customer to view booking history.</p>
-        <Button asChild>
-          <Link to="/auth/login">Customer login</Link>
-        </Button>
-      </div>
-    );
-  }
+  const firstLoad = !loadedOnce && bookingsLoading && !bookings.length;
 
   return (
     <UserLayout
-      pageTitle="History"
+      pageTitle="Bookings"
       width="lg"
       actions={
-        <span
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold",
-            realtimeConnected ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"
-          )}
-        >
-          <span className={cn("size-2 rounded-full", realtimeConnected ? "bg-success" : "bg-muted-foreground")} />
-          {realtimeConnected ? "Live" : "Offline"}
-        </span>
+        <>
+          <span
+            className={cn("hidden h-8 items-center gap-1.5 rounded-full px-3 text-caption font-semibold sm:inline-flex", realtimeConnected ? "bg-success/12 text-ink-success" : "bg-muted text-ink-neutral")}
+            title={realtimeConnected ? "Live updates on" : "Live updates paused"}
+          >
+            {realtimeConnected ? <Wifi className="size-3.5" aria-hidden /> : <WifiOff className="size-3.5" aria-hidden />}
+            {realtimeConnected ? "Live" : "Offline"}
+          </span>
+          <IconButton icon={RefreshCw} label="Refresh" className="hidden sm:inline-grid" onClick={() => void reload()} />
+        </>
       }
     >
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex gap-1 rounded-full bg-card p-1" role="tablist">
-            {[
-              { key: "upcoming", label: "Upcoming", icon: CalendarClock, count: upcoming.length },
-              { key: "past", label: "Past", icon: History, count: past.length },
-            ].map(({ key, label, icon: Icon, count }) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={tab === key}
-                onClick={() => setTab(key)}
-                className={cn(
-                  "flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold",
-                  tab === key ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                )}
-              >
-                <Icon className="size-4" />
-                {label}
-                <span className="opacity-70">{count}</span>
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowPolicy((open) => !open)}
-            aria-expanded={showPolicy}
-            className="flex h-10 items-center gap-1.5 rounded-full bg-card px-4 text-sm font-medium"
-          >
-            <Info className="size-4 text-primary" />
-            Refunds
-            <ChevronDown className={cn("size-4 transition-transform", showPolicy && "rotate-180")} />
-          </button>
-        </div>
-
-        {showPolicy ? (
-          <div className="grid gap-2 sm:grid-cols-3">
-            {CANCELLATION_POLICY_SUMMARY.map((rule) => (
-              <div key={rule.condition} className="flex items-center justify-between gap-3 rounded-2xl bg-card p-3">
-                <span className="flex items-center gap-2 text-sm font-medium">
-                  <Clock className="size-4 text-muted-foreground" />
-                  {rule.condition}
-                </span>
-                <span className={cn("rounded-full px-2.5 py-1 text-xs font-bold", rule.tone)}>{rule.refund}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {!visible.length ? (
-          <EmptyState
-            icon={tab === "upcoming" ? CalendarPlus : History}
-            title={tab === "upcoming" ? "Nothing coming up" : "No past visits"}
-            action={
-              tab === "upcoming" ? (
-                <Button asChild className="h-11 rounded-full px-6">
-                  <Link to="/user-dashboard/appointments">
-                    <CalendarPlus /> Book now
-                  </Link>
-                </Button>
-              ) : null
-            }
-          />
-        ) : (
-          <ul className="space-y-3">
-            {visible.map((booking) => {
-              const status = STATUS_STYLE[normalizeStatus(booking.status)] ?? STATUS_STYLE.PENDING;
-              const StatusIcon = status.icon;
-              const cancellable = canCancelBooking(booking.status);
-              const removable = canRemoveFromHistory(booking.status);
-              const reviewable = canReviewBooking(booking.status);
-              const existingFeedback = feedbackByBooking[booking.id];
-              const pendingAutoComplete = isStartedPendingAutoComplete(booking);
-              const displayStatus = pendingAutoComplete ? "In service" : status.label;
-              const isDeleting = deletingBookingId === booking.id;
-              const when = new Date(booking.startsAt);
-
-              return (
-                <li key={booking.id} className="space-y-4 rounded-3xl bg-card p-4 sm:p-5">
-                  <div className="flex items-start gap-4">
-                    <div className="grid w-14 shrink-0 place-items-center rounded-2xl bg-secondary py-2 text-primary">
-                      <span className="text-xs font-semibold uppercase">{when.toLocaleDateString([], { month: "short" })}</span>
-                      <span className="font-display text-2xl font-bold leading-none">{when.getDate()}</span>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-lg font-semibold">{booking.service}</p>
-                      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Clock className="size-4" />
-                          {when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <User className="size-4" />
-                          {booking.stylistName ?? "To be assigned"}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Wallet className="size-4" />₹{Math.round(Number(booking.payableAmount ?? 0))}
-                        </span>
-                      </p>
-                    </div>
-                    <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", status.tone)}>
-                      <StatusIcon className="size-3.5" />
-                      {displayStatus}
-                    </span>
-                  </div>
-
-                  {pendingAutoComplete ? (
-                    <p className="flex items-center gap-2 rounded-2xl bg-accent/15 px-3 py-2 text-sm font-medium text-accent">
-                      <Loader2 className="size-4 animate-spin" />
-                      Wraps up in {formatCountdownMs(getPendingAutoCompleteCountdownMs(booking, nowMs))}
-                    </p>
-                  ) : null}
-
-                  {isNoShowBooking(booking) ? (
-                    <p className="flex items-center gap-2 rounded-2xl bg-warning/15 px-3 py-2 text-sm font-medium">
-                      <ShieldAlert className="size-4 shrink-0" />
-                      Missed visit · no refund
-                    </p>
-                  ) : null}
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button asChild variant="secondary" size="sm" className="rounded-full">
-                      <a href={toApiUrl(`/api/customer/bookings/${booking.id}/invoice.pdf`)} target="_blank" rel="noreferrer">
-                        <Download /> Invoice
-                      </a>
-                    </Button>
-                    {reviewable ? (
-                      existingFeedback ? (
-                        <span
-                          ref={(el) => (reviewedBadgeRefs.current[booking.id] = el)}
-                          className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1.5 text-xs font-semibold text-accent"
-                        >
-                          <StarRating value={existingFeedback.rating} readOnly size="sm" />
-                        </span>
-                      ) : (
-                        <Button type="button" variant="secondary" size="sm" className="rounded-full" onClick={() => openReviewDialog(booking)}>
-                          <MessageSquareHeart className="text-accent" /> Review
-                        </Button>
-                      )
-                    ) : null}
-                    {cancellable ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className="rounded-full text-destructive"
-                        onClick={() => void openCancelDialog(booking)}
-                      >
-                        <Ban /> Cancel
-                      </Button>
-                    ) : null}
-                    {removable ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="rounded-full text-muted-foreground"
-                        disabled={isDeleting}
-                        onClick={() => void handleRemoveFromHistory(booking)}
-                      >
-                        {isDeleting ? <Loader2 className="animate-spin" /> : <Trash2 />} Remove
-                      </Button>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-
-      {/* Cancel dialog */}
-      <Dialog open={cancelDialogOpen} onOpenChange={(open) => !open && closeCancelDialog()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Ban className="size-5 text-destructive" />
-              Cancel booking
-            </DialogTitle>
-            <DialogDescription className="sr-only">Check your refund before cancelling</DialogDescription>
-          </DialogHeader>
-
-          {cancellationPreviewLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-16" />
-              <Skeleton className="h-24" />
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {previewBooking ? (
-                <div className="rounded-2xl bg-secondary p-4">
-                  <p className="font-semibold">{previewBooking.service}</p>
-                  <p className="mt-0.5 text-sm text-muted-foreground">
-                    {new Date(previewBooking.startsAt).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}
-                  </p>
-                </div>
-              ) : null}
-
-              {preview?.canCancel ? (
-                <div className="rounded-2xl bg-success/10 p-4">
-                  <p className="text-sm font-semibold text-success">{preview.tierLabel}</p>
-                  <p className="mt-1 font-display text-3xl font-bold">
-                    ₹{Math.round(Number(preview.refundAmount ?? 0))}
-                    <span className="ml-2 font-sans text-sm font-medium text-muted-foreground">back · {preview.refundPercent}%</span>
-                  </p>
-                  {Number(preview.retainedAmount ?? 0) > 0 ? (
-                    <p className="mt-1 text-xs text-muted-foreground">₹{Math.round(Number(preview.retainedAmount))} not refundable</p>
-                  ) : null}
-                </div>
-              ) : (
-                <p className="flex items-center gap-2 rounded-2xl bg-destructive/10 p-4 text-sm font-medium text-destructive">
-                  <ShieldAlert className="size-5 shrink-0" />
-                  {preview?.reason ?? "This booking can't be cancelled."}
-                </p>
-              )}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button type="button" variant="secondary" className="rounded-full" onClick={closeCancelDialog}>
-              Keep it
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="rounded-full"
-              disabled={cancellationPreviewLoading || !preview?.canCancel || isCancelling}
-              onClick={() => void confirmCancelBooking()}
-            >
-              {isCancelling ? <Loader2 className="animate-spin" /> : <Ban />}
-              Cancel booking
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Review dialog */}
-      <Dialog open={reviewDialogOpen} onOpenChange={(open) => !open && closeReviewDialog()}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <MessageSquareHeart className="size-5 text-accent" />
-              {reviewTarget?.service ?? "Your visit"}
-            </DialogTitle>
-            <DialogDescription className="sr-only">Rate your visit</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-5">
-            <div className="flex flex-col items-center gap-2">
-              <StarRating value={reviewRating} onChange={setReviewRating} size="lg" />
-              <p className="h-4 text-xs text-muted-foreground">
-                {["Tap a star", "Sorry to hear that", "We can do better", "Thanks for the feedback", "Glad you liked it", "Wonderful!"][reviewRating]}
-              </p>
-            </div>
-
-            <textarea
-              id="review-comment"
-              rows={3}
-              maxLength={2000}
-              value={reviewComment}
-              onChange={(e) => setReviewComment(e.target.value)}
-              placeholder="Add a comment (optional)"
-              aria-label="Comment"
-              className="flex w-full rounded-2xl bg-secondary px-4 py-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      <PullToRefresh onRefresh={reload}>
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <AnimatedTabBar
+              label="Bookings"
+              value={tab}
+              onChange={setTab}
+              items={[
+                { value: "upcoming", label: "Upcoming", icon: CalendarCheck2, badge: upcoming.length || undefined },
+                { value: "past", label: "Past", icon: History },
+              ]}
             />
-
             <button
               type="button"
-              role="switch"
-              aria-checked={reviewIsComplaint}
-              onClick={() => setReviewIsComplaint((value) => !value)}
-              className={cn(
-                "flex w-full items-center gap-3 rounded-2xl p-3 text-left text-sm font-medium",
-                reviewIsComplaint ? "bg-destructive/10 text-destructive" : "bg-secondary"
-              )}
+              onClick={() => setShowPolicy((open) => !open)}
+              aria-expanded={showPolicy}
+              className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-sm font-semibold text-ink-neutral hover:bg-muted"
             >
-              <Flag className="size-4 shrink-0" />
-              <span className="flex-1">This is a complaint</span>
-              <span className={cn("flex h-6 w-11 shrink-0 items-center rounded-full p-0.5", reviewIsComplaint ? "bg-destructive" : "bg-muted-foreground/30")}>
-                <span className={cn("size-5 rounded-full bg-white transition-transform", reviewIsComplaint ? "translate-x-5" : "translate-x-0")} />
-              </span>
+              <Info className="size-4 text-portal" aria-hidden /> Refunds
             </button>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="secondary" className="rounded-full" onClick={closeReviewDialog}>
-              Cancel
-            </Button>
-            <Button type="button" className="rounded-full" disabled={submittingReview || reviewRating < 1} onClick={() => void submitReview()}>
-              {submittingReview ? <Loader2 className="animate-spin" /> : null}
-              Send
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <AnimatePresence initial={false}>
+            {showPolicy ? (
+              <motion.div
+                initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={spring.soft}
+                className="grid gap-2 sm:grid-cols-3"
+              >
+                {POLICY.map((rule) => (
+                  <div key={rule.condition} className="flex items-center justify-between gap-3 rounded-2xl bg-card p-3 ring-1 ring-inset ring-border/60">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      <Clock className="size-4 text-ink-neutral" aria-hidden /> {rule.condition}
+                    </span>
+                    <span className={cn("rounded-full px-2.5 py-1 text-micro font-bold", rule.tone)}>{rule.refund}</span>
+                  </div>
+                ))}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
+          {firstLoad ? (
+            <div className="space-y-3" aria-label="Loading bookings">
+              {Array.from({ length: 3 }, (_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : error && !bookings.length ? (
+            <ErrorState title="Couldn't load bookings" onRetry={reload} offline={typeof navigator !== "undefined" && navigator.onLine === false} />
+          ) : !visible.length ? (
+            <EmptyState
+              illustration="calendar"
+              title={tab === "upcoming" ? "Nothing coming up" : "No past visits"}
+              action={
+                tab === "upcoming" ? (
+                  <Link to="/user-dashboard/appointments" className="inline-flex h-11 items-center gap-2 rounded-control bg-portal px-5 text-sm font-semibold text-portal-foreground shadow-soft">
+                    <CalendarPlus className="size-4" aria-hidden /> Book now
+                  </Link>
+                ) : null
+              }
+            />
+          ) : (
+            <ul className="space-y-3">
+              <AnimatePresence initial={false} mode="popLayout">
+                {visible.map((booking, index) => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    index={index}
+                    nowMs={nowMs}
+                    feedback={feedbackByBooking[booking.id]}
+                    deleting={deletingBookingId === booking.id}
+                    reviewedRef={(el) => (reviewedRefs.current[booking.id] = el)}
+                    onInvoice={setInvoiceTarget}
+                    onReview={openReview}
+                    onCancel={(b) => void openCancel(b, "cancel")}
+                    onReschedule={(b) => void openCancel(b, "reschedule")}
+                    onRemove={setRemoveTarget}
+                    onRebook={(b) => rebook(b)}
+                  />
+                ))}
+              </AnimatePresence>
+            </ul>
+          )}
+        </div>
+      </PullToRefresh>
+
+      <CancelBookingSheet
+        open={Boolean(cancelTarget)}
+        onOpenChange={(open) => !open && closeCancel()}
+        mode={cancelTarget?.mode}
+        loading={cancellationPreviewLoading}
+        preview={preview}
+        booking={cancellationPreview?.booking ?? cancelTarget?.booking}
+        onConfirm={confirmCancel}
+      />
+      <ConfirmSheet
+        open={Boolean(removeTarget)}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        kind="destructive"
+        icon={Trash2}
+        title="Remove from history?"
+        description={removeTarget?.service}
+        confirmLabel="Slide to remove"
+        cancelLabel="Keep"
+        onConfirm={confirmRemove}
+      />
+      <ReviewSheet
+        open={Boolean(reviewTarget)}
+        onOpenChange={(open) => !open && setReviewTarget(null)}
+        booking={reviewTarget}
+        rating={reviewRating}
+        onRating={setReviewRating}
+        comment={reviewComment}
+        onComment={setReviewComment}
+        complaint={reviewIsComplaint}
+        onComplaint={setReviewIsComplaint}
+        onSubmit={submitReview}
+      />
+      <InvoiceSheet open={Boolean(invoiceTarget)} onOpenChange={(open) => !open && setInvoiceTarget(null)} booking={invoiceTarget} />
     </UserLayout>
   );
 }

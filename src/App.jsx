@@ -58,6 +58,7 @@ const AdminFrame = lazyLayout(() => import("@/admin/portal/admin-frame"), "Admin
 const EmployeeLayout = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeLayout")
 const ReceptionLayout = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionLayout")
 const UserLayout = lazyLayout(() => import("@/user/portal/user-layout"), "UserLayout")
+const UserFrame = lazyLayout(() => import("@/user/portal/user-frame"), "UserFrame")
 
 // Shown inside each portal's own shell, so the sidebar/header stay put while a page chunk loads.
 function ContentLoading() {
@@ -151,6 +152,8 @@ function App() {
             </Route>
 
             <Route element={<RequireRole roles={["USER"]} fallback={userFallback} />}>
+             {/* One persistent shell for every customer page (src/user/portal/user-frame.jsx). */}
+             <Route element={<UserFrame />}>
               <Route path="/user-dashboard" element={<UserDashboardPage />} />
               <Route path="/user-dashboard/appointments" element={<UserAppointmentsPage />} />
               <Route path="/user-dashboard/queue" element={<UserQueuePage />} />
@@ -159,6 +162,7 @@ function App() {
               <Route path="/user-dashboard/loyalty" element={<UserLoyaltyPage />} />
               <Route path="/user-dashboard/booking-history" element={<UserBookingHistoryPage />} />
               <Route path="/user-dashboard/profile" element={<UserProfilePage />} />
+             </Route>
             </Route>
 
             <Route path="*" element={<NotFoundPage />} />
