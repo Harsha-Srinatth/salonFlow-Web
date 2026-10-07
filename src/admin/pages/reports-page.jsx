@@ -3,16 +3,19 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowDownLeft, ArrowUpRight, Banknote, BarChart3, Calendar, CalendarRange, ChevronLeft, ChevronRight, Crown, CreditCard, Layers, Receipt, RotateCcw, Smartphone, TrendingUp, UserRound, Wallet } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "@/lib/notify";
+import { notify } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
-import { Button } from "@/components/ui/button";
+import { ErrorState, IconButton, StatCard, TONE_CLASSES } from "@/components/kit";
+import { SkeletonList, spring } from "@/components/motion";
 import { BrushChart } from "@/admin/components/brush-chart";
 import { dayEndIso, dayStartIso, DateRangePicker } from "@/admin/components/date-range-picker";
 import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
-import { StatCard } from "@/admin/components/stat-card";
-import { SegmentedControl } from "@/components/fx/segmented-control";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { FilterTabs } from "@/admin/components/filter-tabs";
+import { Panel } from "@/admin/components/panel";
+import { dayTimeOf } from "@/admin/lib/safe-format";
+import { formatMoney } from "@/lib/format";
+import { salonDateIso, salonDateOf } from "@/lib/salon-date";
 import { cn } from "@/lib/utils";
 import { fetchAdminRevenueReport, setReportsFilter } from "@/store/admin-portal-slice";
 
@@ -25,26 +28,22 @@ const MODES = [
 const MODE_ICON = { ONLINE: CreditCard, OFFLINE_UPI: Smartphone, OFFLINE_CASH: Banknote };
 const MODE_LABEL = { ONLINE: "Online", OFFLINE_UPI: "UPI", OFFLINE_CASH: "Cash" };
 
-// Short card titles: the long ones came from the API.
-const CARD_VIEW = {
-  "Today Net Income": { label: "Today", icon: Calendar },
-  "This Week Net": { label: "This week", icon: CalendarRange },
-  "This Month Net": { label: "This month", icon: BarChart3 },
-  "This Year Net": { label: "This year", icon: TrendingUp },
-  "Previous Week Net": { label: "Last week", icon: RotateCcw },
-};
+// Totals straight from the API summary (numbers, so the cards can count up).
+const CARDS = [
+  { key: "dayTotal", label: "Today", icon: Calendar, tone: "success" },
+  { key: "weekTotal", label: "This week", icon: CalendarRange, tone: "primary" },
+  { key: "monthTotal", label: "This month", icon: BarChart3, tone: "primary" },
+  { key: "yearTotal", label: "This year", icon: TrendingUp, tone: "primary" },
+  { key: "prevWeekTotal", label: "Last week", icon: RotateCcw, tone: "neutral" },
+];
 
-const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
-const when = (value) => {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-};
+const inr = (n) => formatMoney(n);
 
 function paymentKind(payment) {
-  if (payment.isRefund || payment.sourceType === "REFUND") return { icon: ArrowUpRight, tone: "bg-destructive/10 text-destructive", title: "Refund" };
-  if (payment.sourceType === "MEMBERSHIP") return { icon: Crown, tone: "bg-accent/15 text-accent", title: "Membership" };
-  if (payment.sourceType === "WALKIN") return { icon: UserRound, tone: "bg-primary/10 text-primary", title: "Walk-in" };
-  return { icon: ArrowDownLeft, tone: "bg-success/10 text-success", title: "Booking" };
+  if (payment.isRefund || payment.sourceType === "REFUND") return { icon: ArrowUpRight, tone: TONE_CLASSES.info, title: "Refund" };
+  if (payment.sourceType === "MEMBERSHIP") return { icon: Crown, tone: TONE_CLASSES.plum, title: "Membership" };
+  if (payment.sourceType === "WALKIN") return { icon: UserRound, tone: TONE_CLASSES.primary, title: "Walk-in" };
+  return { icon: ArrowDownLeft, tone: TONE_CLASSES.success, title: "Booking" };
 }
 
 function PaymentRow({ payment, index }) {
@@ -59,27 +58,29 @@ function PaymentRow({ payment, index }) {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
-      transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 10) * 0.015 }}
-      className="flex items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4"
+      transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.02 }}
+      className="flex min-h-16 items-center gap-3 px-3 py-3 transition-colors hover:bg-muted/40 sm:px-4"
     >
-      <span title={kind.title} className={cn("grid size-9 shrink-0 place-items-center rounded-full", kind.tone)}>
-        <Icon className="size-4" />
+      <span title={kind.title} className={cn("grid size-10 shrink-0 place-items-center rounded-2xl ring-1 ring-inset", kind.tone)}>
+        <Icon className="size-4" aria-hidden />
+        <span className="sr-only">{kind.title}</span>
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">
           {payment.customerName}
-          {note ? <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{note}</span> : null}
+          {note ? <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-ink-neutral">{note}</span> : null}
         </p>
-        <p className="truncate text-xs text-muted-foreground">{payment.services ?? kind.title}</p>
+        <p className="truncate text-caption text-ink-neutral">{payment.services ?? kind.title}</p>
       </div>
-      <span title={MODE_LABEL[payment.paymentMode] ?? payment.paymentMode} className="hidden size-8 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground sm:grid">
-        <ModeIcon className="size-4" />
+      <span title={MODE_LABEL[payment.paymentMode] ?? payment.paymentMode} className="hidden size-9 shrink-0 place-items-center rounded-xl bg-muted text-ink-neutral sm:grid">
+        <ModeIcon className="size-4" aria-hidden />
+        <span className="sr-only">{MODE_LABEL[payment.paymentMode] ?? payment.paymentMode}</span>
       </span>
       <div className="shrink-0 text-right">
-        <p className={cn("text-sm font-semibold tabular-nums", signed < 0 ? "text-destructive" : "text-success")}>
-          {signed < 0 ? "-" : "+"} {inr(Math.abs(signed))}
+        <p className={cn("text-sm font-semibold tabular-nums", signed < 0 ? "text-ink-info" : "text-ink-success")}>
+          {signed < 0 ? "−" : "+"} {inr(Math.abs(signed))}
         </p>
-        <p className="text-[11px] text-muted-foreground">{when(payment.collectedAt)}</p>
+        <p className="text-[11px] text-ink-neutral">{dayTimeOf(payment.collectedAt)}</p>
       </div>
     </motion.li>
   );
@@ -108,9 +109,9 @@ export default function AdminReportsPage() {
       const result = await dispatch(fetchAdminRevenueReport(p));
       if (fetchAdminRevenueReport.rejected.match(result)) {
         const message = result.payload ?? "Could not load revenue report";
-        toast.error(message);
+        notify.error(message);
         setReportsError(message);
-        return;
+        throw new Error(message);
       }
       setReportsError("");
     },
@@ -118,7 +119,7 @@ export default function AdminReportsPage() {
   );
 
   useEffect(() => {
-    void runReportFetch(params(0));
+    void runReportFetch(params(0)).catch(() => {});
   }, [runReportFetch, params]);
 
   // Per calendar day: money collected (bars) and net after refunds (line), oldest first.
@@ -127,7 +128,8 @@ export default function AdminReportsPage() {
     for (const payment of latestPayments) {
       const at = new Date(payment.collectedAt);
       if (Number.isNaN(at.getTime())) continue;
-      const day = new Date(at.getFullYear(), at.getMonth(), at.getDate());
+      // Salon calendar day (not the device's), as a UTC-midnight Date for the chart's time axis.
+      const day = new Date(`${salonDateOf(at)}T00:00:00Z`);
       const signed = Number(payment.signedAmount ?? payment.amount ?? 0);
       const entry = byDay.get(day.getTime()) ?? { date: day, collected: 0, net: 0 };
       if (signed > 0) entry.collected += signed;
@@ -140,84 +142,85 @@ export default function AdminReportsPage() {
   const weekTrend = reportSummary.prevWeekTotal > 0 ? Math.round(((reportSummary.weekTotal - reportSummary.prevWeekTotal) / reportSummary.prevWeekTotal) * 100) : undefined;
   const { offset, limit, total } = paymentsPagination;
 
+  const runOrNotify = (offset) => runReportFetch(params(offset)).catch(() => {});
+
   return (
     <AdminLayout
-      pageTitle="Reports"
-      description="Revenue, collections and refunds."
+      pageTitle="Revenue"
+      description="Income, refunds and receipts"
       actions={
-        <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-bold text-primary" title="Today's net income">
-          <span className="admin-live-dot relative inline-flex size-1.5 rounded-full bg-primary text-primary" />
+        <span className="inline-flex h-9 items-center gap-2 rounded-full bg-success/12 px-3 text-sm font-bold text-ink-success ring-1 ring-inset ring-success/25" title="Today's net income">
+          <span aria-hidden className="relative grid size-2 place-items-center">
+            <span className="kit-live-ping absolute inset-0 rounded-full bg-success opacity-60" />
+            <span className="size-2 rounded-full bg-success" />
+          </span>
+          <span className="sr-only">Today</span>
           {inr(reportSummary.dayTotal)}
         </span>
       }
     >
       <div className="space-y-5">
-        <ErrorBanner message={reportsError} onRetry={() => void runReportFetch(params(offset))} />
+        <ErrorBanner message={latestPayments.length ? reportsError : ""} onRetry={() => runReportFetch(params(offset))} />
 
-        {/* Filters: one row, no labels to read */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2">
           <DateRangePicker
             value={{ from, to }}
             anyLabel="This month"
             onChange={({ from: f, to: t }) => dispatch(setReportsFilter({ from: f, to: t, ...(f ? { month: f.slice(0, 7) } : {}) }))}
           />
-          <div className="max-w-full overflow-x-auto pb-1 sm:pb-0">
-            <SegmentedControl label="Payment mode" options={MODES} value={paymentMode} onChange={(value) => dispatch(setReportsFilter({ paymentMode: value }))} />
-          </div>
+          <FilterTabs label="Payment mode" options={MODES} value={paymentMode} onChange={(value) => dispatch(setReportsFilter({ paymentMode: value }))} className="min-w-0" />
           <AnimatePresence initial={false}>
             {filtered ? (
-              <motion.button
-                key="reset"
-                type="button"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                onClick={() => dispatch(setReportsFilter({ paymentMode: "ALL", from: "", to: "", month: new Date().toISOString().slice(0, 7) }))}
-                aria-label="Reset filters"
-                title="Reset filters"
-                className="grid size-10 place-items-center rounded-xl border bg-card text-muted-foreground hover:text-foreground"
-              >
-                <RotateCcw className="size-4" />
-              </motion.button>
+              <motion.span key="reset" initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
+                <IconButton icon={RotateCcw} label="Reset filters" variant="soft" onClick={() => dispatch(setReportsFilter({ paymentMode: "ALL", from: "", to: "", month: salonDateIso().slice(0, 7) }))} />
+              </motion.span>
             ) : null}
           </AnimatePresence>
         </div>
 
-        <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-5">
-          {reportCards.map((card, i) => {
-            const view = CARD_VIEW[card.title] ?? { label: card.title, icon: BarChart3 };
-            return <StatCard key={card.title} icon={view.icon} label={view.label} display={card.value.replace(/^Rs\s*/, "Rs ").replace(/\.00$/, "")} trend={view.label === "This week" ? weekTrend : undefined} tone={view.label === "Today" ? "success" : "primary"} delay={i * 40} className={i === 0 ? "col-span-2 lg:col-span-1" : undefined} />;
-          })}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {CARDS.map((card, i) => (
+            <StatCard
+              key={card.key}
+              icon={card.icon}
+              label={card.label}
+              value={Number(reportSummary[card.key] ?? 0)}
+              format={(n) => formatMoney(n)}
+              delta={card.key === "weekTotal" ? weekTrend : undefined}
+              deltaLabel="vs last week"
+              tone={card.tone}
+              loading={reportsLoading && !reportCards.length}
+              className={i === 0 ? "col-span-2 lg:col-span-1" : undefined}
+            />
+          ))}
         </div>
 
         {revenueSeries.length > 1 ? (
-          <motion.section initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-shadow-sm rounded-2xl border border-border/70 bg-card p-4 sm:p-5">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-base font-semibold">
-              <TrendingUp className="size-4 text-primary" /> Revenue
-            </h2>
+          <Panel title="Revenue" icon={TrendingUp} subtitle="Collected vs net after refunds">
             <BrushChart data={revenueSeries} />
-          </motion.section>
+          </Panel>
         ) : null}
 
-        <section className="admin-shadow-sm overflow-hidden rounded-2xl border border-border/70 bg-card">
-          <header className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3.5 sm:px-5">
-            <h2 className="flex items-center gap-2 font-display text-base font-semibold">
-              <Receipt className="size-4 text-primary" /> Payments
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">{total}</span>
-            </h2>
-            <div className="hidden items-center gap-3 text-[11px] text-muted-foreground sm:flex">
-              <span className="flex items-center gap-1"><ArrowDownLeft className="size-3 text-success" /> In</span>
-              <span className="flex items-center gap-1"><ArrowUpRight className="size-3 text-destructive" /> Refund</span>
-              <span className="flex items-center gap-1"><Crown className="size-3 text-accent" /> Plan</span>
+        <Panel
+          title="Payments"
+          icon={Receipt}
+          subtitle={`${total} receipts`}
+          bodyClassName=""
+          action={
+            <div className="hidden items-center gap-3 text-[11px] font-semibold text-ink-neutral sm:flex">
+              <span className="flex items-center gap-1"><ArrowDownLeft className="size-3 text-ink-success" aria-hidden /> In</span>
+              <span className="flex items-center gap-1"><ArrowUpRight className="size-3 text-ink-info" aria-hidden /> Refund</span>
+              <span className="flex items-center gap-1"><Crown className="size-3 text-ink-plum" aria-hidden /> Plan</span>
             </div>
-          </header>
-
-          {reportsLoading && !latestPayments.length ? (
-            <LoadingOrb compact label="Loading payments…" />
+          }
+        >
+          {reportsError && !latestPayments.length ? (
+            <ErrorState compact title="Couldn't load payments" description={reportsError} onRetry={() => runReportFetch(params(offset))} />
+          ) : reportsLoading && !latestPayments.length ? (
+            <SkeletonList rows={4} className="p-4" />
           ) : !latestPayments.length ? (
-            <div className="p-4">
-              <EmptyState icon={Receipt} compact title="No payments" description="Nothing in this period." />
-            </div>
+            <EmptyState compact illustration="bag" title="No payments" description="Nothing in this period." className="bg-transparent" />
           ) : (
             <ul className="divide-y divide-border/60">
               <AnimatePresence initial={false}>
@@ -230,20 +233,18 @@ export default function AdminReportsPage() {
 
           {total > limit ? (
             <footer className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-              <p className="text-xs tabular-nums text-muted-foreground">
+              <p className="text-caption text-ink-neutral tabular-nums">
                 {offset + 1}–{Math.min(offset + latestPayments.length, total)} of {total}
               </p>
-              <div className="flex gap-1.5">
-                <Button type="button" size="icon" variant="outline" aria-label="Previous page" disabled={offset <= 0} onClick={() => void runReportFetch(params(Math.max(offset - limit, 0)))}>
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <Button type="button" size="icon" variant="outline" aria-label="Next page" disabled={offset + limit >= total} onClick={() => void runReportFetch(params(offset + limit))}>
-                  <ChevronRight className="size-4" />
-                </Button>
+              <div className="flex gap-2">
+                <IconButton icon={ChevronLeft} label="Previous page" variant="outline" disabled={offset <= 0} onClick={() => runOrNotify(Math.max(offset - limit, 0))} />
+                <IconButton icon={ChevronRight} label="Next page" variant="outline" disabled={offset + limit >= total} onClick={() => runOrNotify(offset + limit)} />
               </div>
             </footer>
           ) : null}
-        </section>
+        </Panel>
+        {/* Invoices: the API exposes payments (receipts) only. A per-booking invoice endpoint would plug in
+            here as a download action on each PaymentRow. */}
       </div>
     </AdminLayout>
   );

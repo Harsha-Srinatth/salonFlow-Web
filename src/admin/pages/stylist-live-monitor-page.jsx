@@ -1,133 +1,119 @@
 "use client";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AvatarBadge } from "@/admin/components/avatar-badge";
-import { EmptyState } from "@/admin/components/empty-state";
-import { ErrorBanner } from "@/admin/components/error-banner";
-import { StatCard } from "@/admin/components/stat-card";
-import { StatusPill } from "@/admin/components/status-pill";
-import { AnimatePresence, motion } from "motion/react";
-import { fetchAdminBookings, selectAdminAppointments } from "@/store/admin-portal-slice";
-import { Activity, AlertTriangle, Timer } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Activity, AlertTriangle, CircleCheck, Timer } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { toast } from "@/lib/notify";
+import { ErrorState, ProgressRing, StatCard } from "@/components/kit";
+import { SkeletonList, spring } from "@/components/motion";
+import { AvatarBadge } from "@/admin/components/avatar-badge";
+import { EmptyState } from "@/admin/components/empty-state";
+import { ToneChip } from "@/admin/components/tone-chip";
+import { selectAppointmentsList } from "@/admin/lib/selectors";
+import { cn } from "@/lib/utils";
+import { fetchAdminBookings } from "@/store/admin-portal-slice";
 import { AdminLayout } from "../portal/admin-layout";
+
+const CRITICAL_MS = 10 * 60 * 1000;
 
 function formatMs(ms) {
   const abs = Math.max(0, Math.abs(ms));
   const mins = Math.floor(abs / 60000);
   const secs = Math.floor((abs % 60000) / 1000);
-  return `${ms < 0 ? "-" : ""}${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${ms < 0 ? "+" : ""}${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
+const STATE = {
+  ok: { label: "On track", tone: "success", ring: "success", icon: CircleCheck, ink: "text-ink-success" },
+  over: { label: "Overtime", tone: "warning", ring: "warning", icon: Timer, ink: "text-ink-warning" },
+  critical: { label: "Critical", tone: "destructive", ring: "destructive", icon: AlertTriangle, ink: "text-ink-destructive" },
+};
+
+/** Live countdown for every service in progress. Overtime after the planned duration, critical after +10 min. */
 export default function AdminStylistLiveMonitorPage() {
+  const reduce = useReducedMotion();
   const dispatch = useDispatch();
   const [nowMs, setNowMs] = useState(Date.now());
-  const appointments = useSelector(selectAdminAppointments);
-  const { realtimeConnected, appointmentsError } = useSelector((state) => state.adminPortal);
+  const appointments = useSelector(selectAppointmentsList);
+  const { appointmentsError, appointmentsLoading } = useSelector((state) => state.adminPortal);
 
+  const load = () => dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
   useEffect(() => {
-    void dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
+    void load();
     const t = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [dispatch]);
+  }, [dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (appointmentsError) toast.error(appointmentsError);
-  }, [appointmentsError]);
-
-  function retryLoad() {
-    void dispatch(fetchAdminBookings({ limit: 200, offset: 0, sort: "proximity" }));
-  }
-
-  const activeCards = useMemo(() => {
-    return appointments
-      .filter((booking) => booking.status === "STARTED")
-      .map((booking) => {
-        const startedAt = new Date(booking.actualStartAt ?? booking.startsAt).getTime();
-        const durationMs = Number(booking.durationMinutes ?? 0) * 60 * 1000;
-        const remainingMs = durationMs - Math.max(0, nowMs - startedAt);
-        const inRedZone = remainingMs <= 0 && remainingMs >= -(10 * 60 * 1000);
-        const critical = remainingMs < -(10 * 60 * 1000);
-        const progress = durationMs > 0 ? Math.min(1, Math.max(0, 1 - remainingMs / durationMs)) : 1;
-        return { booking, remainingMs, inRedZone, critical, progress };
-      })
-      .sort((a, b) => a.remainingMs - b.remainingMs);
-  }, [appointments, nowMs]);
-
-  const criticalCount = activeCards.filter((c) => c.critical).length;
-  const redZoneCount = activeCards.filter((c) => c.inRedZone && !c.critical).length;
+  const cards = useMemo(
+    () =>
+      appointments
+        .filter((b) => b.status === "STARTED")
+        .map((booking) => {
+          const startedAt = new Date(booking.actualStartAt ?? booking.startsAt).getTime();
+          const durationMs = Number(booking.durationMinutes ?? 0) * 60 * 1000;
+          const remainingMs = durationMs - Math.max(0, nowMs - startedAt);
+          const state = remainingMs < -CRITICAL_MS ? "critical" : remainingMs <= 0 ? "over" : "ok";
+          const progress = durationMs > 0 ? Math.min(1, Math.max(0, 1 - remainingMs / durationMs)) : 1;
+          return { booking, remainingMs, state, progress };
+        })
+        .sort((a, b) => a.remainingMs - b.remainingMs),
+    [appointments, nowMs]
+  );
+  const critical = cards.filter((c) => c.state === "critical").length;
+  const over = cards.filter((c) => c.state === "over").length;
+  const firstLoad = appointmentsLoading && !appointments.length;
 
   return (
-    <AdminLayout
-      pageTitle="Stylist Live Monitor"
-      description="Live countdown for every service in progress."
-      actions={
-        <span className="hidden items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-3 py-1.5 text-xs font-medium text-muted-foreground sm:inline-flex">
-          <span className={`admin-live-dot relative inline-flex size-1.5 rounded-full ${realtimeConnected ? "bg-emerald-500 text-emerald-500" : "bg-muted-foreground text-muted-foreground"}`} />
-          {realtimeConnected ? "Live" : "Offline"}
-        </span>
-      }
-    >
-      <div className="space-y-4">
-        <ErrorBanner message={appointmentsError} onRetry={retryLoad} />
-
-        <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard icon={Activity} label="In progress" value={activeCards.length} tone="primary" />
-          <StatCard icon={Timer} label="In red zone" value={redZoneCount} tone="warning" delay={60} />
-          <StatCard icon={AlertTriangle} label="Critical delay" value={criticalCount} tone="destructive" delay={120} />
+    <AdminLayout pageTitle="Live floor" description="Services in progress, live">
+      <div className="space-y-5">
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard icon={Activity} label="In service" value={cards.length} tone="info" loading={firstLoad} />
+          <StatCard icon={Timer} label="Overtime" value={over} tone="warning" loading={firstLoad} />
+          <StatCard icon={AlertTriangle} label="Critical" value={critical} tone="destructive" loading={firstLoad} />
         </div>
 
-        <Card className="admin-shadow-sm">
-          <CardHeader>
-            <CardTitle>Live started services</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Red zone starts after planned duration, critical after 10 minutes overtime.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {!activeCards.length ? (
-              <EmptyState icon={Activity} title="No started services right now" description="Once a stylist marks a booking as started, it will show up here with a live countdown." />
-            ) : (
-              <motion.div layout className="space-y-2.5">
-                <AnimatePresence initial={false} mode="popLayout">
-                {activeCards.map(({ booking, remainingMs, inRedZone, critical, progress }) => (
-                  <motion.div
+        {appointmentsError && !appointments.length ? (
+          <ErrorState title="Couldn't load the floor" description={appointmentsError} onRetry={() => load().unwrap()} />
+        ) : firstLoad ? (
+          <SkeletonList rows={3} />
+        ) : !cards.length ? (
+          <EmptyState illustration="queue" title="Nobody in the chair" description="Started services appear here with a live countdown." />
+        ) : (
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <AnimatePresence initial={false}>
+              {cards.map(({ booking, remainingMs, state, progress }) => {
+                const s = STATE[state];
+                return (
+                  <motion.li
                     key={booking.id}
-                    layout
-                    initial={{ opacity: 0, y: 14 }}
+                    layout={!reduce}
+                    initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: 24 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 32 }}
-                    className="admin-shadow-sm overflow-hidden rounded-xl border border-border/70 bg-card"
+                    exit={{ opacity: 0 }}
+                    transition={spring.soft}
+                    className={cn("flex items-center gap-4 rounded-card border bg-card p-4 shadow-soft", state === "critical" ? "border-destructive/40" : "border-border/60")}
                   >
-                  <div className="flex items-center justify-between gap-3 p-3.5">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <AvatarBadge name={booking.customer} />
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{booking.customer}</p>
-                        <p className="truncate text-sm text-muted-foreground">{booking.service}</p>
-                        <p className="text-xs text-muted-foreground">Stylist: {booking.stylistName ?? "—"}</p>
-                      </div>
+                    <ProgressRing value={Math.round(progress * 100)} size={72} stroke={7} tone={s.ring} label={`${booking.service} progress`} showValue={false}>
+                      <AvatarBadge name={booking.customer} size="md" />
+                    </ProgressRing>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold">{booking.customer}</p>
+                      <p className="truncate text-caption text-ink-neutral">{booking.service}</p>
+                      <p className="truncate text-caption text-ink-neutral">{booking.stylistName ?? "—"}</p>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className={`font-mono text-lg font-semibold tabular-nums ${critical ? "text-destructive" : inRedZone ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5">
+                      <span className={cn("font-display text-xl font-bold tabular-nums", s.ink)} aria-label={remainingMs < 0 ? `${formatMs(remainingMs)} over` : `${formatMs(remainingMs)} left`}>
                         {formatMs(remainingMs)}
-                      </p>
-                      <StatusPill status={critical ? "Critical" : inRedZone ? "Red zone" : "On track"} className="mt-1" />
+                      </span>
+                      <ToneChip tone={s.tone} icon={s.icon} size="sm">
+                        {s.label}
+                      </ToneChip>
                     </div>
-                  </div>
-                  <div className="h-1 bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
-                    <motion.div className={`h-full ${critical ? "bg-destructive" : inRedZone ? "bg-warning" : "bg-primary"}`} animate={{ width: `${progress * 100}%` }} transition={{ ease: "linear", duration: 1 }} />
-                  </div>
-                  </motion.div>
-                ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </CardContent>
-        </Card>
+                  </motion.li>
+                );
+              })}
+            </AnimatePresence>
+          </ul>
+        )}
       </div>
     </AdminLayout>
   );

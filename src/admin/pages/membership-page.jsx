@@ -1,20 +1,19 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { AlertTriangle, ChevronLeft, ChevronRight, CreditCard, Crown, ExternalLink, Loader2, Plus, RefreshCw, Save, Search, ShieldCheck, Sparkles, Star, Trash2, Users } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AlertTriangle, ChevronLeft, ChevronRight, CreditCard, Crown, ExternalLink, Plus, RefreshCw, RotateCcw, Save, Search, ShieldCheck, Sparkles, Star, Tag, Trash2, Users, Webhook } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toast } from "@/lib/notify";
+import { notify as toast } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";
-import { Button } from "@/components/ui/button";
+import { AnimatedTabBar, ButtonLoadingMorph, ErrorState, FloatingLabelInput, IconButton, ResponsiveTable, StatCard, StatusChip, TONE_CLASSES, useAsyncAction } from "@/components/kit";
+import { SkeletonCard, spring } from "@/components/motion";
+import { FilterTabs } from "@/admin/components/filter-tabs";
+import { dateOf, dayTimeOf } from "@/admin/lib/safe-format";
+import { formatMoney, formatPhone } from "@/lib/format";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
-import { Switch } from "@/admin/components/service-editor-drawer";
-import { StatCard } from "@/admin/components/stat-card";
-import { StatusPill } from "@/admin/components/status-pill";
-import { SegmentedControl } from "@/components/fx/segmented-control";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { Switch } from "@/admin/components/switch";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { cn } from "@/lib/utils";
@@ -50,17 +49,12 @@ const STATUS_FILTERS = [
   { value: "MISMATCH", label: "Needs review" },
   { value: "REFUNDED", label: "Refunded" },
 ];
-const STATUS_VIEW = {
-  PAID: { label: "Paid", tone: "success" },
-  CREATED: { label: "Pending", tone: "warning" },
-  FAILED: { label: "Failed", tone: "destructive" },
-  EXPIRED: { label: "Expired", tone: "neutral" },
-  MISMATCH: { label: "Needs review", tone: "warning" },
-  REFUNDED: { label: "Refunded", tone: "neutral" },
-};
-const inr = (n) => `Rs ${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
-const fmt = (value) => (value ? new Date(value).toLocaleString([], { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
-const fmtDate = (value) => (value ? new Date(value).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : "—");
+// Razorpay purchase states → the shared StatusChip vocabulary (DESIGN.md §6a).
+const STATUS_KEY = { PAID: "PAID", CREATED: "PENDING", FAILED: "FAILED", EXPIRED: "EXPIRED", MISMATCH: "NEEDS REVIEW", REFUNDED: "REFUNDED" };
+// Plan amounts in this API are rupees (priceAmount, amount), not paise.
+const inr = (n) => formatMoney(n);
+const fmt = (value) => dayTimeOf(value);
+const fmtDate = (value) => dateOf(value);
 
 function planToForm(plan) {
   return {
@@ -73,110 +67,85 @@ function planToForm(plan) {
   };
 }
 
-function PlanEditor({ segment, icon: Icon, saved, form, onChange, onSave, saving }) {
+function PlanEditor({ segment, icon: Icon, saved, form, onChange, onSave }) {
+  const reduce = useReducedMotion();
+  const save = useAsyncAction({ successMs: 900 });
   const dirty = JSON.stringify(form) !== JSON.stringify(planToForm(saved));
   const price = Number(form.priceAmount);
   const priceChanged = saved && Number(saved.priceAmount) !== price;
-  const period = DURATIONS.find((d) => d.value === form.durationMonths)?.label ?? "";
   const setBenefit = (i, value) => onChange({ ...form, benefits: form.benefits.map((b, idx) => (idx === i ? value : b)) });
   return (
-    <motion.div layout initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="admin-shadow-sm flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <header className="flex items-center justify-between gap-3 border-b border-border/60 bg-muted/20 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-            <Icon className="size-5" />
+    <motion.section initial={reduce ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft} className="flex flex-col overflow-hidden rounded-card border border-border/60 bg-card shadow-soft">
+      <header className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gold/16 text-ink-warning ring-1 ring-inset ring-gold/35">
+            <Icon className="size-5" aria-hidden />
           </span>
-          <div>
-            <h2 className="font-display text-lg font-semibold leading-tight">{segment === "BASIC" ? "Basic plan" : "Premium plan"}</h2>
-            <p className="text-xs text-muted-foreground">{form.isActive ? "On sale" : "Hidden from customers"}</p>
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-headline font-semibold">{segment === "BASIC" ? "Basic" : "Premium"}</h2>
+            <p className="text-caption text-ink-neutral">{form.isActive ? "On sale" : "Hidden"}</p>
           </div>
         </div>
         <Switch checked={form.isActive} onChange={(isActive) => onChange({ ...form, isActive })} label={`${segment} plan on sale`} />
       </header>
 
-      <div className="flex-1 space-y-5 p-5">
-        {/* Price: the number customers actually pay through Razorpay */}
-        <div className="rounded-xl bg-primary/5 p-4">
-          <label htmlFor={`price-${segment}`} className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Price customers pay
+      <div className="flex-1 space-y-5 p-4 sm:p-5">
+        <div className="rounded-2xl bg-portal/8 p-4 ring-1 ring-inset ring-portal/20 focus-within:ring-2 focus-within:ring-portal">
+          <label htmlFor={`price-${segment}`} className="text-micro font-semibold uppercase text-ink-neutral">
+            Price · Razorpay charge
           </label>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-muted-foreground">₹</span>
-            <input
-              id={`price-${segment}`}
-              inputMode="numeric"
-              type="number"
-              min="1"
-              value={form.priceAmount}
-              onChange={(e) => onChange({ ...form, priceAmount: e.target.value })}
-              className="w-full min-w-0 bg-transparent font-display text-4xl font-bold tracking-tight outline-none"
-            />
-            <span className="shrink-0 text-sm text-muted-foreground">for {period}</span>
+            <span className="font-display text-2xl font-bold text-ink-neutral">₹</span>
+            <input id={`price-${segment}`} inputMode="numeric" type="number" min="1" value={form.priceAmount} onChange={(e) => onChange({ ...form, priceAmount: e.target.value })} className="w-full min-w-0 bg-transparent font-display text-4xl font-bold tracking-tight tabular-nums outline-none" />
           </div>
           <AnimatePresence initial={false}>
             {priceChanged ? (
-              <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden pt-2 text-xs text-muted-foreground">
-                New price applies to new payments. Members who already paid keep their current period.
+              <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pt-2 text-caption text-ink-neutral">
+                New payments only. Current members keep their period.
               </motion.p>
             ) : null}
           </AnimatePresence>
         </div>
 
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Membership period</p>
-          <SegmentedControl fluid label="Membership period" options={DURATIONS} value={form.durationMonths} onChange={(durationMonths) => onChange({ ...form, durationMonths })} />
-        </div>
+        <AnimatedTabBar fullWidth size="sm" label="Membership period" items={DURATIONS.map((d) => ({ value: `${d.value}`, label: d.value === 12 ? "1 yr" : `${d.value} mo` }))} value={`${form.durationMonths}`} onChange={(v) => onChange({ ...form, durationMonths: Number(v) })} />
 
         <div className="grid gap-3">
-          <label className="space-y-1 text-sm font-medium">
-            Plan name
-            <input value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm font-normal outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-          </label>
-          <label className="space-y-1 text-sm font-medium">
-            Tagline
-            <input value={form.tagline} onChange={(e) => onChange({ ...form, tagline: e.target.value })} className="mt-1 h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm font-normal outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-          </label>
+          <FloatingLabelInput label="Plan name" icon={Tag} value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} />
+          <FloatingLabelInput label="Tagline" icon={Sparkles} value={form.tagline} onChange={(e) => onChange({ ...form, tagline: e.target.value })} />
         </div>
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">What members get</p>
-            <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...form, benefits: [...form.benefits, ""] })}>
-              <Plus className="size-3.5" /> Add
-            </Button>
+            <p className="text-caption font-semibold text-ink-neutral">Benefits · {form.benefits.filter((b) => b.trim()).length}</p>
+            <ButtonLoadingMorph size="sm" variant="outline" icon={Plus} onClick={() => onChange({ ...form, benefits: [...form.benefits, ""] })}>
+              Add
+            </ButtonLoadingMorph>
           </div>
           <AnimatePresence initial={false}>
             {form.benefits.map((benefit, i) => (
-              <motion.div key={i} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="flex items-center gap-2 pb-2">
-                  <input aria-label={`Benefit ${i + 1}`} value={benefit} placeholder="e.g. Member-only service discounts" onChange={(e) => setBenefit(i, e.target.value)} className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-                  <Button type="button" variant="ghost" size="icon" aria-label={`Remove benefit ${i + 1}`} onClick={() => onChange({ ...form, benefits: form.benefits.filter((_, idx) => idx !== i) })}>
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                </div>
+              <motion.div key={i} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex items-center gap-1">
+                <FloatingLabelInput label={`Benefit ${i + 1}`} value={benefit} onChange={(e) => setBenefit(i, e.target.value)} />
+                <IconButton icon={Trash2} label={`Remove benefit ${i + 1}`} className="text-ink-destructive" onClick={() => onChange({ ...form, benefits: form.benefits.filter((_, idx) => idx !== i) })} />
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
       </div>
 
-      <footer className="flex items-center justify-between gap-3 border-t border-border/60 px-5 py-3">
-        <span className={cn("text-xs", dirty ? "font-medium text-warning" : "text-muted-foreground")}>{dirty ? "Unsaved changes" : "Saved"}</span>
+      <footer className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-3 sm:px-5">
+        <span className={cn("text-caption font-semibold", dirty ? "text-ink-warning" : "text-ink-neutral")}>{dirty ? "Unsaved" : "Saved"}</span>
         <div className="flex gap-2">
           {dirty ? (
-            <Button type="button" variant="ghost" onClick={() => onChange(planToForm(saved))} disabled={saving}>
+            <ButtonLoadingMorph variant="ghost" icon={RotateCcw} onClick={() => onChange(planToForm(saved))}>
               Reset
-            </Button>
+            </ButtonLoadingMorph>
           ) : null}
-          <BorderBeam size="sm" active={dirty && !saving}>
-            <Button type="button" onClick={onSave} disabled={!dirty || saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              {saving ? "Saving…" : "Save plan"}
-            </Button>
-          </BorderBeam>
+          <ButtonLoadingMorph icon={Save} state={save.state} disabled={!dirty && save.state === "idle"} loadingLabel="Saving…" successLabel="Saved" onClick={() => save.run(onSave)}>
+            Save
+          </ButtonLoadingMorph>
         </div>
       </footer>
-    </motion.div>
+    </motion.section>
   );
 }
 
@@ -209,21 +178,22 @@ function PaymentsTab({ razorpay }) {
       setError("");
     } catch (e) {
       setError(e.message ?? "Could not load membership payments");
+      throw e;
     } finally {
       setLoading(false);
     }
   }, [status, query, offset]);
 
   useEffect(() => {
-    void load();
+    load().catch(() => {});
   }, [load]);
 
   async function reconcile(id) {
     setCheckingId(id);
     try {
       const { result } = await authFetch(`/api/admin/membership/purchases/${id}/reconcile`, { method: "POST" });
-      toast.success(result === "ACTIVATED" ? "Payment confirmed with Razorpay: membership activated" : result === "ALREADY_PAID" ? "Already confirmed" : `Checked with Razorpay: ${`${result}`.toLowerCase().replace(/_/g, " ")}`);
-      await load();
+      toast.success(result === "ACTIVATED" ? "Confirmed · membership activated" : result === "ALREADY_PAID" ? "Already confirmed" : `Razorpay: ${`${result}`.toLowerCase().replace(/_/g, " ")}`);
+      await load().catch(() => {});
     } catch (e) {
       toast.error(e.message ?? "Could not check with Razorpay");
     } finally {
@@ -231,106 +201,110 @@ function PaymentsTab({ razorpay }) {
     }
   }
 
+  const columns = [
+    {
+      key: "customer",
+      header: "Customer",
+      primary: true,
+      cell: (p) => (
+        <span className="flex min-w-0 items-center gap-3">
+          <AvatarBadge name={p.customer?.name || p.customer?.email || "?"} size="sm" />
+          <span className="min-w-0">
+            <span className="block truncate font-semibold">{p.customer?.name || "Deleted customer"}</span>
+            <span className="block truncate text-caption text-ink-neutral">{[p.customer?.phone ? formatPhone(p.customer.phone) : "", p.customer?.email].filter(Boolean).join(" · ") || "—"}</span>
+          </span>
+        </span>
+      ),
+    },
+    { key: "plan", header: "Plan", secondary: true, cell: (p) => `${p.planName} · ${p.durationMonths === 12 ? "1 year" : `${p.durationMonths} mo`}` },
+    { key: "amount", header: "Amount", align: "right", cell: (p) => <span className="font-semibold tabular-nums">{inr(p.amount)}</span> },
+    { key: "when", header: "When", cell: (p) => <span className="whitespace-nowrap text-caption">{fmt(p.paidAt ?? p.createdAt)}</span> },
+    {
+      key: "ref",
+      header: "Razorpay",
+      hideOnMobile: true,
+      cell: (p) => (
+        <span className="block max-w-40 truncate font-mono text-[11px] text-ink-neutral" title={p.failureReason ?? undefined}>
+          {p.razorpayPaymentId ?? p.razorpayOrderId ?? "No order"}
+        </span>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      trailing: true,
+      cell: (p) => (
+        <span className="flex items-center justify-end gap-1">
+          <StatusChip status={STATUS_KEY[p.status] ?? p.status} size="sm" />
+        </span>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-full overflow-x-auto pb-1">
-          <SegmentedControl label="Payment status" options={STATUS_FILTERS} value={status} onChange={(value) => { setStatus(value); setOffset(0); }} />
-        </div>
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <FilterTabs label="Payment status" options={STATUS_FILTERS} value={status} onChange={(value) => { setStatus(value); setOffset(0); }} className="min-w-0" />
         <div className="flex items-center gap-2">
-          <BorderBeam className="w-full lg:w-72" radius="0.75rem">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, phone, email or Razorpay id" aria-label="Search membership payments" className="h-10 w-full rounded-xl border bg-card pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground" />
-            </div>
-          </BorderBeam>
-          <Button type="button" variant="outline" size="icon" aria-label="Refresh" onClick={() => void load()}>
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-          </Button>
+          <label className="relative block min-w-0 flex-1 lg:w-72">
+            <span className="sr-only">Search membership payments</span>
+            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-neutral" aria-hidden />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, phone, email, Razorpay id" className="h-11 w-full rounded-control bg-card pr-3 pl-10 text-sm shadow-soft ring-1 ring-inset ring-border/60 outline-none placeholder:text-ink-neutral focus-visible:ring-2 focus-visible:ring-portal" />
+          </label>
+          <IconButton icon={RefreshCw} label="Refresh" variant="soft" onClick={() => load().catch(() => {})} />
         </div>
       </div>
 
-      <ErrorBanner message={error} onRetry={() => void load()} />
-
-      {loading && !data.purchases.length ? (
-        <LoadingOrb compact label="Loading payments…" />
-      ) : !data.purchases.length ? (
-        <EmptyState icon={CreditCard} title="No membership payments" description={razorpay?.configured ? "Payments appear here as customers buy a plan." : "Connect Razorpay to let customers buy plans online."} />
+      {error && !data.purchases.length ? (
+        <ErrorState title="Couldn't load payments" description={error} onRetry={load} />
       ) : (
-        <motion.div layout className="space-y-2.5">
-          <AnimatePresence initial={false} mode="popLayout">
-            {data.purchases.map((p, index) => {
-              const view = STATUS_VIEW[p.status] ?? { label: p.status, tone: "neutral" };
-              return (
-                <motion.div
-                  key={p.id}
-                  layout
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.02 }}
-                  className="admin-shadow-sm rounded-xl border border-border/70 bg-card p-4"
-                >
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <AvatarBadge name={p.customer.name || p.customer.email || "?"} />
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{p.customer.name || "Deleted customer"}</p>
-                        <p className="truncate text-xs text-muted-foreground">{[p.customer.phone, p.customer.email].filter(Boolean).join(" · ") || "—"}</p>
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          {p.planName} · {p.durationMonths === 12 ? "1 year" : `${p.durationMonths} month${p.durationMonths === 1 ? "" : "s"}`}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between gap-4 md:justify-end">
-                      <div className="text-right">
-                        <p className="text-base font-bold tabular-nums">{inr(p.amount)}</p>
-                        <p className="text-xs text-muted-foreground">{p.paymentMethod ? `${p.paymentMethod.toUpperCase()} · ` : ""}{fmt(p.paidAt ?? p.createdAt)}</p>
-                      </div>
-                      <StatusPill status={view.label} tone={view.tone} />
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted-foreground">
-                    <div className="space-y-0.5">
-                      {p.status === "PAID" ? <p>Valid {fmtDate(p.startsAt)} to {fmtDate(p.expiresAt)}</p> : null}
-                      {p.failureReason && p.status !== "PAID" ? <p className="text-destructive">{p.failureReason}</p> : null}
-                      <p className="font-mono">{p.razorpayPaymentId ?? p.razorpayOrderId ?? "No order created"}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      {p.status === "CREATED" || p.status === "MISMATCH" || p.status === "FAILED" ? (
-                        <Button type="button" size="sm" variant="outline" disabled={checkingId === p.id} onClick={() => void reconcile(p.id)}>
-                          {checkingId === p.id ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}
-                          Check with Razorpay
-                        </Button>
-                      ) : null}
-                      {p.razorpayUrl ? (
-                        <Button asChild type="button" size="sm" variant="ghost">
-                          <a href={p.razorpayUrl} target="_blank" rel="noreferrer">
-                            <ExternalLink className="size-3.5" /> Open in Razorpay
-                          </a>
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </motion.div>
+        <ResponsiveTable
+          caption="Membership payments"
+          columns={columns}
+          rows={data.purchases}
+          loading={loading}
+          empty={<EmptyState illustration="bag" icon={CreditCard} title="No payments yet" description={razorpay?.configured ? "Plan purchases land here." : "Connect Razorpay to sell plans."} />}
+        />
       )}
+
+      {data.purchases.some((p) => ["CREATED", "MISMATCH", "FAILED"].includes(p.status) || p.razorpayUrl) ? (
+        <div className="space-y-2">
+          <p className="text-caption font-semibold text-ink-neutral">Actions</p>
+          <ul className="grid gap-2 md:grid-cols-2">
+            {data.purchases
+              .filter((p) => ["CREATED", "MISMATCH", "FAILED"].includes(p.status) || p.razorpayUrl)
+              .map((p) => (
+                <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-inset ring-border/60">
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{p.customer?.name || "Customer"} · {inr(p.amount)}</span>
+                    {p.failureReason && p.status !== "PAID" ? <span className="block truncate text-caption text-ink-destructive">{p.failureReason}</span> : p.status === "PAID" ? <span className="block text-caption text-ink-neutral">Valid {fmtDate(p.startsAt)} – {fmtDate(p.expiresAt)}</span> : null}
+                  </span>
+                  <span className="flex gap-1.5">
+                    {["CREATED", "MISMATCH", "FAILED"].includes(p.status) ? (
+                      <ButtonLoadingMorph size="sm" variant="outline" icon={ShieldCheck} state={checkingId === p.id ? "loading" : "idle"} loadingLabel="Checking…" onClick={() => void reconcile(p.id)}>
+                        Verify
+                      </ButtonLoadingMorph>
+                    ) : null}
+                    {p.razorpayUrl ? (
+                      <a href={p.razorpayUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-portal hover:bg-portal/10">
+                        <ExternalLink className="size-4" aria-hidden /> Razorpay
+                      </a>
+                    ) : null}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ) : null}
 
       {data.total > data.limit ? (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-caption text-ink-neutral tabular-nums">
             {offset + 1}–{Math.min(offset + data.limit, data.total)} of {data.total}
           </p>
           <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" disabled={offset <= 0} onClick={() => setOffset(Math.max(0, offset - data.limit))}>
-              <ChevronLeft className="size-4" /> Previous
-            </Button>
-            <Button type="button" size="sm" variant="outline" disabled={offset + data.limit >= data.total} onClick={() => setOffset(offset + data.limit)}>
-              Next <ChevronRight className="size-4" />
-            </Button>
+            <IconButton icon={ChevronLeft} label="Previous page" variant="outline" disabled={offset <= 0} onClick={() => setOffset(Math.max(0, offset - data.limit))} />
+            <IconButton icon={ChevronRight} label="Next page" variant="outline" disabled={offset + data.limit >= data.total} onClick={() => setOffset(offset + data.limit)} />
           </div>
         </div>
       ) : null}
@@ -340,7 +314,6 @@ function PaymentsTab({ razorpay }) {
 
 export default function AdminMembershipPage() {
   const [loading, setLoading] = useState(true);
-  const [savingSegment, setSavingSegment] = useState("");
   const [loadError, setLoadError] = useState("");
   const [center, setCenter] = useState(null);
   const [tab, setTab] = useState("plans");
@@ -354,23 +327,21 @@ export default function AdminMembershipPage() {
       setForms({ BASIC: planToForm(byId("BASIC")), PREMIUM: planToForm(byId("PREMIUM")) });
       setLoadError("");
     } catch (error) {
-      const message = error.message ?? "Could not load membership plans";
-      toast.error(message);
-      setLoadError(message);
+      setLoadError(error.message ?? "Could not load membership plans");
+      throw error;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadCenter();
+    loadCenter().catch(() => {});
   }, [loadCenter]);
 
   const saved = useMemo(() => Object.fromEntries((center?.paidPlans ?? []).map((plan) => [plan.segment, plan])), [center]);
 
   async function savePlan(segment) {
     const form = forms[segment];
-    setSavingSegment(segment);
     try {
       await authFetch(`/api/admin/membership/plans/${segment}`, {
         method: "PUT",
@@ -387,8 +358,7 @@ export default function AdminMembershipPage() {
       await loadCenter();
     } catch (error) {
       toast.error(error.message ?? "Could not save plan");
-    } finally {
-      setSavingSegment("");
+      throw error;
     }
   }
 
@@ -396,88 +366,89 @@ export default function AdminMembershipPage() {
   const stats = center?.stats;
   const razorpay = center?.razorpay;
 
+  const firstLoad = loading && !center;
+
   return (
     <AdminLayout
-      pageTitle="Membership Plans"
-      description="Set plan prices and track every membership payment made through Razorpay."
+      pageTitle="Memberships"
+      description="Razorpay plans and payments"
       actions={
         razorpay ? (
-          <span className={cn("hidden items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium sm:inline-flex", razorpay.configured ? "border-success/30 bg-success/10 text-success" : "border-warning/40 bg-warning/10 text-warning")}>
-            <span className={cn("size-1.5 rounded-full", razorpay.configured ? "bg-success" : "bg-warning")} />
-            {razorpay.configured ? `Razorpay ${razorpay.mode === "live" ? "live" : razorpay.mode === "test" ? "test mode" : "connected"}` : "Razorpay not connected"}
+          <span className={cn("inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-caption font-semibold ring-1 ring-inset", razorpay.configured ? TONE_CLASSES.success : TONE_CLASSES.warning)}>
+            <CreditCard className="size-3.5" aria-hidden />
+            {razorpay.configured ? (razorpay.mode === "live" ? "Razorpay live" : razorpay.mode === "test" ? "Razorpay test" : "Razorpay on") : "Razorpay off"}
           </span>
         ) : null
       }
     >
       <div className="space-y-5">
-        <ErrorBanner message={loadError} onRetry={() => void loadCenter()} />
+        <ErrorBanner message={center ? loadError : ""} onRetry={loadCenter} />
 
         <AnimatePresence initial={false}>
           {razorpay && !razorpay.configured ? (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <div className="flex items-start gap-2 rounded-xl border border-warning/40 bg-warning/10 p-3 text-sm">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
-                <p>
-                  <span className="font-semibold">Razorpay is not connected.</span> Customers cannot buy plans online until <code className="text-xs">RAZORPAY_KEY_ID</code> and <code className="text-xs">RAZORPAY_KEY_SECRET</code> are set on the server.
-                </p>
-              </div>
-            </motion.div>
+            <motion.p key="rz" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={cn("flex items-start gap-2 rounded-2xl p-3 text-sm ring-1 ring-inset", TONE_CLASSES.warning)}>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                <b>Razorpay not connected.</b> Set <code className="text-xs">RAZORPAY_KEY_ID</code> and <code className="text-xs">RAZORPAY_KEY_SECRET</code> on the server.
+              </span>
+            </motion.p>
           ) : null}
           {razorpay?.configured && !razorpay.webhookConfigured ? (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/40 p-3 text-sm">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <p className="text-muted-foreground">
-                  No webhook secret is set (<code className="text-xs">RAZORPAY_WEBHOOK_SECRET</code>). Payments are still confirmed when the customer returns and by the background check, but a webhook makes activation instant if the customer closes the page early.
-                </p>
-              </div>
-            </motion.div>
+            <motion.p key="wh" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={cn("flex items-start gap-2 rounded-2xl p-3 text-sm ring-1 ring-inset", TONE_CLASSES.neutral)}>
+              <Webhook className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                No webhook secret (<code className="text-xs">RAZORPAY_WEBHOOK_SECRET</code>). Payments still confirm, just not instantly if the customer closes the page.
+              </span>
+            </motion.p>
           ) : null}
           {stats?.needsReview ? (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-              <button type="button" onClick={() => setTab("payments")} className="flex w-full items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-left text-sm text-destructive">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <span>
-                  <span className="font-semibold">{stats.needsReview} payment{stats.needsReview === 1 ? "" : "s"} need review.</span> Money was captured but did not match the plan price. Open Payments to check.
-                </span>
-              </button>
-            </motion.div>
+            <motion.button key="rv" type="button" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} onClick={() => setTab("payments")} className={cn("flex w-full items-start gap-2 rounded-2xl p-3 text-left text-sm ring-1 ring-inset", TONE_CLASSES.destructive)}>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                <b>{stats.needsReview} to review.</b> Captured amount didn't match the plan price.
+              </span>
+            </motion.button>
           ) : null}
         </AnimatePresence>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard icon={Users} label="Free customers" value={counts.FREE ?? 0} tone="neutral" />
-          <StatCard icon={Star} label="Basic members" value={counts.BASIC ?? 0} tone="primary" delay={60} trendLabel={stats?.expiringSoon ? `${stats.expiringSoon} expiring in 7 days` : undefined} />
-          <StatCard icon={Crown} label="Premium members" value={counts.PREMIUM ?? 0} tone="accent" delay={120} />
-          <StatCard icon={CreditCard} label="Membership revenue (30 days)" value={0} display={inr(stats?.revenue30d)} tone="success" delay={180} trendLabel={stats ? `${inr(stats.revenueTotal)} all time` : undefined} />
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <StatCard icon={Users} label="Free" value={counts.FREE ?? 0} tone="neutral" loading={firstLoad} />
+          <StatCard icon={Star} label="Basic" value={counts.BASIC ?? 0} tone="gold" loading={firstLoad} />
+          <StatCard icon={Crown} label="Premium" value={counts.PREMIUM ?? 0} tone="gold" loading={firstLoad} />
+          <StatCard icon={CreditCard} label="Revenue · 30d" value={Number(stats?.revenue30d ?? 0)} format={inr} tone="success" loading={firstLoad} />
         </div>
 
-        <SegmentedControl
+        <AnimatedTabBar
           label="Membership view"
-          options={[
-            { value: "plans", label: "Plans & pricing", icon: Sparkles },
-            { value: "payments", label: "Razorpay payments", icon: CreditCard },
+          items={[
+            { value: "plans", label: "Plans", icon: Sparkles },
+            { value: "payments", label: "Payments", icon: CreditCard, badge: stats?.needsReview || undefined },
           ]}
           value={tab}
           onChange={setTab}
         />
 
         <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+          <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={spring.soft}>
             {tab === "plans" ? (
-              loading ? (
-                <LoadingOrb compact label="Loading plans…" />
+              loadError && !center ? (
+                <ErrorState title="Couldn't load plans" description={loadError} onRetry={loadCenter} />
+              ) : firstLoad ? (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </div>
               ) : (
                 <div className="space-y-4">
                   <div className="grid gap-4 lg:grid-cols-2">
-                    <PlanEditor segment="BASIC" icon={Star} saved={saved.BASIC} form={forms.BASIC} onChange={(f) => setForms((c) => ({ ...c, BASIC: f }))} onSave={() => void savePlan("BASIC")} saving={savingSegment === "BASIC"} />
-                    <PlanEditor segment="PREMIUM" icon={Crown} saved={saved.PREMIUM} form={forms.PREMIUM} onChange={(f) => setForms((c) => ({ ...c, PREMIUM: f }))} onSave={() => void savePlan("PREMIUM")} saving={savingSegment === "PREMIUM"} />
+                    <PlanEditor segment="BASIC" icon={Star} saved={saved.BASIC} form={forms.BASIC} onChange={(f) => setForms((c) => ({ ...c, BASIC: f }))} onSave={() => savePlan("BASIC")} />
+                    <PlanEditor segment="PREMIUM" icon={Crown} saved={saved.PREMIUM} form={forms.PREMIUM} onChange={(f) => setForms((c) => ({ ...c, PREMIUM: f }))} onSave={() => savePlan("PREMIUM")} />
                   </div>
-                  <div className="flex items-start gap-3 rounded-2xl border border-dashed border-border bg-muted/20 p-4 text-sm">
-                    <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="flex items-start gap-3 rounded-card border border-dashed border-border bg-card/60 p-4 text-sm">
+                    <Users className="mt-0.5 size-4 shrink-0 text-portal" aria-hidden />
                     <div>
-                      <p className="font-medium">{center?.freePlan?.name ?? "Free"} plan (default)</p>
-                      <p className="text-muted-foreground">{center?.freePlan?.tagline} Always active for new customers; it has no price.</p>
+                      <p className="font-semibold">{center?.freePlan?.name ?? "Free"} · default</p>
+                      <p className="text-caption text-ink-neutral">{center?.freePlan?.tagline} Always on, no price.</p>
                     </div>
                   </div>
                 </div>

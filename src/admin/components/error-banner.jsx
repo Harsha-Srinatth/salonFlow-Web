@@ -1,41 +1,41 @@
 "use client";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { CircleAlert, RotateCcw } from "lucide-react";
+import { ButtonLoadingMorph, TONE_CLASSES, useAsyncAction } from "@/components/kit";
+import { spring } from "@/components/motion";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { AlertTriangle, RotateCw } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
 
 /**
- * Persistent inline error surface to pair with toast notifications —
- * toasts disappear, this stays visible until the underlying error clears
- * or the user retries.
+ * Slim inline alert that stays until the error clears (toasts disappear; this doesn't). Use it above
+ * content that is still usable. When a list failed to load and there is nothing to show, render the
+ * kit's <ErrorState onRetry> instead.
  */
 export function ErrorBanner({ message, onRetry, className }) {
-    return (
-        <AnimatePresence initial={false}>
-        {message ? (
+  const reduce = useReducedMotion();
+  const { state, run } = useAsyncAction({ successMs: 600 });
+  return (
+    <AnimatePresence initial={false}>
+      {message ? (
         <motion.div
-            initial={{ opacity: 0, height: 0, y: -6 }}
-            animate={{ opacity: 1, height: "auto", y: 0 }}
-            exit={{ opacity: 0, height: 0 }}
-            style={{ overflow: "hidden" }}
-            role="alert"
-            className={cn(
-                "flex flex-col gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive sm:flex-row sm:items-center sm:justify-between",
-                className
-            )}
+          key="error"
+          role="alert"
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          transition={spring.soft}
+          className={cn("flex flex-col gap-3 rounded-2xl p-3 ring-1 ring-inset sm:flex-row sm:items-center sm:justify-between", TONE_CLASSES.destructive, className)}
         >
-            <div className="flex items-start gap-2">
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                <span className="leading-snug">{message}</span>
-            </div>
-            {onRetry ? (
-                <Button type="button" size="sm" variant="outline" className="w-fit gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10" onClick={onRetry}>
-                    <RotateCw className="size-3.5" />
-                    Retry
-                </Button>
-            ) : null}
+          <p className="flex items-start gap-2 text-sm font-medium">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 break-words">{message}</span>
+          </p>
+          {onRetry ? (
+            <ButtonLoadingMorph size="sm" variant="outline" icon={RotateCcw} state={state} successLabel="Loaded" className="shrink-0 self-start sm:self-auto" onClick={() => run(onRetry)}>
+              Retry
+            </ButtonLoadingMorph>
+          ) : null}
         </motion.div>
-        ) : null}
-        </AnimatePresence>
-    );
+      ) : null}
+    </AnimatePresence>
+  );
 }

@@ -1,11 +1,18 @@
 "use client";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { SkeletonCard, SkeletonList } from "@/components/motion";
+import { cn } from "@/lib/utils";
 
-// Kept under the old names so every admin page shows the shared orb instead of grey placeholder blocks.
-export function SkeletonRows({ className }) {
-    return <LoadingOrb compact className={className} />;
+/** Shimmer placeholders shaped like the admin's list rows and card grids. */
+export function SkeletonRows({ count = 4, className }) {
+  return <SkeletonList rows={count} className={className} />;
 }
 
-export function SkeletonCards({ className }) {
-    return <LoadingOrb compact className={className} />;
+export function SkeletonCards({ count = 6, className }) {
+  return (
+    <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3", className)} aria-busy="true" aria-label="Loading">
+      {Array.from({ length: count }, (_, i) => (
+        <SkeletonCard key={i} />
+      ))}
+    </div>
+  );
 }

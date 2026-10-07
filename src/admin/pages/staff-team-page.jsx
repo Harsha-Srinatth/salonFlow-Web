@@ -1,286 +1,230 @@
 "use client";
 
-import { AnimatePresence, motion } from "motion/react";
-import { BorderBeam } from "border-beam";
-import { Check, ConciergeBell, Loader2, Mail, Pencil, Phone, Scissors, Search, Trash2, UserPlus, Users } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Check, ConciergeBell, Hourglass, Mail, Pencil, Phone, Scissors, Search, Trash2, UserPlus, UserRound, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Link, useNavigate } from "react-router-dom";
-import { toast } from "@/lib/notify";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { AnimatedTabBar, ButtonLoadingMorph, ErrorState, FloatingLabelInput, IconButton, StatCard, StatusChip, useAsyncAction } from "@/components/kit";
+import { interaction, spring } from "@/components/motion";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Button } from "@/components/ui/button";
 import { AvatarBadge } from "@/admin/components/avatar-badge";
 import { useConfirm } from "@/admin/components/confirm-dialog";
 import { EmptyState } from "@/admin/components/empty-state";
-import { ErrorBanner } from "@/admin/components/error-banner";
+import { FilterTabs } from "@/admin/components/filter-tabs";
+import { SkeletonCards } from "@/admin/components/skeleton";
 import { SlideOver } from "@/admin/components/slide-over";
-import { Switch } from "@/admin/components/service-editor-drawer";
-import { StatusPill } from "@/admin/components/status-pill";
-import { ToggleChip } from "@/admin/components/toggle-chip";
-import Counter from "@/components/fx/counter";
-import { SegmentedControl } from "@/components/fx/segmented-control";
-import { LoadingOrb } from "@/components/shared/loading-orb";
+import { Switch } from "@/admin/components/switch";
+import { AllowedServicesPicker } from "@/admin/components/allowed-services-picker";
+import { formatPhone } from "@/lib/format";
+import { notify } from "@/lib/notify";
+import { iconForAudience } from "@/lib/service-icons";
 import { clearEditStaff, deleteStaffAsync, fetchAdminDashboardData, setEditFormField, startEditStaff, updateStaffAsync } from "@/store/admin-dashboard-slice";
-import { cn } from "@/lib/utils";
 import { AdminLayout } from "../portal/admin-layout";
 
 const ROLE_FILTERS = [
-  { value: "ALL", label: "Everyone" },
-  { value: "STAFF", label: "Employees", icon: Scissors },
-  { value: "RECEPTIONIST", label: "Receptionists", icon: ConciergeBell },
+  { value: "ALL", label: "Everyone", icon: Users },
+  { value: "STAFF", label: "Stylists", icon: Scissors },
+  { value: "RECEPTIONIST", label: "Reception", icon: ConciergeBell },
 ];
 const ROLE_OPTIONS = ROLE_FILTERS.filter((r) => r.value !== "ALL");
-const GENDER_TYPES = [
-  { value: "UNISEX", label: "Unisex" },
-  { value: "WOMEN", label: "Women" },
-  { value: "MEN", label: "Men" },
-];
-const roleLabel = (role) => (role === "STAFF" ? "Employee" : role === "RECEPTIONIST" ? "Receptionist" : role);
-const categoryOf = (service) => `${service.category ?? ""}`.trim() || "General";
+const GENDER_TYPES = ["UNISEX", "WOMEN", "MEN"].map((value) => ({ value, label: value.charAt(0) + value.slice(1).toLowerCase(), icon: iconForAudience(value) }));
+const roleLabel = (role) => (role === "STAFF" ? "Stylist" : role === "RECEPTIONIST" ? "Reception" : role);
 
 export default function AdminTeamPage() {
+  const reduce = useReducedMotion();
   const { appUser } = useAuth();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { confirm, confirmDialog } = useConfirm();
-  const { staff, servicesCatalog, editId, editForm, loading, mutating, error } = useSelector((state) => state.adminDashboard);
+  const [params, setParams] = useSearchParams();
+  const { ask, confirmSheet } = useConfirm();
+  const { staff, servicesCatalog, editId, editForm, loading, error } = useSelector((state) => state.adminDashboard);
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("ALL");
+  const save = useAsyncAction({ successMs: 700 });
 
   useEffect(() => {
     if (appUser?.role !== "ADMIN") return;
     void dispatch(fetchAdminDashboardData());
   }, [appUser?.role, dispatch]);
 
+  // ⌘K deep link: ?edit=<staff id>
   useEffect(() => {
-    if (error) toast.error(error);
-  }, [error]);
+    const id = params.get("edit");
+    const member = id && staff.find((s) => s.id === id);
+    if (!member) return;
+    dispatch(startEditStaff(member));
+    setParams((p) => {
+      p.delete("edit");
+      return p;
+    }, { replace: true });
+  }, [params, staff, dispatch, setParams]);
 
   const pending = staff.filter((s) => s.accountStatus !== "ACTIVE").length;
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return staff.filter((s) => {
-      if (role !== "ALL" && s.role !== role) return false;
-      if (!q) return true;
-      return `${s.name ?? ""} ${s.email ?? ""} ${s.phone ?? ""}`.toLowerCase().includes(q);
-    });
+    return staff.filter((s) => (role === "ALL" || s.role === role) && (!q || `${s.name ?? ""} ${s.email ?? ""} ${s.phone ?? ""}`.toLowerCase().includes(q)));
   }, [staff, search, role]);
-
   const selected = Array.isArray(editForm.allowedServiceIds) ? editForm.allowedServiceIds : [];
-  const grouped = useMemo(() => {
-    const groups = new Map();
-    for (const service of servicesCatalog) groups.set(categoryOf(service), [...(groups.get(categoryOf(service)) ?? []), service]);
-    return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
-  }, [servicesCatalog]);
-  const setSelected = (ids) => dispatch(setEditFormField({ field: "allowedServiceIds", value: Array.from(new Set(ids)) }));
 
-  async function removeStaff(member) {
-    const ok = await confirm({ title: `Remove ${member.name}?`, description: "Their account is removed and they can no longer sign in.", confirmLabel: "Delete", hold: true });
-    if (!ok) return;
-    const result = await dispatch(deleteStaffAsync(member.id));
-    if (deleteStaffAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Delete failed");
-      return;
-    }
-    toast.success("Removed");
-    dispatch(clearEditStaff());
+  function removeStaff(member) {
+    ask({
+      title: `Remove ${member.name}?`,
+      description: "Their account is deleted and they can't sign in.",
+      confirmLabel: "Slide to remove",
+      action: async () => {
+        const result = await dispatch(deleteStaffAsync(member.id));
+        if (deleteStaffAsync.rejected.match(result)) {
+          notify.error(result.payload ?? "Delete failed");
+          throw new Error("delete failed");
+        }
+        notify.success(`${member.name} removed`);
+        dispatch(clearEditStaff());
+      },
+    });
   }
 
   async function saveEdit() {
     if (!editId) return;
     const result = await dispatch(updateStaffAsync({ id: editId, payload: editForm }));
     if (updateStaffAsync.rejected.match(result)) {
-      toast.error(result.payload ?? "Update failed");
-      return;
+      notify.error(result.payload ?? "Update failed");
+      throw new Error("update failed");
     }
-    toast.success("Staff updated. Re-verify the phone with Firebase if the number changed.");
-    dispatch(clearEditStaff());
+    notify.success("Saved", { description: "Re-verify the phone if it changed." });
+    setTimeout(() => dispatch(clearEditStaff()), 600);
     void dispatch(fetchAdminDashboardData());
   }
 
-  if (!appUser) return <div className="p-4">Please sign in first.</div>;
-  if (appUser.role !== "ADMIN") return <div className="p-4">Admin only.</div>;
+  if (!appUser || appUser.role !== "ADMIN") {
+    return (
+      <AdminLayout pageTitle="Team">
+        <EmptyState illustration="search" title="Admins only" />
+      </AdminLayout>
+    );
+  }
+
+  const field = (name) => ({ value: editForm[name] ?? "", onChange: (e) => dispatch(setEditFormField({ field: name, value: e.target.value })) });
 
   return (
     <AdminLayout
       pageTitle="Team"
-      description="Everyone who works at the salon: employees and receptionists."
+      description="Stylists and reception"
       actions={
-        <BorderBeam size="sm">
-          <Button asChild>
-            <Link to="/admin-dashboard/staff/new">
-              <UserPlus className="size-4" /> Create staff
-            </Link>
-          </Button>
-        </BorderBeam>
+        <Link to="/admin-dashboard/staff/new" className="inline-flex h-11 items-center gap-2 rounded-control bg-portal px-5 text-sm font-semibold text-portal-foreground shadow-soft transition-shadow hover:shadow-glow">
+          <UserPlus className="size-4" aria-hidden /> Add staff
+        </Link>
       }
     >
       <div className="space-y-5">
-        <ErrorBanner message={error} onRetry={() => void dispatch(fetchAdminDashboardData())} />
-
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
-          {[
-            ["Team members", staff.length, ""],
-            ["Employees", staff.filter((s) => s.role === "STAFF").length, ""],
-            ["Pending setup", pending, pending ? "text-warning" : ""],
-          ].map(([label, value, tone], i) => (
-            <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="admin-shadow-sm rounded-2xl border border-border/70 bg-card px-3 py-3 sm:px-4">
-              <p className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:text-xs">{label}</p>
-              <p className={cn("mt-1 text-2xl font-bold tracking-tight", tone)}>
-                <Counter value={value} fontSize={26} padding={4} gap={0} horizontalPadding={0} fontWeight={700} gradientHeight={0} gradientFrom="transparent" />
-              </p>
-            </motion.div>
-          ))}
+        <div className="grid grid-cols-3 gap-3">
+          <StatCard icon={Users} label="Team" value={staff.length} tone="primary" loading={loading && !staff.length} />
+          <StatCard icon={Scissors} label="Stylists" value={staff.filter((s) => s.role === "STAFF").length} tone="info" loading={loading && !staff.length} />
+          <StatCard icon={Hourglass} label="Pending" value={pending} tone={pending ? "warning" : "neutral"} loading={loading && !staff.length} />
         </div>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-          <BorderBeam className="w-full lg:w-80" radius="0.75rem">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email or phone" aria-label="Search team" className="h-10 w-full rounded-xl border bg-card pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground" />
-            </div>
-          </BorderBeam>
-          <div className="max-w-full overflow-x-auto pb-1">
-            <SegmentedControl label="Role" options={ROLE_FILTERS} value={role} onChange={setRole} />
-          </div>
+        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+          <label className="relative block min-w-0 lg:w-80">
+            <span className="sr-only">Search team</span>
+            <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-neutral" aria-hidden />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, email or phone" className="h-11 w-full rounded-control bg-card pr-3 pl-10 text-sm shadow-soft ring-1 ring-inset ring-border/60 outline-none placeholder:text-ink-neutral focus-visible:ring-2 focus-visible:ring-portal" />
+          </label>
+          <FilterTabs label="Role" options={ROLE_FILTERS} value={role} onChange={setRole} />
         </div>
 
-        {loading && !staff.length ? (
-          <LoadingOrb compact label="Loading your team…" />
+        {error && !staff.length ? (
+          <ErrorState title="Couldn't load the team" description={error} onRetry={() => dispatch(fetchAdminDashboardData()).unwrap()} />
+        ) : loading && !staff.length ? (
+          <SkeletonCards count={3} />
         ) : !shown.length ? (
-          <EmptyState icon={Users} title={staff.length ? "No one matches" : "No team members yet"} description={staff.length ? "Try a different search or role." : "Create your first employee or receptionist account to get started."} actionLabel={staff.length ? undefined : "Create staff"} onAction={() => navigate("/admin-dashboard/staff/new")} />
+          <EmptyState
+            illustration={staff.length ? "search" : "sparkle"}
+            title={staff.length ? "No one matches" : "No team yet"}
+            description={staff.length ? "Try another search." : "Add your first stylist or receptionist."}
+            actionLabel={staff.length ? undefined : "Add staff"}
+            actionIcon={UserPlus}
+            onAction={() => navigate("/admin-dashboard/staff/new")}
+          />
         ) : (
-          <motion.div layout className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <AnimatePresence mode="popLayout">
               {shown.map((member, index) => (
-                <motion.article
+                <motion.li
                   key={member.id}
-                  layout
-                  initial={{ opacity: 0, y: 14 }}
+                  layout={!reduce}
+                  initial={reduce ? { opacity: 0 } : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.96 }}
-                  transition={{ type: "spring", stiffness: 380, damping: 32, delay: Math.min(index, 8) * 0.025 }}
-                  whileHover={{ y: -3 }}
-                  className="admin-shadow-sm flex flex-col rounded-2xl border border-border/70 bg-card p-4"
+                  whileHover={reduce ? undefined : interaction.cardHover}
+                  transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }}
+                  className="flex flex-col rounded-card border border-border/60 bg-card p-4 shadow-soft transition-shadow hover:shadow-lift"
                 >
                   <div className="flex items-start gap-3">
                     <AvatarBadge name={member.name} />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate font-medium">{member.name}</p>
-                        <StatusPill status={member.accountStatus ?? "—"} />
-                      </div>
-                      <p className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        {member.role === "RECEPTIONIST" ? <ConciergeBell className="size-3" /> : <Scissors className="size-3" />} {roleLabel(member.role)}
+                      <p className="truncate font-semibold">{member.name}</p>
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex h-6 items-center gap-1 rounded-full bg-muted px-2 text-[11px] font-semibold text-ink-neutral">
+                          {member.role === "RECEPTIONIST" ? <ConciergeBell className="size-3" aria-hidden /> : <Scissors className="size-3" aria-hidden />} {roleLabel(member.role)}
+                        </span>
+                        <StatusChip status={member.accountStatus === "ACTIVE" ? (member.isActive ? "ACTIVE" : "INACTIVE") : "PENDING"} size="sm" />
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                    <p className="flex items-center gap-1.5 truncate"><Mail className="size-3.5 shrink-0" /> {member.email}</p>
-                    <p className="flex items-center gap-1.5"><Phone className="size-3.5 shrink-0" /> {member.phone}</p>
+                  <div className="mt-3 space-y-1 text-caption text-ink-neutral">
+                    <p className="flex items-center gap-1.5 truncate">
+                      <Mail className="size-3.5 shrink-0" aria-hidden /> {member.email}
+                    </p>
+                    <p className="flex items-center gap-1.5">
+                      <Phone className="size-3.5 shrink-0" aria-hidden /> {formatPhone(member.phone) || "—"}
+                    </p>
                   </div>
                   <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => dispatch(startEditStaff(member))}>
-                      <Pencil className="size-3.5" /> Edit
-                    </Button>
-                    <Button size="sm" variant="ghost" aria-label={`Delete ${member.name}`} className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => void removeStaff(member)}>
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                    <ButtonLoadingMorph size="md" variant="secondary" icon={Pencil} className="flex-1" onClick={() => dispatch(startEditStaff(member))}>
+                      Edit
+                    </ButtonLoadingMorph>
+                    <IconButton icon={Trash2} label={`Remove ${member.name}`} variant="ghost" className="text-ink-destructive" onClick={() => removeStaff(member)} />
                   </div>
-                </motion.article>
+                </motion.li>
               ))}
             </AnimatePresence>
-          </motion.div>
+          </ul>
         )}
       </div>
 
       <SlideOver
         open={Boolean(editId)}
         onOpenChange={(open) => !open && dispatch(clearEditStaff())}
-        title="Edit team member"
-        description="Update contact details, role and availability."
+        title="Edit teammate"
+        icon={UserRound}
         footer={
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => dispatch(clearEditStaff())} disabled={mutating}>
-              Cancel
-            </Button>
-            <BorderBeam size="sm" active={!mutating}>
-              <Button disabled={mutating} onClick={() => void saveEdit()}>
-                {mutating ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-                {mutating ? "Saving…" : "Save"}
-              </Button>
-            </BorderBeam>
-          </div>
+          <ButtonLoadingMorph icon={Check} state={save.state} loadingLabel="Saving…" successLabel="Saved" onClick={() => save.run(saveEdit)}>
+            Save
+          </ButtonLoadingMorph>
         }
       >
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
-          {[
-            ["name", "Name", "text", "Full name"],
-            ["email", "Email", "email", "name@salon.com"],
-            ["phone", "Phone (E.164)", "tel", "+919876543210"],
-          ].map(([field, label, type, placeholder]) => (
-            <label key={field} className="block space-y-1.5 text-sm font-medium">
-              {label}
-              <input type={type} placeholder={placeholder} value={editForm[field] ?? ""} onChange={(e) => dispatch(setEditFormField({ field, value: e.target.value }))} className="mt-1 h-10 w-full rounded-md border border-input bg-transparent px-3 text-sm font-normal outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" />
-            </label>
-          ))}
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Role</p>
-            <SegmentedControl fluid label="Role" options={ROLE_OPTIONS} value={editForm.role} onChange={(value) => dispatch(setEditFormField({ field: "role", value }))} />
+        <div className="space-y-4">
+          <FloatingLabelInput label="Full name" icon={UserRound} autoComplete="name" {...field("name")} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <FloatingLabelInput label="Email" icon={Mail} type="email" autoComplete="email" {...field("email")} />
+            <FloatingLabelInput label="Phone (+91…)" icon={Phone} type="tel" autoComplete="tel" {...field("phone")} />
           </div>
-          <div className="flex items-center justify-between rounded-xl border p-3">
-            <div>
-              <p className="text-sm font-medium">Active</p>
-              <p className="text-xs text-muted-foreground">{editForm.isActive ? "Can be booked / sign in." : "Switched off."}</p>
-            </div>
+          <AnimatedTabBar fullWidth label="Role" items={ROLE_OPTIONS} value={editForm.role} onChange={(value) => dispatch(setEditFormField({ field: "role", value }))} />
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-muted/60 p-3">
+            <span className="text-sm font-semibold">{editForm.isActive ? "Active" : "Switched off"}</span>
             <Switch checked={Boolean(editForm.isActive)} onChange={(value) => dispatch(setEditFormField({ field: "isActive", value }))} label="Active" />
           </div>
-
           <AnimatePresence initial={false}>
             {editForm.role === "STAFF" ? (
-              <motion.div key="stylist" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Stylist type</p>
-                    <SegmentedControl fluid label="Stylist gender type" options={GENDER_TYPES} value={editForm.genderType ?? "UNISEX"} onChange={(value) => dispatch(setEditFormField({ field: "genderType", value }))} />
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold">Allowed services</p>
-                      <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-                        {selected.length} of {servicesCatalog.length}
-                      </span>
-                    </div>
-                    {!servicesCatalog.length ? <p className="rounded-xl border border-dashed py-5 text-center text-sm text-muted-foreground">Create services first.</p> : null}
-                    {grouped.map(([category, list]) => {
-                      const ids = list.map((s) => s.id);
-                      const all = ids.every((id) => selected.includes(id));
-                      return (
-                        <div key={category} className="rounded-xl border bg-muted/20 p-3">
-                          <div className="mb-2 flex items-center justify-between">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category}</p>
-                            <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={() => setSelected(all ? selected.filter((id) => !ids.includes(id)) : [...selected, ...ids])}>
-                              {all ? "Remove all" : "Add all"}
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {list.map((service) => (
-                              <ToggleChip key={service.id} size="sm" selected={selected.includes(service.id)} onClick={() => setSelected(selected.includes(service.id) ? selected.filter((id) => id !== service.id) : [...selected, service.id])}>
-                                {service.name}
-                              </ToggleChip>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+              <motion.div key="stylist" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-4">
+                <AnimatedTabBar fullWidth label="Stylist type" items={GENDER_TYPES} value={editForm.genderType ?? "UNISEX"} onChange={(value) => dispatch(setEditFormField({ field: "genderType", value }))} />
+                <AllowedServicesPicker services={servicesCatalog} selected={selected} onChange={(ids) => dispatch(setEditFormField({ field: "allowedServiceIds", value: Array.from(new Set(ids)) }))} />
               </motion.div>
             ) : null}
           </AnimatePresence>
         </div>
       </SlideOver>
-      {confirmDialog}
+      {confirmSheet}
     </AdminLayout>
   );
 }
