@@ -50,6 +50,7 @@ export function BookingTimeline({ status, times = {}, orientation = "horizontal"
                 isCurrent && "shadow-glow"
               )}
             >
+              {isCurrent && meta.live ? <span aria-hidden className={cn("kit-live-ping absolute inset-0 rounded-full", TONE_DOT[meta.tone])} /> : null}
               <Icon className="relative size-4" aria-hidden />
             </motion.span>
             <span className={cn(vertical ? "pt-1.5" : "mt-1.5 px-1")}>

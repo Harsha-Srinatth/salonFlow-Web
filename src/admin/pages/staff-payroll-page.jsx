@@ -14,7 +14,7 @@ import { Stepper } from "@/admin/components/stepper";
 import { formatMoney } from "@/lib/format";
 import { formatIsoDate, monthStartIso, salonDateIso } from "@/lib/salon-date";
 import { toApiUrl } from "@/lib/api-base";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { cn } from "@/lib/utils";
 import { AdminLayout } from "../portal/admin-layout";
 

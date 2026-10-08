@@ -16,7 +16,7 @@ export function TodayOverview({ metrics, loading }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
-      <div className="relative overflow-hidden rounded-card border border-border/60 bg-card p-5 shadow-soft">
+      <div className="aurora grain relative overflow-hidden rounded-card border border-border/60 bg-card p-5 shadow-soft">
         <div className="relative z-[2] flex items-center gap-5">
           <ProgressRing value={completed} max={plannedToday || 1} size={112} stroke={10} label="Day progress">
             <span className="flex flex-col items-center leading-none">

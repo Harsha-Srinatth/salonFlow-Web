@@ -9,7 +9,7 @@ import { ConciergeBell } from "lucide-react";
 export default function ReceptionProfilePage() {
   const { loading, user } = useReceptionSession();
 
-  if (loading) return <BrandLoader className="py-24" label="Loading profile…" />;
+  if (loading) return <BrandLoader fullScreen label="Loading profile…" />;
   if (!user) return null;
 
   return (

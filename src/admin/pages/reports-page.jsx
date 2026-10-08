@@ -151,6 +151,7 @@ export default function AdminReportsPage() {
       actions={
         <span className="inline-flex h-9 items-center gap-2 rounded-full bg-success/12 px-3 text-sm font-bold text-ink-success ring-1 ring-inset ring-success/25" title="Today's net income">
           <span aria-hidden className="relative grid size-2 place-items-center">
+            <span className="kit-live-ping absolute inset-0 rounded-full bg-success opacity-60" />
             <span className="size-2 rounded-full bg-success" />
           </span>
           <span className="sr-only">Today</span>

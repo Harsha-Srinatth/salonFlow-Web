@@ -60,7 +60,7 @@ export default function ReceptionDashboardPage() {
     [dispatch]
   );
 
-  if (loading) return <BrandLoader className="py-24" label="Opening the desk…" />;
+  if (loading) return <BrandLoader fullScreen label="Opening the desk…" />;
   if (!user) return null;
 
   const firstLoad = (bookingsLoading || queueLoading) && !bookings.length && !queue.length;

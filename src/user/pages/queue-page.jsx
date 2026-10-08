@@ -38,6 +38,7 @@ function TurnSoonBanner({ entry }) {
       className="relative flex items-center gap-3 overflow-hidden rounded-card bg-success/12 p-4 ring-1 ring-inset ring-success/30"
     >
       <span className="relative grid size-11 shrink-0 place-items-center rounded-2xl bg-success text-success-foreground">
+        <span aria-hidden className="kit-live-ping absolute inset-0 rounded-2xl bg-success/50" />
         <BellRing className="relative size-5" aria-hidden />
       </span>
       <span className="min-w-0">

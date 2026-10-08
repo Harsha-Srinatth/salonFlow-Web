@@ -15,7 +15,7 @@ import { formatIsoDate, salonDateOf } from "@/lib/salon-date";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { fetchMembership, MEMBERSHIP_PATH, peekUserResource } from "../lib/user-api";
+import { fetchMembership } from "../lib/user-api";
 import { SectionHeading } from "../components/section-heading";
 
 const PERKS = [
@@ -42,7 +42,7 @@ function PlanCard({ plan, index, isCurrentPlan, isRecommended, expiresAt, disabl
       className={cn(
         "relative flex flex-col gap-5 overflow-hidden bg-card p-6 shadow-soft ring-1 ring-inset transition-shadow hover:shadow-lift",
         isCurrentPlan ? "ring-2 ring-portal shadow-glow" : isRecommended ? "ring-2 ring-gold/60" : "ring-border/60",
-        isRecommended && "relative"
+        isRecommended && "shine shine-auto"
       )}
     >
       {isCurrentPlan || isRecommended ? (
@@ -182,7 +182,7 @@ function ResultDialog({ result, onClose }) {
 export default function UserMembershipPage() {
   const { appUser, refresh } = useAuth();
   const isUser = appUser?.role === "USER";
-  const [membership, setMembership] = useState(() => peekUserResource(MEMBERSHIP_PATH) ?? null);
+  const [membership, setMembership] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [chosen, setChosen] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -252,10 +252,13 @@ export default function UserMembershipPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={spring.soft}
-            className="relative isolate flex flex-wrap items-center gap-4 overflow-hidden rounded-card p-6 bg-primary text-primary-foreground sm:p-8"
+            className="relative isolate flex flex-wrap items-center gap-4 overflow-hidden rounded-card p-6 text-white shadow-float sm:p-8"
           >
-            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-primary-foreground/10">
-              <Crown className="size-7" aria-hidden />
+            <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--ink-info))_130%)]" />
+            <div aria-hidden className="absolute inset-0 -z-[1] hidden bg-[hsl(222_45%_6%/0.55)] dark:block" />
+            <div aria-hidden className="grain absolute inset-0 -z-[1]" />
+            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/15 backdrop-blur">
+              <Crown className={cn("size-7", !isFree && "text-gold")} aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
               <p className="text-caption font-semibold opacity-85">Your plan</p>
@@ -264,7 +267,7 @@ export default function UserMembershipPage() {
               {currentPlan?.lapsed ? <p className="mt-0.5 text-sm font-semibold">Ended · renew for member prices</p> : null}
             </div>
             {!isFree ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-foreground px-4 py-2 text-sm font-bold text-primary">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-bold text-[hsl(222_45%_14%)]">
                 <Check className="size-4" strokeWidth={3} aria-hidden /> Active
               </span>
             ) : null}

@@ -1,8 +1,14 @@
 export * from "./presets";
 export { FadeIn } from "./fade-in";
 export { Stagger, StaggerItem } from "./stagger";
+export { ScrollReveal } from "./scroll-reveal";
 export { PageTransition } from "./page-transition";
 export { AnimatedCounter } from "./animated-counter";
+export { HoverLiftCard } from "./hover-lift-card";
+export { SpotlightCard } from "./spotlight-card";
+export { MagneticButton } from "./magnetic-button";
 export { SkeletonShimmer, SkeletonText, SkeletonStat, SkeletonListItem, SkeletonList, SkeletonCard, SkeletonTable, SkeletonSlots } from "./skeleton-shimmer";
 export { ConfettiBurst, fireConfetti } from "./confetti-burst";
 export { SuccessBurst } from "./success-burst";
+export { ScrollProgress } from "./scroll-progress";
+export { loadGsap, startSmoothScroll } from "./lazy-landing";

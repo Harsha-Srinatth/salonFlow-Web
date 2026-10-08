@@ -12,7 +12,7 @@ import { EmptyState } from "@/admin/components/empty-state";
 import { ErrorBanner } from "@/admin/components/error-banner";
 import { Panel } from "@/admin/components/panel";
 import { Switch } from "@/admin/components/switch";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { notify } from "@/lib/notify";
 import { iconForAudience } from "@/lib/service-icons";

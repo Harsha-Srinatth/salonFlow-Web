@@ -14,11 +14,12 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 function HeroShell({ eyebrow, icon: Icon, children, live = false }) {
   return (
-    <div className="relative overflow-hidden rounded-card border border-border/60 bg-card p-5 shadow-soft sm:p-6">
+    <div className="aurora grain relative overflow-hidden rounded-card border border-border/60 bg-card p-5 shadow-soft sm:p-6">
       <div className="relative z-[2]">
         <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-portal/12 px-2.5 py-1 text-micro font-bold tracking-wide text-portal uppercase">
           {live ? (
             <span className="relative grid size-1.5" aria-hidden>
+              <span className="kit-live-ping absolute inset-0 rounded-full bg-portal" />
               <span className="relative size-1.5 rounded-full bg-portal" />
             </span>
           ) : null}

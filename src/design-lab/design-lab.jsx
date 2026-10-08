@@ -3,6 +3,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { Monitor, Moon, Smartphone, Sun, Tablet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppThemeToggle } from "@/components/theme-provider";
+import { ScrollProgress } from "@/components/motion";
 import { Feedback, Foundations, Loaders, MotionSection } from "./sections-a";
 import { DateTime, Forms, NavSection, Overlays } from "./sections-b";
 import { DataSection, Rewards, States } from "./sections-c";
@@ -68,6 +69,7 @@ export default function DesignLab() {
 
   return (
     <div className="min-h-dvh bg-background">
+      {!embedded ? <ScrollProgress /> : null}
       {!embedded ? (
         <header className="glass-surface sticky top-0 z-sticky border-x-0 border-t-0 pt-safe">
           <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-3 px-[var(--gutter)] py-3">

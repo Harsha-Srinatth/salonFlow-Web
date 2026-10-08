@@ -16,10 +16,10 @@ export function Stagger({ gap = S.base, delay = 0, inView = false, as = "div", c
 }
 
 /** One staggered child. `variant` picks an entrance from presets.variants. */
-export function StaggerItem({ variant = "fadeIn", as = "div", className, children, ...rest }) {
+export function StaggerItem({ variant = "fadeUp", as = "div", className, children, ...rest }) {
   const Comp = motion[as] ?? motion.div;
   return (
-    <Comp className={className} variants={variants[variant] ?? variants.fadeIn} {...rest}>
+    <Comp className={className} variants={variants[variant] ?? variants.fadeUp} {...rest}>
       {children}
     </Comp>
   );

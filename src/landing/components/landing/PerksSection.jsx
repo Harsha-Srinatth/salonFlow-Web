@@ -1,6 +1,9 @@
+import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, BadgePercent, Crown, ShieldCheck, Sparkles, Timer, Wallet } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { spring, stagger } from "@/components/motion/presets";
+import { SpotlightCard } from "@/components/motion/spotlight-card";
 import { SectionHeading } from "./section-heading";
 import { SIGNUP_HREF } from "./landing-data";
 
@@ -25,14 +28,23 @@ const TONE = {
 };
 
 export default function PerksSection() {
+  const reduce = useReducedMotion();
   return (
-    <section id="perks" aria-labelledby="perks-title" className="py-16 sm:py-24">
+    <section id="perks" aria-labelledby="perks-title" className="py-20 sm:py-28">
       <div className="mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)]">
         <SectionHeading id="perks-title" icon={Sparkles} overline="Members & offers" title="More perks, every visit" accent={["perks"]} />
         <ul className="mt-12 grid auto-rows-[minmax(9.5rem,auto)] gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {PERKS.map(({ icon: Icon, title, sub, tone, span, big }) => (
-            <li key={title} className={cn("min-w-0", span)}>
-              <div className={cn("flex h-full flex-col justify-between gap-6 rounded-card border border-border bg-card p-6", big && "p-7 sm:p-8")}>
+          {PERKS.map(({ icon: Icon, title, sub, tone, span, big }, i) => (
+            <motion.li
+              key={title}
+              initial={reduce ? false : { opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.3 }}
+              transition={{ ...spring.soft, delay: Math.min(i, 5) * stagger.base }}
+              className={cn("min-w-0", span)}
+            >
+              <SpotlightCard className={cn("flex h-full flex-col justify-between gap-6 p-6", big && "p-7 sm:p-8")}>
+                {big ? (<div aria-hidden className="absolute inset-0 -z-[2]"><div className="aurora size-full" /></div>) : null}
                 <span className={cn("grid place-items-center rounded-2xl", TONE[tone], big ? "size-16" : "size-12")}>
                   <Icon className={big ? "size-8" : "size-6"} aria-hidden />
                 </span>
@@ -45,8 +57,8 @@ export default function PerksSection() {
                     </Link>
                   ) : null}
                 </div>
-              </div>
-            </li>
+              </SpotlightCard>
+            </motion.li>
           ))}
         </ul>
       </div>

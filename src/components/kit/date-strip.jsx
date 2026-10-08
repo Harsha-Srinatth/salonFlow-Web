@@ -115,13 +115,13 @@ export function DateStrip({ value, onChange, startDate, days = 30, minDate, maxD
                     }
                   }}
                   className={cn(
-                    "relative flex h-[4.75rem] w-[3.75rem] shrink-0 flex-col items-center justify-center rounded-xl text-center transition-colors duration-100",
+                    "relative flex h-[4.75rem] w-[3.75rem] shrink-0 flex-col items-center justify-center rounded-2xl text-center transition-colors",
                     selected ? "text-portal-foreground" : "bg-card text-foreground ring-1 ring-inset ring-border/70 hover:ring-portal/40",
-                    st.isToday && !selected && "ring-2 ring-portal/60",
+                    st.isToday && !selected && "ring-2 ring-portal/60 shadow-glow",
                     st.disabled && "cursor-not-allowed opacity-40"
                   )}
                 >
-                  {selected ? <span aria-hidden className="absolute inset-0 -z-0 rounded-xl bg-portal" /> : null}
+                  {selected ? <motion.span layoutId="date-strip-pill" aria-hidden className="absolute inset-0 -z-0 rounded-2xl bg-portal shadow-glow" transition={reduce ? { duration: 0 } : spring.snappy} /> : null}
                   <span className={cn("relative text-micro font-semibold uppercase", !selected && "text-ink-neutral")}>{st.isToday ? "Today" : formatIsoDate(iso, { weekday: "short" })}</span>
                   <span className="relative font-display text-xl font-bold leading-tight tabular-nums">{formatIsoDate(iso, { day: "numeric" })}</span>
                   <span className={cn("relative text-[10px] font-medium leading-none", selected ? "opacity-90" : "text-ink-neutral", !firstOfMonth && "invisible")}>{formatIsoDate(iso, { month: "short" })}</span>

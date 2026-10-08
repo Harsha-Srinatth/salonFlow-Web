@@ -80,6 +80,7 @@ export function StaffLivePill({ connected, className }) {
       )}
     >
       <span className="relative grid size-2 place-items-center">
+        {connected && !reduce ? <span aria-hidden className="kit-live-ping absolute inset-0 rounded-full bg-success opacity-60" /> : null}
         <span aria-hidden className={cn("relative size-2 rounded-full", connected ? "bg-success" : "bg-muted-foreground")} />
       </span>
       <span className="hidden sm:inline">{connected ? "Live" : "Paused"}</span>

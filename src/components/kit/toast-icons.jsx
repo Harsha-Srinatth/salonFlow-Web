@@ -12,6 +12,7 @@ export const toastIcons = {
   success: tile(
     "--success",
     <>
+      <span aria-hidden className="kit-live-ping absolute inset-0 rounded-full bg-current opacity-30" style={{ animationIterationCount: 1 }} />
       <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
         <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="24" style={{ "--kit-dash": 24, animation: "kit-draw 420ms var(--ease-out-expo) 120ms both" }} />
       </svg>

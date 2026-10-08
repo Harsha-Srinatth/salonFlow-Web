@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useState, type ReactNode } from "react"
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from "react"
 
 type Theme = "light" | "dark"
 
@@ -32,13 +32,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applyThemeClass(theme)
   }, [theme])
 
-  const toggleTheme = useCallback(() => setTheme(current => (current === "dark" ? "light" : "dark")), [])
-  // Stable value: App re-renders on every navigation, and a fresh object here re-rendered
-  // every theme consumer (each portal shell) with it.
-  const value = useMemo(() => ({ theme, toggleTheme, isDark: theme === "dark" }), [theme, toggleTheme])
+  const toggleTheme = () => setTheme(current => (current === "dark" ? "light" : "dark"))
 
   return (
-    <ThemeContext.Provider value={value}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, isDark: theme === "dark" }}>
       {children}
     </ThemeContext.Provider>
   )

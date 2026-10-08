@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Bell, CalendarCheck, Gift, Layers, Loader, Megaphone, Palette, RefreshCw, Save, Sparkles, Trash2, Wand2, Wifi } from "lucide-react";
+import { Bell, CalendarCheck, Gift, Layers, Loader, Megaphone, MousePointerClick, Palette, RefreshCw, Save, Sparkles, Trash2, Wand2, Wifi } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { formatMoney } from "@/lib/format";
 import { duration, ease, spring, stagger } from "@/components/motion/presets";
@@ -8,12 +8,16 @@ import {
   AnimatedCounter,
   ConfettiBurst,
   FadeIn,
+  HoverLiftCard,
+  MagneticButton,
+  ScrollReveal,
   SkeletonCard,
   SkeletonList,
   SkeletonSlots,
   SkeletonStat,
   SkeletonTable,
   SkeletonText,
+  SpotlightCard,
   Stagger,
   StaggerItem,
   SuccessBurst,
@@ -52,9 +56,9 @@ export function Foundations() {
             <p className="text-micro font-semibold uppercase text-ink-neutral">Micro</p>
           </div>
         </Specimen>
-        <Specimen title="Surfaces">
-          <div className="grid h-44 place-items-center rounded-card bg-muted">
-            <div className="glass-strong rounded-2xl px-5 py-3 text-sm font-semibold">glass-strong (solid)</div>
+        <Specimen title="Surfaces: glass, aurora, grain">
+          <div className="aurora aurora-animated grain relative grid h-44 place-items-center rounded-card">
+            <div className="glass-surface relative z-[2] rounded-2xl px-5 py-3 text-sm font-semibold">glass-surface</div>
           </div>
         </Specimen>
         <Specimen title="Elevation & radii">
@@ -118,6 +122,22 @@ export function MotionSection() {
               Add
             </button>
           </Row>
+        </Specimen>
+        <Specimen title="ScrollReveal">
+          <ScrollReveal className="grid h-24 place-items-center rounded-2xl bg-accent/15 text-sm font-semibold">Revealed on scroll</ScrollReveal>
+        </Specimen>
+        <Specimen title="HoverLiftCard (tilt)">
+          <HoverLiftCard tilt className="grid h-28 place-items-center p-4 text-sm font-semibold">
+            Hover / press me
+          </HoverLiftCard>
+        </Specimen>
+        <Specimen title="SpotlightCard">
+          <SpotlightCard className="grid h-28 place-items-center p-4 text-sm font-semibold">Move the cursor</SpotlightCard>
+        </Specimen>
+        <Specimen title="MagneticButton">
+          <MagneticButton>
+            <ButtonLoadingMorph icon={MousePointerClick}>Magnetic</ButtonLoadingMorph>
+          </MagneticButton>
         </Specimen>
         <Specimen title="ConfettiBurst · SuccessBurst">
           <Row>

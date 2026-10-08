@@ -11,7 +11,7 @@ import { FilterTabs } from "@/admin/components/filter-tabs";
 import { SlideOver } from "@/admin/components/slide-over";
 import { ToneChip } from "@/admin/components/tone-chip";
 import { dateOf } from "@/admin/lib/safe-format";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { notify } from "@/lib/notify";
 import { AdminLayout } from "../portal/admin-layout";

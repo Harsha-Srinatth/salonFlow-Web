@@ -19,7 +19,7 @@ import { Stepper } from "@/admin/components/stepper";
 import { Switch } from "@/admin/components/switch";
 import { ToneChip } from "@/admin/components/tone-chip";
 import { dateOf } from "@/admin/lib/safe-format";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 import { formatMoney } from "@/lib/format";
 import { iconForAudience } from "@/lib/service-icons";

@@ -26,6 +26,7 @@ export function StatusChip({ status, booking, audience = "staff", size = "md", i
       title={iconOnly ? meta.label : undefined}
     >
       <span className="relative grid place-items-center">
+        {live ? <span aria-hidden className={cn("kit-live-ping absolute inset-0 rounded-full opacity-60", TONE_DOT[meta.tone])} /> : null}
         <AnimatePresence mode="popLayout" initial={false}>
           <motion.span
             key={meta.key}

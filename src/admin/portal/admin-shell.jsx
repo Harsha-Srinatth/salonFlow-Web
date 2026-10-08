@@ -24,6 +24,7 @@ function LiveStatus() {
       )}
     >
       <span className="relative grid place-items-center">
+        {connected ? <span aria-hidden className="kit-live-ping absolute inset-0 rounded-full bg-success opacity-60" /> : null}
         <Icon className="relative size-3.5" aria-hidden />
       </span>
       <span className="hidden md:inline">{connected ? "Live" : "Offline"}</span>
@@ -95,6 +96,7 @@ export function AdminShell({ pageTitle, description, actions, slotRef, children 
       tabs={adminTabHrefs}
       title={pageTitle}
       subtitle={description}
+      accent="sage"
       user={{ name: appUser?.name ?? "Administrator", role: appUser?.email ?? "Admin" }}
       userMenu={<SignOutButton />}
       commands={commands}

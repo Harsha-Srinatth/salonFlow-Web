@@ -220,11 +220,8 @@ export const connectReceptionRealtime = createAsyncThunk(
     try {
       await connectReceptionBookingsSocket({
         token: null,
-        owner: "reception-bookings",
-        onConnect: (info) => {
+        onConnect: () => {
           dispatch(setReceptionRealtimeConnected(true));
-          // The bootstrap just fetched these; only a reconnect can have missed events.
-          if (!info?.reconnect) return;
           void dispatch(fetchReceptionBookings());
           void dispatch(fetchReceptionQueue());
           void dispatch(fetchReceptionServices());

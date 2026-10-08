@@ -25,7 +25,7 @@ export function ResponsiveTable({ columns, rows = [], rowKey = (r) => r.id, onRo
       <div className={cn("overflow-hidden rounded-card border border-border/60 bg-card shadow-soft", className)}>
         <table className="w-full border-collapse text-sm">
           {caption ? <caption className="sr-only">{caption}</caption> : null}
-          <thead className="sticky top-0 z-[1] bg-muted">
+          <thead className="sticky top-0 z-[1] bg-muted/60 backdrop-blur">
             <tr>
               {columns.map((col) => (
                 <th key={col.key} scope="col" style={{ width: col.width }} className={cn("px-4 py-3 text-left text-micro font-semibold uppercase text-ink-neutral", col.align === "right" && "text-right", col.align === "center" && "text-center")}>

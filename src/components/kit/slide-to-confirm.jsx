@@ -100,7 +100,7 @@ export function SlideToConfirm({ label = "Slide to confirm", confirmedLabel = "C
         className={cn("pointer-events-none absolute inset-0 grid place-items-center pl-12 text-sm font-semibold", state === "idle" ? t.text : "text-white")}
         style={{ opacity: state === "idle" ? labelOpacity : 1 }}
       >
-        <span className={cn(state === "idle" && !reduce && "relative rounded-full px-2")}>{mode === "hold" && state === "idle" ? label.replace(/^slide/i, "Hold") : statusText}</span>
+        <span className={cn(state === "idle" && !reduce && "shine shine-auto rounded-full px-2")}>{mode === "hold" && state === "idle" ? label.replace(/^slide/i, "Hold") : statusText}</span>
       </motion.span>
       <motion.button
         type="button"

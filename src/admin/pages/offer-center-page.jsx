@@ -15,7 +15,7 @@ import { emptyForm, formFromOffer, OfferEditor, payloadFromForm, SEGMENT_META, T
 import { SkeletonCards } from "@/admin/components/skeleton"
 import { Switch } from "@/admin/components/switch"
 import { ToneChip } from "@/admin/components/tone-chip"
-import { getFirebaseIdToken } from "@/lib/auth/id-token"
+import { getFirebaseIdToken } from "@/lib/auth/auth-client"
 import { toApiUrl } from "@/lib/api-base"
 import { formatMoney } from "@/lib/format"
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket"
@@ -219,7 +219,6 @@ export default function OfferCenterPage() {
       .then((token) =>
         connectAdminBookingsSocket({
           token,
-          owner: "offer-center",
           onOfferUpdated: (payload) => {
             const segment = previewSegmentRef.current || "FREE"
             if (payload?.center) setCenter(payload.center)

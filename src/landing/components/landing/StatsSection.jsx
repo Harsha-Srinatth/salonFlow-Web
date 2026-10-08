@@ -1,12 +1,26 @@
+import { motion, useReducedMotion } from "motion/react";
 import { Clock, MessageSquareQuote, Star } from "lucide-react";
 import { GOOGLE_RATING } from "@/lib/public-claims";
 import { useBusinessInfo } from "@/lib/business-info";
+import { spring, stagger } from "@/components/motion/presets";
+import { AnimatedCounter } from "@/components/motion/animated-counter";
 import { Rating } from "@/components/kit/rating";
 
 const formatRating = (n) => n.toFixed(1);
 
-function Tile({ className = "", children }) {
-  return <li className={`relative overflow-hidden rounded-card border border-border bg-card p-6 sm:p-7 ${className}`}>{children}</li>;
+function Tile({ index, className = "", children }) {
+  const reduce = useReducedMotion();
+  return (
+    <motion.li
+      initial={reduce ? false : { opacity: 0, y: 24, scale: 0.97 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, amount: 0.4 }}
+      transition={{ ...spring.soft, delay: index * stagger.loose }}
+      className={`relative overflow-hidden rounded-card border border-border/70 bg-card p-6 shadow-soft sm:p-7 ${className}`}
+    >
+      {children}
+    </motion.li>
+  );
 }
 
 /**
@@ -23,25 +37,25 @@ export default function StatsSection() {
   return (
     <section aria-label="Ratings" className="py-8 sm:py-12">
       <ul className={`mx-auto grid w-full max-w-[var(--content-max)] gap-4 px-[var(--gutter)] sm:grid-cols-2 ${hours ? "lg:grid-cols-3" : ""}`}>
-        <Tile className={`${hours ? "sm:col-span-2 lg:col-span-1" : ""}`}>
+        <Tile index={0} className={`aurora ${hours ? "sm:col-span-2 lg:col-span-1" : ""}`}>
           <p className="flex items-center gap-2 text-caption font-semibold text-ink-neutral">
             <Star className="size-4 fill-gold text-gold" aria-hidden /> Google rating
           </p>
           <p className="mt-3 flex items-end gap-2">
-            <span className="font-display text-display-xl font-bold">{formatRating(rating)}</span>
+            <AnimatedCounter value={rating} format={formatRating} duration={1.4} className="font-display text-display-xl font-bold" />
             <span className="pb-2 text-headline font-semibold text-ink-neutral">/ 5</span>
           </p>
           <Rating value={rating} size="md" label="Google rating" className="mt-2" />
         </Tile>
-        <Tile>
+        <Tile index={1}>
           <p className="flex items-center gap-2 text-caption font-semibold text-ink-neutral">
             <MessageSquareQuote className="size-4 text-ink-primary" aria-hidden /> Google reviews
           </p>
-          <span className="mt-3 block font-display text-display-xl font-bold tabular-nums">{reviews.toLocaleString("en-IN")}</span>
+          <AnimatedCounter value={reviews} duration={1.8} className="mt-3 block font-display text-display-xl font-bold" />
           <p className="mt-2 text-sm text-ink-neutral">On our Google listing</p>
         </Tile>
         {hours ? (
-          <Tile>
+          <Tile index={2}>
             <p className="flex items-center gap-2 text-caption font-semibold text-ink-neutral">
               <Clock className="size-4 text-ink-primary" aria-hidden /> Open {hours.days}
             </p>

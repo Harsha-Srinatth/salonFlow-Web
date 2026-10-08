@@ -1,12 +1,10 @@
 "use client";
 
-import { BrandLoader, FloatingActionButton, PortalShell } from "@/components/kit";
+import { FloatingActionButton, PortalShell } from "@/components/kit";
 import { StaffLivePill, StaffRealtimeBanner } from "@/components/kit-extra/staff-realtime-status";
 import { NotificationBell } from "@/components/shared/notification-bell";
 import { staffLogout } from "@/lib/staff-auth-client";
 import { formatBookingTime } from "@/receptionist/lib/booking-utils";
-import { useReceptionBootstrap } from "@/receptionist/hooks/use-reception-bootstrap";
-import { useReceptionSession } from "@/receptionist/hooks/use-reception-session";
 import {
   RECEPTION_COLLECT,
   RECEPTION_SCHEDULE,
@@ -14,19 +12,16 @@ import {
   receptionNavItems,
 } from "@/receptionist/portal/nav-config";
 import { CalendarSearch, CreditCard, LogOut, Search, UserPlus } from "lucide-react";
-import { createContext, Suspense, useContext, useLayoutEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo } from "react";
 import { useSelector } from "react-redux";
-import { Outlet, useNavigate } from "react-router-dom";
-
-const ReceptionFrameContext = createContext(null);
+import { useNavigate } from "react-router-dom";
 
 export function ReceptionSignOutButton() {
   const navigate = useNavigate();
   return (
     <button
       type="button"
-      className="flex h-11 w-full items-center gap-2 rounded-xl px-3 text-sm font-semibold text-ink-destructive hover:bg-destructive/10"
+      className="flex h-11 w-full items-center gap-2 rounded-2xl px-3 text-sm font-semibold text-ink-destructive hover:bg-destructive/10"
       onClick={async () => {
         await staffLogout();
         navigate("/auth/login", { replace: true });
@@ -37,7 +32,13 @@ export function ReceptionSignOutButton() {
   );
 }
 
-function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hideFab, children }) {
+/**
+ * Reception shell: PortalShell with the teal accent, live socket state, notifications,
+ * quick-action FAB and a command palette that can jump to any loaded booking.
+ * `pageTitle`/`pageSubtitle` names are kept because App.jsx renders `<ReceptionLayout pageTitle="">`
+ * as the route fallback.
+ */
+export function ReceptionLayout({ pageTitle, pageSubtitle, actions, realtimeConnected, user, hideFab = false, children }) {
   const navigate = useNavigate();
   const bookings = useSelector((state) => state.receptionBookings?.bookings ?? []);
 
@@ -69,8 +70,9 @@ function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hid
     <PortalShell
       brand={{ name: "Sahasra", tagline: "Reception desk", href: receptionNavItems[0].href }}
       nav={receptionNavItems}
-      title={title}
-      subtitle={subtitle}
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      accent="teal"
       user={user ? { name: user.name, role: "Receptionist" } : undefined}
       userMenu={<ReceptionSignOutButton />}
       commands={commands}
@@ -84,7 +86,6 @@ function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hid
       fab={
         hideFab ? null : (
           <FloatingActionButton
-            className="lg:hidden"
             label="Quick actions"
             actions={[
               { id: "walk-in", label: "New walk-in", icon: UserPlus, onClick: () => navigate(RECEPTION_WALK_IN) },
@@ -98,74 +99,5 @@ function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hid
       <StaffRealtimeBanner connected={realtimeConnected} />
       {children}
     </PortalShell>
-  );
-}
-
-/**
- * Route layout for every reception page: one shell, one session lookup, one data bootstrap and one
- * realtime socket for the whole visit. Switching tabs only swaps the page inside it, so the shared
- * bookings/queue/stylists/services stay loaded instead of being refetched per tab.
- */
-export function ReceptionFrame() {
-  const { user } = useReceptionSession();
-  const realtimeConnected = useSelector((state) => state.receptionBookings.realtimeConnected);
-  // Cookie-authenticated and already role-checked by the route guard: load the desk's data in
-  // parallel with /staff/me rather than after it.
-  useReceptionBootstrap({ enabled: true });
-  const [meta, setMetaState] = useState({ title: "", subtitle: "", hideFab: false });
-  const [slot, setSlot] = useState(null);
-
-  const value = useMemo(
-    () => ({
-      setMeta: (next) =>
-        setMetaState((cur) => (cur.title === next.title && cur.subtitle === next.subtitle && cur.hideFab === next.hideFab ? cur : next)),
-      slot,
-    }),
-    [slot]
-  );
-
-  return (
-    <ReceptionFrameContext.Provider value={value}>
-      <ReceptionShell
-        title={meta.title}
-        subtitle={meta.subtitle}
-        hideFab={meta.hideFab}
-        realtimeConnected={realtimeConnected}
-        user={user}
-        actions={<span ref={setSlot} className="flex items-center gap-1 empty:hidden" />}
-      >
-        {/* The page chunk loads in parallel with the session lookup (pages show their own loader
-            until the shared, de-duplicated /staff/me resolves) instead of after it. */}
-        <Suspense fallback={<BrandLoader className="py-24" label="Opening the desk…" />}>
-          <Outlet />
-        </Suspense>
-      </ReceptionShell>
-    </ReceptionFrameContext.Provider>
-  );
-}
-
-/**
- * Page wrapper. Inside `ReceptionFrame` it reports the title and portals `actions` into the top
- * bar; outside it (the auth / chunk-loading fallback in App.jsx) it renders a complete shell.
- */
-export function ReceptionLayout({ pageTitle, pageSubtitle, actions, realtimeConnected, user, hideFab = false, children }) {
-  const frame = useContext(ReceptionFrameContext);
-
-  useLayoutEffect(() => {
-    frame?.setMeta({ title: pageTitle ?? "", subtitle: pageSubtitle ?? "", hideFab });
-  }, [frame, pageTitle, pageSubtitle, hideFab]);
-
-  if (frame) {
-    return (
-      <>
-        {actions && frame.slot ? createPortal(actions, frame.slot) : null}
-        {children}
-      </>
-    );
-  }
-  return (
-    <ReceptionShell title={pageTitle} subtitle={pageSubtitle} actions={actions} realtimeConnected={realtimeConnected} user={user} hideFab={hideFab}>
-      {children}
-    </ReceptionShell>
   );
 }

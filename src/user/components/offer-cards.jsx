@@ -11,8 +11,8 @@ export const endsLabel = (endAt) => (endAt ? `Ends ${formatIsoDate(salonDateOf(e
 /** Store-wide discount banner. */
 export function GlobalDiscountCard({ discount, action, className }) {
   return (
-    <div className={cn("relative flex h-full min-h-36 flex-col justify-between gap-4 overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border", className)}>
-      <span className="relative z-[2] grid size-11 place-items-center rounded-xl bg-portal text-portal-foreground">
+    <div className={cn("aurora grain relative isolate flex h-full min-h-36 flex-col justify-between gap-4 overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border/60 shine", className)}>
+      <span className="relative z-[2] grid size-11 place-items-center rounded-2xl bg-portal text-portal-foreground shadow-glow">
         <Sparkles className="size-5" aria-hidden />
       </span>
       <div className="relative z-[2] flex items-end justify-between gap-3">
@@ -30,10 +30,12 @@ export function GlobalDiscountCard({ discount, action, className }) {
 export function ComboCard({ combo, applied, onApply, onClear, className }) {
   const reduce = useReducedMotion();
   return (
-    <div
+    <motion.div
+      whileHover={reduce ? undefined : interaction.cardHover}
+      transition={spring.soft}
       className={cn(
-        "relative flex h-full flex-col gap-4 overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset transition-shadow duration-150 hover:shadow-lift",
-        applied ? "ring-2 ring-portal" : "ring-border",
+        "relative flex h-full flex-col gap-4 overflow-hidden rounded-card bg-card p-5 shadow-soft ring-1 ring-inset transition-shadow hover:shadow-lift",
+        applied ? "ring-2 ring-portal shadow-glow" : "ring-border/60",
         className
       )}
     >
@@ -65,7 +67,7 @@ export function ComboCard({ combo, applied, onApply, onClear, className }) {
           </motion.button>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -77,9 +79,10 @@ export function DealCard({ offer, member = false, onClick, className }) {
     <Comp
       type={onClick ? "button" : undefined}
       onClick={onClick}
+      whileHover={reduce ? undefined : interaction.cardHover}
       whileTap={onClick && !reduce ? interaction.press : undefined}
-      transition={spring.snappy}
-      className={cn("flex h-full w-full items-center gap-4 rounded-card bg-card p-4 text-left ring-1 ring-inset ring-border transition-shadow duration-150 hover:shadow-lift", className)}
+      transition={spring.soft}
+      className={cn("flex h-full w-full items-center gap-4 rounded-card bg-card p-4 text-left shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift", className)}
     >
       <span className={cn("grid size-14 shrink-0 place-items-center rounded-2xl font-display text-lg font-bold", member ? "bg-gold/16 text-ink-warning" : "bg-portal/12 text-portal")}>
         {Math.round(offer.discountPercent)}

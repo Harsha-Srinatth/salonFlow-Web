@@ -35,7 +35,7 @@ export function ResponsiveModal({ open, onOpenChange, title, description, icon, 
 export function ConfirmSheet({ open, onOpenChange, title, description, icon, kind = "default", confirmLabel, cancelLabel = "Cancel", confirmMode = "slide", onConfirm, children }) {
   const { state, run } = useAsyncAction({ successMs: 700 });
   const tone = kind === "destructive" ? "destructive" : kind === "payment" ? "gold" : "primary";
-  const close = () => setTimeout(() => onOpenChange(false), 450);
+  const close = () => setTimeout(() => onOpenChange(false), 650);
   const confirm = async () => {
     await onConfirm?.();
     close();

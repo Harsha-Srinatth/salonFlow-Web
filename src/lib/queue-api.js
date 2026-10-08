@@ -1,4 +1,4 @@
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { toApiUrl } from "@/lib/api-base";
 
 async function queueFetch(path) {

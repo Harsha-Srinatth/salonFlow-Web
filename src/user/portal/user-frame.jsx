@@ -9,7 +9,6 @@ import { ProfileCompletionPrompts } from "@/components/shared/profile-completion
 import { BrandLoader, InviteSheet, PortalShell } from "@/components/kit";
 import { usePortalClass } from "@/lib/use-portal-class";
 import { useLoyalty, resetLoyalty } from "../lib/use-loyalty";
-import { clearUserResources } from "../lib/user-api";
 import { NotificationCenter, useCustomerNotifications } from "./customer-notifications";
 import { UserFrameContext } from "./user-frame-context";
 import { USER_NAV, USER_TABS } from "./user-nav";
@@ -58,7 +57,6 @@ export function UserFrame() {
 
   const signOut = useCallback(() => {
     resetLoyalty();
-    clearUserResources();
     void logout();
   }, [logout]);
   const openInvite = useCallback(() => setInviteOpen(true), []);

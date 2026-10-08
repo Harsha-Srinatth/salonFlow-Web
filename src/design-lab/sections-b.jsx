@@ -175,7 +175,7 @@ export function DateTime() {
           <TimeSlotPicker slots={[]} onChange={() => {}} empty={<EmptyState compact illustration="calendar" title="No times left" description="Try another day." />} />
         </Specimen>
         <Specimen title="TimeSlotPicker (timeline mode)" wide className="xl:col-span-2">
-          <TimeSlotPicker slots={slots} value={slot} onChange={setSlot} durationMinutes={45} />
+          <TimeSlotPicker slots={slots} value={slot} onChange={setSlot} mode="timeline" allowModeToggle={false} />
         </Specimen>
       </Grid>
     </Section>
@@ -255,7 +255,7 @@ export function NavSection() {
           <div className="space-y-4">
             <AnimatedTabBar items={items} value={tab} onChange={setTab} />
             <AnimatedTabBar items={items} value={tab} onChange={setTab} variant="underline" />
-            <div className="rounded-card bg-muted p-4">
+            <div className="aurora rounded-card p-4">
               <AnimatedTabBar items={items} value={tab} onChange={setTab} variant="glass" size="sm" fullWidth />
             </div>
           </div>

@@ -1,6 +1,8 @@
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { CalendarPlus, CalendarX, CircleHelp, CreditCard, Footprints, Gift, MessageCircleQuestion, Plus } from "lucide-react";
 import { useId, useState } from "react";
 import { useBusinessInfo } from "@/lib/business-info";
+import { spring, stagger } from "@/components/motion/presets";
 import { SectionHeading } from "./section-heading";
 
 // Each answer describes what the product actually does today. Keep them in sync with the code
@@ -40,12 +42,21 @@ const ICONS = [
 ];
 const iconFor = (q) => ICONS.find(([re]) => re.test(q))?.[1] ?? CircleHelp;
 
-function FaqItem({ q, a, open, onToggle }) {
+function FaqItem({ q, a, open, onToggle, index }) {
+  const reduce = useReducedMotion();
   const id = useId();
   const Icon = iconFor(q);
   return (
-    <li className={`overflow-hidden rounded-card border bg-card transition-colors duration-150 ${open ? "border-portal/40" : "border-border"}`}>
-      <h3>
+    <motion.li
+      layout={!reduce}
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ ...spring.sheet, opacity: { duration: 0.4, delay: Math.min(index, 8) * stagger.base } }}
+      style={{ borderRadius: 20 }}
+      className={`overflow-hidden border bg-card transition-[border-color,box-shadow] duration-300 ${open ? "border-portal/40 shadow-lift" : "border-border/70 shadow-soft"}`}
+    >
+      <motion.h3 layout={reduce ? false : "position"}>
         <button
           type="button"
           id={`${id}-q`}
@@ -54,21 +65,32 @@ function FaqItem({ q, a, open, onToggle }) {
           onClick={onToggle}
           className="flex min-h-16 w-full items-center gap-4 px-4 py-3 text-left sm:px-5"
         >
-          <span className={`grid size-10 shrink-0 place-items-center rounded-xl transition-colors duration-150 ${open ? "bg-portal text-portal-foreground" : "bg-portal/12 text-ink-primary"}`}>
+          <span className={`grid size-10 shrink-0 place-items-center rounded-xl transition-colors duration-300 ${open ? "bg-portal text-portal-foreground" : "bg-portal/12 text-ink-primary"}`}>
             <Icon className="size-5" aria-hidden />
           </span>
           <span className="flex-1 font-semibold sm:text-[1.05rem]">{q}</span>
-          <span className={`grid size-9 shrink-0 place-items-center rounded-full bg-muted transition-transform duration-150 ${open ? "rotate-45" : ""}`}>
+          <motion.span animate={{ rotate: open ? 135 : 0 }} transition={spring.bouncy} className="grid size-9 shrink-0 place-items-center rounded-full bg-muted">
             <Plus className="size-4" aria-hidden />
-          </span>
+          </motion.span>
         </button>
-      </h3>
-      {open ? (
-        <div id={`${id}-a`} role="region" aria-labelledby={`${id}-q`}>
-          <p className="px-4 pb-5 text-sm leading-relaxed text-ink-neutral sm:pr-6 sm:pl-[4.75rem]">{a}</p>
-        </div>
-      ) : null}
-    </li>
+      </motion.h3>
+      <AnimatePresence initial={false} mode="popLayout">
+        {open ? (
+          <motion.div
+            key="a"
+            id={`${id}-a`}
+            role="region"
+            aria-labelledby={`${id}-q`}
+            layout={reduce ? false : "position"}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0, transition: { ...spring.soft, delay: 0.05 } }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+          >
+            <p className="px-4 pb-5 text-sm leading-relaxed text-ink-neutral sm:pr-6 sm:pl-[4.75rem]">{a}</p>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.li>
   );
 }
 
@@ -85,16 +107,18 @@ export default function FAQSection() {
   ].filter((faq, index, all) => all.findIndex((other) => other.q.toLowerCase() === faq.q.toLowerCase()) === index);
 
   return (
-    <section id="faq" aria-labelledby="faq-title" className="py-16 sm:py-24">
+    <section id="faq" aria-labelledby="faq-title" className="py-20 sm:py-28">
       <div className="mx-auto grid w-full max-w-[var(--content-max)] gap-10 px-[var(--gutter)] lg:grid-cols-[0.8fr_1.2fr] lg:gap-16">
         <div className="lg:sticky lg:top-28 lg:self-start">
           <SectionHeading id="faq-title" icon={MessageCircleQuestion} overline="FAQ" title="Good to know" accent={["know"]} sub="Still curious? Tap Ask us anytime." align="left" />
         </div>
-        <ul className="flex flex-col gap-3">
-          {faqs.map((faq, i) => (
-            <FaqItem key={faq.q} q={faq.q} a={faq.a} open={openIndex === i} onToggle={() => setOpenIndex((cur) => (cur === i ? -1 : i))} />
-          ))}
-        </ul>
+        <LayoutGroup>
+          <ul className="flex flex-col gap-3">
+            {faqs.map((faq, i) => (
+              <FaqItem key={faq.q} q={faq.q} a={faq.a} index={i} open={openIndex === i} onToggle={() => setOpenIndex((cur) => (cur === i ? -1 : i))} />
+            ))}
+          </ul>
+        </LayoutGroup>
       </div>
     </section>
   );

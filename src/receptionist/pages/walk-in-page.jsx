@@ -12,7 +12,7 @@ export default function ReceptionWalkInPage() {
   const { realtimeConnected } = useSelector((state) => state.receptionBookings);
   useReceptionBootstrap({ enabled: Boolean(user) });
 
-  if (loading) return <BrandLoader className="py-24" label="Loading walk-in…" />;
+  if (loading) return <BrandLoader fullScreen label="Loading walk-in…" />;
   if (!user) return null;
 
   return (

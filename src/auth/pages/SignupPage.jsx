@@ -161,7 +161,7 @@ export default function SignupPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const { appUser, loading, refresh, setSignedInUser } = useAuth()
+  const { appUser, loading, refresh } = useAuth()
   const referralCode = `${searchParams.get("ref") ?? ""}`.trim().toUpperCase()
 
   const [fullName, setFullName] = useState("")
@@ -304,10 +304,7 @@ export default function SignupPage() {
       // reads the *provider's* user, and this page registered the account through
       // the client directly. Landing there while the context still says "signed
       // out" bounces the customer to login seconds after creating their account.
-      // The registration response is that user, so hand it over instead of syncing
-      // the session a second time.
-      if (appUserResult?.role) setSignedInUser(appUserResult)
-      else await refresh()
+      await refresh()
       toast.success("You're all set, welcome to Sahasra!")
       navigate(appUserResult?.role ? getDashboardPathByRole(appUserResult.role) : "/auth/login", { replace: true })
     } catch (error) {
@@ -319,7 +316,7 @@ export default function SignupPage() {
       setCreatingAccount(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isGoogleSignup, password, signupPhone, fullName, gender, navigate, refresh, setSignedInUser])
+  }, [isGoogleSignup, password, signupPhone, fullName, gender, navigate, refresh])
 
   /**
    * The account is created the instant the phone (and, for email signups, the

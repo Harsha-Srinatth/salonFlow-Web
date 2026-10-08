@@ -1,4 +1,5 @@
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { io } from "socket.io-client";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { decryptPayloadEnvelope, encryptPayloadEnvelope, isPayloadEncryptionEnabled } from "@/lib/security/payload-envelope";
 
 /**
@@ -16,8 +17,6 @@ const socketRefs = new Map();
 const connectionRefCounts = new Map();
 /** key -> Map(callbackName -> Set<callback>) */
 const listenerRegistries = new Map();
-/** `${key}:${owner}` -> the callbacks that owner registered last (replaced on its next connect). */
-const ownerCallbacks = new Map();
 
 /** Server event name -> the callback option that consumes it. */
 const EVENT_CALLBACKS = [
@@ -75,7 +74,7 @@ async function decodePayload(payload) {
   return payload;
 }
 
-function createSocket(io, key, initialToken, room) {
+function createSocket(key, initialToken, room) {
   const socket = io(import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080", {
     path: "/socket.io",
     transports: ["websocket", "polling"],
@@ -90,12 +89,8 @@ function createSocket(io, key, initialToken, room) {
     withCredentials: true,
   });
 
-  let hasConnected = false;
   socket.on("connect", async () => {
-    // `reconnect` lets consumers refetch only after a drop (to catch missed events); the first
-    // connect follows the page's own initial fetch, so refetching then just doubles the load.
-    emitToCallbacks(key, "onConnect", { reconnect: hasConnected });
-    hasConnected = true;
+    emitToCallbacks(key, "onConnect");
     // Kept for older servers that still honour a client-chosen room; current servers
     // assign rooms from the authenticated identity and ignore this.
     if (isPayloadEncryptionEnabled()) {
@@ -115,55 +110,27 @@ function createSocket(io, key, initialToken, room) {
   return socket;
 }
 
-const CALLBACK_NAMES = [...LIFECYCLE_CALLBACKS, ...EVENT_CALLBACKS.map(([, callbackName]) => callbackName)];
-
-/**
- * `owner` (optional) names a consumer that may connect many times while the socket stays up,
- * e.g. a Redux thunk dispatched from a page that remounts per visit. Its previous callbacks are
- * replaced instead of piling up (one more set of handlers per visit otherwise).
- */
-async function connectBookingsSocket({ token, room = "bookings:global", key = "default", owner, ...callbacks }) {
+async function connectBookingsSocket({ token, room = "bookings:global", key = "default", ...callbacks }) {
   retainConnection(key);
-  if (owner) {
-    const ownerKey = `${key}:${owner}`;
-    const previous = ownerCallbacks.get(ownerKey);
-    if (previous) {
-      const registry = listenerRegistries.get(key);
-      for (const name of CALLBACK_NAMES) if (previous[name]) registry?.get(name)?.delete(previous[name]);
-    }
-    ownerCallbacks.set(ownerKey, callbacks);
-  }
-  for (const name of CALLBACK_NAMES) {
+  for (const name of [...LIFECYCLE_CALLBACKS, ...EVENT_CALLBACKS.map(([, callbackName]) => callbackName)]) {
     addCallback(key, name, callbacks[name]);
   }
   const existing = socketRefs.get(key);
   if (existing) {
-    // Reuse even while it is still loading, connecting or reconnecting; socket.io retries by
-    // itself. Late joiners that missed the connect event are told right away.
+    // Reuse even while it is still connecting or reconnecting; socket.io retries by itself.
+    // Late joiners that missed the connect event are told right away.
     if (existing.connected) {
       try {
-        callbacks.onConnect?.({ reconnect: false, lateJoin: true });
+        callbacks.onConnect?.();
       } catch (error) {
         console.error("socket onConnect listener failed", error);
       }
     }
     return existing;
   }
-  // socket.io-client is loaded on first connect, keeping it out of the entry bundle (the landing
-  // page and sign-in never open a socket). Until then the registry holds the pending promise.
-  const pending = import("socket.io-client").then(({ io }) => {
-    const socket = createSocket(io, key, token, room);
-    if (socketRefs.get(key) === pending) {
-      socketRefs.set(key, socket);
-    } else {
-      // Every consumer left while the library was loading.
-      socket.removeAllListeners();
-      socket.disconnect();
-    }
-    return socket;
-  });
-  socketRefs.set(key, pending);
-  return pending;
+  const socket = createSocket(key, token, room);
+  socketRefs.set(key, socket);
+  return socket;
 }
 
 export async function connectAdminBookingsSocket(options) {
@@ -200,10 +167,7 @@ function disconnectByKey(key) {
   if (!releaseConnection(key)) return;
   const socket = socketRefs.get(key);
   listenerRegistries.delete(key);
-  for (const ownerKey of [...ownerCallbacks.keys()]) if (ownerKey.startsWith(`${key}:`)) ownerCallbacks.delete(ownerKey);
-  socketRefs.delete(key);
-  // Still loading: the pending connect sees it was dropped and closes the socket itself.
-  if (!socket || typeof socket.then === "function") return;
+  if (!socket) return;
   try {
     if (typeof socket.removeAllListeners === "function") socket.removeAllListeners();
     if (typeof socket.disconnect === "function") socket.disconnect();
@@ -211,6 +175,7 @@ function disconnectByKey(key) {
   } catch {
     // Ignore socket cleanup errors from half-open transports
   }
+  socketRefs.delete(key);
 }
 
 export function disconnectAdminBookingsSocket() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { serviceImageUrl } from "@/lib/service-image";
+import { PixelImage } from "@/components/fx/pixel-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -184,7 +184,7 @@ export function ServiceCatalogSelector({
                 <div className="flex items-start gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted/20">
                     {service.image ? (
-                      <img src={serviceImageUrl(service.image, 112)} alt={service.name} width={56} height={56} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                      <PixelImage src={service.image} alt={service.name} className="h-full w-full" />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>
                     )}
@@ -216,7 +216,7 @@ export function ServiceCatalogSelector({
                 <div className="flex flex-1 items-start gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted/20">
                     {service.image ? (
-                      <img src={serviceImageUrl(service.image, 112)} alt={service.name} width={56} height={56} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                      <PixelImage src={service.image} alt={service.name} className="h-full w-full" />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>
                     )}

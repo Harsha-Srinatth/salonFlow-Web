@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { formatIsoDate, salonDateOf } from "@/lib/salon-date";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { fetchNotifications, fetchUnreadNotificationCount, markAllNotificationsRead, markNotificationRead } from "@/lib/notifications-api";
 import { connectCustomerBookingsSocket, disconnectCustomerBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { haptic, spring, stagger } from "@/components/motion/presets";

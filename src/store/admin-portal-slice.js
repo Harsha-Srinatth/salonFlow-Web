@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getFirebaseIdToken } from "@/lib/auth/id-token";
+import { getFirebaseIdToken } from "@/lib/auth/auth-client";
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { decryptPayloadEnvelope, encryptPayloadEnvelope, isPayloadEncryptionEnabled } from "@/lib/security/payload-envelope";
 import { toApiUrl } from "@/lib/api-base";
@@ -271,11 +271,8 @@ export const connectAdminRealtime = createAsyncThunk(
       const token = await getFirebaseIdToken().catch(() => null);
       await connectAdminBookingsSocket({
         token,
-        owner: "admin-portal",
-        onConnect: (info) => {
+        onConnect: () => {
           dispatch(setRealtimeConnected(true));
-          // Pages fetch on mount; only a reconnect can have missed events.
-          if (!info?.reconnect) return;
           scheduleBookingsRealtimeRefresh(dispatch, getState);
           scheduleReportsRealtimeRefresh(dispatch, getState);
         },

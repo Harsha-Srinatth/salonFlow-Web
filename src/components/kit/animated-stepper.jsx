@@ -18,7 +18,7 @@ export function AnimatedStepper({ steps, current, onStepClick, className }) {
         <span aria-hidden className="absolute top-5 right-5 left-5 h-1 rounded-full bg-muted" />
         <motion.span
           aria-hidden
-          className="absolute top-5 left-5 h-1 origin-left rounded-full bg-portal"
+          className="absolute top-5 left-5 h-1 origin-left rounded-full bg-gradient-to-r from-portal to-accent"
           style={{ right: "1.25rem" }}
           initial={false}
           animate={{ scaleX: pct / 100 }}
