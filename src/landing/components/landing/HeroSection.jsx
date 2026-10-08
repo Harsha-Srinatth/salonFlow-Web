@@ -35,7 +35,7 @@ function HeroVisual() {
           <span className="text-caption text-ink-neutral">{GOOGLE_RATING.sub}</span>
         </span>
       </div>
-      <div className="absolute -right-10 -bottom-5 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-lift">
+      <div className="absolute -bottom-5 -left-10 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-lift">
         <span className="grid size-10 place-items-center rounded-xl bg-portal/12 text-ink-primary">
           <Timer className="size-5" aria-hidden />
         </span>
