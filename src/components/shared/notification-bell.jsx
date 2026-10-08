@@ -2,7 +2,7 @@
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { fetchStaffMe } from "@/lib/staff-auth-client";
 import {
   fetchNotifications,

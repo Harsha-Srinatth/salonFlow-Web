@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { toApiUrl } from "@/lib/api-base";
 import { handleUnauthorizedStatus } from "@/lib/auth/session-manager";
 

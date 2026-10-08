@@ -1,7 +1,7 @@
 "use client";
 
 import { toApiUrl } from "@/lib/api-base";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { connectStaffBookingsSocket, disconnectStaffBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { staffApiFetch } from "@/lib/staff-auth-client";
 import { buildAppointmentCardModels } from "@/employee/lib/queue-utils";

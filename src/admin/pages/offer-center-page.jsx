@@ -15,7 +15,7 @@ import { emptyForm, formFromOffer, OfferEditor, payloadFromForm, SEGMENT_META, T
 import { SkeletonCards } from "@/admin/components/skeleton"
 import { Switch } from "@/admin/components/switch"
 import { ToneChip } from "@/admin/components/tone-chip"
-import { getFirebaseIdToken } from "@/lib/auth/auth-client"
+import { getFirebaseIdToken } from "@/lib/auth/id-token"
 import { toApiUrl } from "@/lib/api-base"
 import { formatMoney } from "@/lib/format"
 import { connectAdminBookingsSocket, disconnectAdminBookingsSocket } from "@/lib/realtime/admin-bookings-socket"

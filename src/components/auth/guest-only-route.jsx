@@ -1,5 +1,5 @@
 "use client";
-import { useAuth } from "@/components/auth/auth-provider";
+import { readSignedInHint, useAuth } from "@/components/auth/auth-provider";
 import { getDashboardPathByRole } from "@/lib/auth/role-routing";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -17,7 +17,10 @@ export function GuestOnlyRoute({ children }) {
         navigate(getDashboardPathByRole(appUser.role), { replace: true });
     }, [appUser, loading, navigate]);
 
-    if (loading) {
+    // Guests (no signed-in hint) get the page immediately instead of waiting for the auth check;
+    // a returning signed-in visitor sees the loader rather than a flash of the landing page
+    // before the redirect to their dashboard.
+    if (loading && readSignedInHint()) {
         return <LoadingOrb fullScreen />;
     }
     if (appUser?.role && DASHBOARD_ROLES.has(appUser.role))
