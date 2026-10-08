@@ -175,7 +175,7 @@ export function DateTime() {
           <TimeSlotPicker slots={[]} onChange={() => {}} empty={<EmptyState compact illustration="calendar" title="No times left" description="Try another day." />} />
         </Specimen>
         <Specimen title="TimeSlotPicker (timeline mode)" wide className="xl:col-span-2">
-          <TimeSlotPicker slots={slots} value={slot} onChange={setSlot} mode="timeline" allowModeToggle={false} />
+          <TimeSlotPicker slots={slots} value={slot} onChange={setSlot} durationMinutes={45} />
         </Specimen>
       </Grid>
     </Section>

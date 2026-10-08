@@ -10,7 +10,7 @@ export { MorphDialog } from "./morph-dialog";
 export { SlideToConfirm } from "./slide-to-confirm";
 export { ResponsiveModal, ConfirmSheet } from "./responsive-modal";
 export { DateStrip, MonthExpander } from "./date-strip";
-export { TimeSlotPicker } from "./time-slot-picker";
+export { DayTabs, TimeSlotPicker } from "./time-slot-picker";
 export { FloatingLabelInput } from "./floating-label-input";
 export { OtpInput } from "./otp-input";
 export { AnimatedStepper } from "./animated-stepper";

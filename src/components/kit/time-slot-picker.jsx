@@ -1,12 +1,11 @@
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { Check, Info, LayoutGrid, Moon, Sun, Sunrise, Sunset, GanttChart } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { Check, Clock, Info, Moon, Sun, Sunrise, Sunset } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { salonHour, salonTimeLabel } from "@/lib/salon-date";
-import { haptic, spring } from "@/components/motion/presets";
+import { formatIsoDate, salonDateOf, salonHour, salonRelativeDayLabel, salonTimeLabel } from "@/lib/salon-date";
+import { haptic } from "@/components/motion/presets";
 import { SkeletonSlots } from "@/components/motion/skeleton-shimmer";
 
-const GROUPS = [
+const PARTS = [
   { key: "morning", label: "Morning", icon: Sunrise, test: (h) => h < 12 },
   { key: "afternoon", label: "Afternoon", icon: Sun, test: (h) => h >= 12 && h < 17 },
   { key: "evening", label: "Evening", icon: Sunset, test: (h) => h >= 17 && h < 21 },
@@ -16,20 +15,56 @@ const DEFAULT_REASON = { busy: "Fully booked", unavailable: "Not available" };
 const isOff = (s) => s.availability === "busy" || s.availability === "unavailable";
 
 /**
- * THE time picker (contract item b). Props-driven: give it slots, it never fetches.
- * Slot shape: { startsAt: ISO, availability?: "free"|"limited"|"busy"|"unavailable", reason?: string, seatsLeft?: number }
- * (the booking API's `{ startsAt }` objects work as-is — they render as "free").
- * Grouped Morning/Afternoon/Evening, morphing selection pill, "filling fast" pulse on limited slots,
- * tap an unavailable slot to see why. Optional visual timeline mode.
- * @param {{ slots: object[], value?: string, onChange: (startsAt:string, slot:object)=>void, loading?: boolean,
- *   mode?: "grid"|"timeline", allowModeToggle?: boolean, empty?: React.ReactNode, className?: string }} props
+ * Day selector for booking flows that offer a short, fixed window (today / tomorrow): large tabs
+ * with the full date, so the chosen day is never in doubt.
+ * @param {{ days: string[], value: string, onChange: (iso:string)=>void, label?: string, className?: string }} props
  */
-export function TimeSlotPicker({ slots = [], value, onChange, loading = false, mode: modeProp = "grid", allowModeToggle = true, empty, className }) {
-  const reduce = useReducedMotion();
-  const [mode, setMode] = useState(modeProp);
+export function DayTabs({ days, value, onChange, label = "Day", className }) {
+  return (
+    <div role="radiogroup" aria-label={label} className={cn("grid gap-2", days.length === 2 ? "grid-cols-2" : "grid-cols-3", className)}>
+      {days.map((iso) => {
+        const active = iso === value;
+        return (
+          <button
+            key={iso}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => {
+              if (active) return;
+              haptic("tap");
+              onChange(iso);
+            }}
+            className={cn(
+              "flex min-h-14 flex-col items-start justify-center rounded-control px-4 py-2 text-left transition-colors duration-100",
+              active ? "bg-primary text-primary-foreground" : "bg-card ring-1 ring-inset ring-border hover:ring-primary/50"
+            )}
+          >
+            <span className="text-sm font-semibold">{salonRelativeDayLabel(iso)}</span>
+            <span className={cn("text-caption", active ? "opacity-85" : "text-ink-neutral")}>{formatIsoDate(iso, { weekday: "short", day: "numeric", month: "short" })}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The time picker. Props-driven: give it slots, it never fetches.
+ * Slot shape: { startsAt: ISO, availability?: "free"|"limited"|"busy"|"unavailable", reason?: string, seatsLeft?: number }
+ * (the booking API's `{ startsAt }` objects work as-is: they render as open).
+ *
+ * Layout: an availability summary with day-part filters (each with its open count), then the
+ * times as large chips grouped by part of day, then a one-line confirmation of the picked time
+ * (with the end time when `durationMinutes` is known). Tapping an unavailable time says why.
+ * Selection is instant; nothing animates in.
+ * @param {{ slots: object[], value?: string, onChange: (startsAt:string, slot:object)=>void, loading?: boolean,
+ *   durationMinutes?: number, empty?: React.ReactNode, className?: string }} props
+ */
+export function TimeSlotPicker({ slots = [], value, onChange, loading = false, durationMinutes, empty, className }) {
+  const [part, setPart] = useState("all");
   const [explain, setExplain] = useState(null);
-  const groupId = useId();
-  useEffect(() => setMode(modeProp), [modeProp]);
+
   useEffect(() => {
     if (!explain) return undefined;
     const t = setTimeout(() => setExplain(null), 3200);
@@ -37,13 +72,20 @@ export function TimeSlotPicker({ slots = [], value, onChange, loading = false, m
   }, [explain]);
 
   const groups = useMemo(() => {
-    const out = GROUPS.map((g) => ({ ...g, items: [] }));
+    const out = PARTS.map((p) => ({ ...p, items: [], open: 0 }));
     for (const slot of slots) {
-      const h = salonHour(slot.startsAt);
-      (out.find((g) => g.test(h)) ?? out[0]).items.push(slot);
+      const g = out.find((p) => p.test(salonHour(slot.startsAt))) ?? out[0];
+      g.items.push(slot);
+      if (!isOff(slot)) g.open += 1;
     }
     return out.filter((g) => g.items.length);
   }, [slots]);
+
+  // A filter left over from another day (or a part with no times now) falls back to "all".
+  const activePart = groups.some((g) => g.key === part) ? part : "all";
+  const shown = activePart === "all" ? groups : groups.filter((g) => g.key === activePart);
+  const open = groups.reduce((n, g) => n + g.open, 0);
+  const selected = value ? slots.find((s) => s.startsAt === value) : null;
 
   if (loading && !slots.length) return <SkeletonSlots className={className} />;
   if (!slots.length) return empty ?? null;
@@ -60,162 +102,127 @@ export function TimeSlotPicker({ slots = [], value, onChange, loading = false, m
   };
 
   return (
-    <div className={cn("space-y-4", className)}>
-      {allowModeToggle ? (
-        <div className="flex justify-end">
-          <div role="radiogroup" aria-label="Slot view" className="inline-flex rounded-full bg-muted p-1">
-            {[
-              ["grid", LayoutGrid, "Grid"],
-              ["timeline", GanttChart, "Timeline"],
-            ].map(([m, Icon, label]) => (
+    <div className={cn("space-y-4", loading && "opacity-60 transition-opacity", className)} aria-busy={loading || undefined}>
+      {/* Overview: how many times are open, and quick filters by part of day. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="text-sm text-ink-neutral">
+          <span className="font-semibold text-foreground tabular-nums">{open}</span> open {open === 1 ? "time" : "times"}
+        </p>
+        <ul className="flex items-center gap-3 text-micro text-ink-neutral" aria-label="Legend">
+          <li className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2.5 rounded-sm ring-1 ring-inset ring-border bg-card" /> Open
+          </li>
+          <li className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2 rounded-full bg-warning" /> Few left
+          </li>
+          <li className="inline-flex items-center gap-1.5">
+            <span aria-hidden className="size-2.5 rounded-sm bg-muted" /> Taken
+          </li>
+        </ul>
+      </div>
+
+      {groups.length > 1 ? (
+        <div role="tablist" aria-label="Part of day" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5">
+          {[{ key: "all", label: "All", open }, ...groups].map((g) => {
+            const active = activePart === g.key;
+            const Icon = g.icon;
+            return (
               <button
-                key={m}
+                key={g.key}
                 type="button"
-                role="radio"
-                aria-checked={mode === m}
-                onClick={() => setMode(m)}
-                className={cn("relative inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-caption font-semibold", mode === m ? "text-foreground" : "text-ink-neutral")}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setPart(g.key)}
+                className={cn(
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-caption font-semibold transition-colors duration-100",
+                  active ? "bg-foreground text-background" : "bg-muted text-foreground hover:bg-muted/70"
+                )}
               >
-                {mode === m ? <motion.span layoutId={`${groupId}-mode`} className="absolute inset-0 rounded-full bg-card shadow-soft" transition={spring.snappy} /> : null}
-                <Icon className="relative size-3.5" aria-hidden />
-                <span className="relative">{label}</span>
+                {Icon ? <Icon className="size-3.5" aria-hidden /> : null}
+                {g.label}
+                <span className={cn("tabular-nums", active ? "opacity-75" : "text-ink-neutral")}>{g.open}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
       ) : null}
 
-      <LayoutGroup id={groupId}>
-        {mode === "timeline" ? (
-          <Timeline slots={slots} value={value} onPick={pick} reduce={reduce} groupId={groupId} />
+      {shown.map(({ key, label, icon: Icon, items, open: partOpen }) => (
+        <section key={key} aria-label={label}>
+          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+            <Icon className="size-4 text-portal" aria-hidden />
+            {label}
+            <span className="text-caption font-normal text-ink-neutral">
+              · {salonTimeLabel(items[0].startsAt)} – {salonTimeLabel(items[items.length - 1].startsAt)} · {partOpen} open
+            </span>
+          </p>
+          <div role="radiogroup" aria-label={`${label} times`} className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+            {items.map((slot) => (
+              <SlotChip key={slot.startsAt} slot={slot} selected={value === slot.startsAt} onPick={pick} />
+            ))}
+          </div>
+          {explain && items.some((s) => s.startsAt === explain.startsAt) ? (
+            <p role="status" className="mt-2 flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-caption text-foreground">
+              <Info className="size-4 shrink-0 text-ink-info" aria-hidden />
+              <span>
+                <b className="font-semibold">{salonTimeLabel(explain.startsAt)}</b> · {explain.reason}
+              </span>
+            </p>
+          ) : null}
+        </section>
+      ))}
+
+      <p aria-live="polite" className={cn("flex min-h-11 items-center gap-2 rounded-control px-3 text-sm", selected ? "bg-primary/10 text-foreground" : "bg-muted/60 text-ink-neutral")}>
+        <Clock className={cn("size-4 shrink-0", selected ? "text-portal" : "")} aria-hidden />
+        {selected ? (
+          <span>
+            <span className="font-semibold">{salonRelativeDayLabel(salonDateOf(selected.startsAt))}</span>
+            {" · "}
+            <span className="font-semibold tabular-nums">
+              {salonTimeLabel(selected.startsAt)}
+              {durationMinutes > 0 ? ` – ${salonTimeLabel(new Date(new Date(selected.startsAt).getTime() + durationMinutes * 60000).toISOString())}` : ""}
+            </span>
+            {durationMinutes > 0 ? <span className="text-ink-neutral"> ({durationMinutes} min)</span> : null}
+          </span>
         ) : (
-          groups.map(({ key, label, icon: Icon, items }) => {
-            const free = items.filter((s) => !isOff(s)).length;
-            return (
-              <section key={key} aria-label={label}>
-                <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
-                  <Icon className="size-4 text-portal" aria-hidden />
-                  {label}
-                  <span className="text-caption font-normal text-ink-neutral">· {free} open</span>
-                </p>
-                <div role="radiogroup" aria-label={`${label} times`} className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                  {items.map((slot, i) => (
-                    <SlotChip key={slot.startsAt} slot={slot} index={i} selected={value === slot.startsAt} onPick={pick} reduce={reduce} groupId={groupId} />
-                  ))}
-                </div>
-                <AnimatePresence>
-                  {explain && items.some((s) => s.startsAt === explain.startsAt) ? (
-                    <motion.p
-                      role="status"
-                      initial={{ opacity: 0, y: -6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={spring.snappy}
-                      className="mt-2 flex items-center gap-2 rounded-xl bg-muted px-3 py-2 text-caption text-foreground"
-                    >
-                      <Info className="size-4 shrink-0 text-ink-info" aria-hidden />
-                      <span>
-                        <b className="font-semibold">{salonTimeLabel(explain.startsAt)}</b> · {explain.reason}
-                      </span>
-                    </motion.p>
-                  ) : null}
-                </AnimatePresence>
-              </section>
-            );
-          })
+          "Pick a time to continue"
         )}
-      </LayoutGroup>
+      </p>
     </div>
   );
 }
 
-function SlotChip({ slot, index, selected, onPick, reduce, groupId }) {
+function SlotChip({ slot, selected, onPick }) {
   const off = isOff(slot);
   const limited = slot.availability === "limited";
   const label = salonTimeLabel(slot.startsAt);
   return (
-    <motion.button
+    <button
       type="button"
       role="radio"
       aria-checked={selected}
       aria-disabled={off || undefined}
-      aria-label={`${label}${limited ? ", filling fast" : ""}${off ? `, ${slot.reason ?? DEFAULT_REASON[slot.availability]}` : ""}`}
+      aria-label={`${label}${limited ? ", few left" : ""}${off ? `, ${slot.reason ?? DEFAULT_REASON[slot.availability]}` : ""}`}
       onClick={() => onPick(slot)}
-      initial={reduce ? false : { opacity: 0, y: 8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(index, 12) * 0.025 }}
-      whileTap={off || reduce ? undefined : { scale: 0.94 }}
       className={cn(
-        "relative flex h-12 flex-col items-center justify-center rounded-control text-sm font-semibold tabular-nums transition-colors",
-        selected ? "text-portal-foreground" : off ? "bg-muted/60 text-ink-neutral" : "bg-card ring-1 ring-inset ring-border/70 hover:ring-portal/50",
-        limited && !selected && "ring-warning/50"
+        "relative flex h-12 flex-col items-center justify-center rounded-control text-sm font-semibold tabular-nums transition-colors duration-100 active:scale-[0.97]",
+        selected
+          ? "bg-primary text-primary-foreground"
+          : off
+            ? "bg-muted text-ink-neutral"
+            : cn("bg-card ring-1 ring-inset hover:ring-primary/60", limited ? "ring-warning/60" : "ring-border")
       )}
     >
-      {selected ? <motion.span layoutId={`${groupId}-pill`} aria-hidden className="absolute inset-0 rounded-control bg-portal shadow-glow" transition={reduce ? { duration: 0 } : spring.snappy} /> : null}
-      <span className={cn("relative inline-flex items-center gap-1", off && "line-through decoration-1 opacity-70")}>
-        {selected ? (
-          <motion.span initial={reduce ? false : { scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={spring.bouncy} className="inline-grid">
-            <Check className="size-3.5" strokeWidth={3} aria-hidden />
-          </motion.span>
-        ) : null}
+      <span className={cn("inline-flex items-center gap-1", off && "line-through decoration-1 opacity-70")}>
+        {selected ? <Check className="size-3.5" strokeWidth={3} aria-hidden /> : null}
         {label}
       </span>
       {limited && !off ? (
-        <span className={cn("relative mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold leading-none", selected ? "opacity-90" : "text-ink-warning")}>
+        <span className={cn("mt-0.5 inline-flex items-center gap-1 text-[10px] leading-none font-semibold", selected ? "opacity-90" : "text-ink-warning")}>
           <span aria-hidden className="size-1.5 rounded-full bg-warning" />
-          {slot.seatsLeft ? `${slot.seatsLeft} left` : "Filling fast"}
+          {slot.seatsLeft ? `${slot.seatsLeft} left` : "Few left"}
         </span>
       ) : null}
-    </motion.button>
-  );
-}
-
-const BAR = { free: "bg-success/70", limited: "bg-warning/80", busy: "bg-destructive/35", unavailable: "bg-muted-foreground/25" };
-
-function Timeline({ slots, value, onPick, reduce, groupId }) {
-  return (
-    <div className="no-scrollbar -mx-1 overflow-x-auto px-1 pb-2">
-      <div role="radiogroup" aria-label="Times on a timeline" className="flex min-w-max items-end gap-1.5 pt-6">
-        {slots.map((slot, i) => {
-          const selected = slot.startsAt === value;
-          const showHour = i === 0 || salonHour(slot.startsAt) !== salonHour(slots[i - 1].startsAt);
-          const label = salonTimeLabel(slot.startsAt);
-          return (
-            <button
-              key={slot.startsAt}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              aria-label={`${label}${isOff(slot) ? `, ${slot.reason ?? DEFAULT_REASON[slot.availability]}` : ""}`}
-              onClick={() => onPick(slot)}
-              className="group relative flex w-9 flex-col items-center"
-            >
-              {showHour ? <span className="absolute -top-5 left-0 whitespace-nowrap text-micro font-semibold text-ink-neutral">{label}</span> : null}
-              <motion.span
-                aria-hidden
-                initial={reduce ? false : { scaleY: 0 }}
-                animate={{ scaleY: 1 }}
-                transition={{ ...spring.soft, delay: reduce ? 0 : i * 0.015 }}
-                className={cn("block h-16 w-full origin-bottom rounded-lg", BAR[slot.availability ?? "free"] ?? BAR.free, "group-hover:opacity-80")}
-              />
-              {selected ? <motion.span layoutId={`${groupId}-tl`} aria-hidden className="absolute inset-x-0 bottom-0 h-16 rounded-lg bg-portal shadow-glow ring-2 ring-portal-foreground/40" transition={spring.snappy} /> : null}
-              {selected ? <span className="absolute -bottom-6 whitespace-nowrap text-micro font-bold text-portal">{label}</span> : null}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-7 flex flex-wrap gap-3 text-micro text-ink-neutral">
-        {[
-          ["Open", "bg-success/70"],
-          ["Filling fast", "bg-warning/80"],
-          ["Booked", "bg-destructive/35"],
-        ].map(([l, c]) => (
-          <span key={l} className="inline-flex items-center gap-1.5">
-            <span className={cn("size-2.5 rounded-sm", c)} aria-hidden />
-            {l}
-          </span>
-        ))}
-      </div>
-    </div>
+    </button>
   );
 }

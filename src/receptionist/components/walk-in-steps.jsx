@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, BrandDots, DateStrip, EmptyState, FloatingLabelInput, TimeSlotPicker } from "@/components/kit";
+import { Avatar, BrandDots, DayTabs, EmptyState, FloatingLabelInput, TimeSlotPicker } from "@/components/kit";
 import { spring } from "@/components/motion/presets";
 import { ServiceCatalogSelector } from "@/components/services/service-catalog-selector";
 import { formatPhone } from "@/lib/format";
@@ -178,7 +178,7 @@ export function TimeStep({ form, todayIso, tomorrowIso, slots, slotsLoading, sty
   const stylistId = useId();
   return (
     <div className="space-y-6">
-      <DateStrip value={form.bookingDate || todayIso} onChange={onDate} days={2} minDate={todayIso} maxDate={tomorrowIso} expandable={false} label="Date" />
+      <DayTabs days={[todayIso, tomorrowIso]} value={form.bookingDate || todayIso} onChange={onDate} label="Date" />
       <div>
         <SectionLabel icon={CalendarClock}>Time</SectionLabel>
         <TimeSlotPicker

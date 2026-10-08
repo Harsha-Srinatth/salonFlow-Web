@@ -157,6 +157,32 @@ function QueueWidget() {
   );
 }
 
+/** Plans call to action for customers without a paid membership. */
+function MembershipCard() {
+  return (
+    <div className="flex min-w-0 flex-col">
+      <SectionHeading icon={Crown} title="Membership" />
+      <div className="flex flex-1 flex-col justify-between gap-4 rounded-card border border-border bg-card p-5">
+        <div className="flex items-start gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gold/15 text-ink-warning">
+            <Crown className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <p className="font-semibold">Member prices on every visit</p>
+            <p className="mt-0.5 text-caption text-ink-neutral">Combos, member deals and priority booking.</p>
+          </div>
+        </div>
+        <Link
+          to="/user-dashboard/membership"
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-control border border-border text-sm font-semibold transition-colors hover:bg-muted"
+        >
+          View membership plans <ArrowRight className="size-4" aria-hidden />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboardPage() {
   const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
@@ -294,42 +320,36 @@ export default function UserDashboardPage() {
           <StaggerItem className="lg:col-span-7">
             <SectionHeading icon={Hourglass} title="Live queue" to="/user-dashboard/queue" linkLabel="Open" />
             <QueueWidget />
-            {!isMember ? (
-              <Link
-                to="/user-dashboard/membership"
-                className="mt-4 flex items-center gap-3 rounded-card bg-card p-4 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift relative"
-              >
-                <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/16 text-ink-warning">
-                  <Crown className="size-5" aria-hidden />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">Member prices</span>
-                  <span className="block truncate text-caption text-ink-neutral">Combos and priority booking</span>
-                </span>
-                <ArrowRight className="size-5 text-ink-neutral" aria-hidden />
-              </Link>
-            ) : null}
           </StaggerItem>
 
-          {/* Offers */}
-          {offersLoading && !offers ? (
-            <StaggerItem className="lg:col-span-12">
-              <SkeletonShimmer className="h-40 rounded-card" />
-            </StaggerItem>
-          ) : offerSlides.length ? (
-            <StaggerItem className="lg:col-span-12">
-              <SectionHeading icon={Zap} title="Offers for you" to="/user-dashboard/offers" />
-              <UserCarousel label="Offers">
-                {offerSlides.map((slide) =>
-                  slide.kind === "global" ? (
-                    <GlobalDiscountCard key={slide.key} discount={slide.data} />
-                  ) : slide.kind === "combo" ? (
-                    <ComboCard key={slide.key} combo={slide.data} applied={bookingForm.comboId === slide.data.id} onApply={applyCombo} />
-                  ) : (
-                    <DealCard key={slide.key} offer={slide.data} member={slide.kind === "member"} onClick={() => navigate("/user-dashboard/appointments")} />
-                  )
-                )}
-              </UserCarousel>
+          {/* Offers and membership: one section, two columns from lg, stacked below. Each column
+              sizes to its own content, so the carousel and the plans card can never overlap. */}
+          {offersLoading || offerSlides.length || !isMember ? (
+            <StaggerItem as="section" aria-label="Offers and membership" className="lg:col-span-12">
+              <div className={cn("grid gap-4", offerSlides.length || offersLoading ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : "")}>
+                {offersLoading && !offers ? (
+                  <div className="min-w-0">
+                    <SectionHeading icon={Zap} title="Offers for you" />
+                    <SkeletonShimmer className="h-36 rounded-card" />
+                  </div>
+                ) : offerSlides.length ? (
+                  <div className="min-w-0">
+                    <SectionHeading icon={Zap} title="Offers for you" to="/user-dashboard/offers" />
+                    <UserCarousel label="Offers" slideClassName="basis-[85%] sm:basis-[48%] 2xl:basis-[32%]">
+                      {offerSlides.map((slide) =>
+                        slide.kind === "global" ? (
+                          <GlobalDiscountCard key={slide.key} discount={slide.data} />
+                        ) : slide.kind === "combo" ? (
+                          <ComboCard key={slide.key} combo={slide.data} applied={bookingForm.comboId === slide.data.id} onApply={applyCombo} />
+                        ) : (
+                          <DealCard key={slide.key} offer={slide.data} member={slide.kind === "member"} onClick={() => navigate("/user-dashboard/appointments")} />
+                        )
+                      )}
+                    </UserCarousel>
+                  </div>
+                ) : null}
+                {!isMember ? <MembershipCard /> : null}
+              </div>
             </StaggerItem>
           ) : null}
         </Stagger>

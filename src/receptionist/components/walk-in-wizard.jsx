@@ -276,10 +276,10 @@ export function WalkInWizard() {
           <motion.div
             key={STEPS[step].id}
             custom={direction}
-            initial={{ opacity: 0, x: direction * offset }}
+            initial={{ opacity: 0, x: direction * Math.min(offset, 12) }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -direction * offset }}
-            transition={spring.soft}
+            exit={{ opacity: 0, transition: { duration: 0 } }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
             <h2 className="mb-4 font-display text-title font-bold">{STEPS[step].label}</h2>
             {stepProps[step]}
