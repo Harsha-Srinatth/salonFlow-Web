@@ -219,6 +219,7 @@ export default function OfferCenterPage() {
       .then((token) =>
         connectAdminBookingsSocket({
           token,
+          owner: "offer-center",
           onOfferUpdated: (payload) => {
             const segment = previewSegmentRef.current || "FREE"
             if (payload?.center) setCenter(payload.center)

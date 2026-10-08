@@ -52,6 +52,7 @@ export const connectQueueRealtime = createAsyncThunk(
       }
       await connectCustomerBookingsSocket({
         token,
+        owner: "queue",
         onConnect: () => dispatch(setQueueRealtimeConnected(true)),
         onDisconnect: () => dispatch(setQueueRealtimeConnected(false)),
         onQueueSnapshot: SNAPSHOT_CALLBACK.current,

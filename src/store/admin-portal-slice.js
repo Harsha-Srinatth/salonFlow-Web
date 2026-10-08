@@ -271,8 +271,11 @@ export const connectAdminRealtime = createAsyncThunk(
       const token = await getFirebaseIdToken().catch(() => null);
       await connectAdminBookingsSocket({
         token,
-        onConnect: () => {
+        owner: "admin-portal",
+        onConnect: (info) => {
           dispatch(setRealtimeConnected(true));
+          // Pages fetch on mount; only a reconnect can have missed events.
+          if (!info?.reconnect) return;
           scheduleBookingsRealtimeRefresh(dispatch, getState);
           scheduleReportsRealtimeRefresh(dispatch, getState);
         },

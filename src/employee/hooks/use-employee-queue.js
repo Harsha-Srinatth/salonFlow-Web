@@ -6,15 +6,38 @@ import { connectStaffBookingsSocket, disconnectStaffBookingsSocket } from "@/lib
 import { staffApiFetch } from "@/lib/staff-auth-client";
 import { buildAppointmentCardModels } from "@/employee/lib/queue-utils";
 import { formatMoney } from "@/lib/format";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "@/lib/notify";
 
+/** Provided by `EmployeeFrame` so every stylist tab shares one queue and one socket. */
+export const EmployeeQueueContext = createContext(null);
+
+/**
+ * The stylist's queue plus a live clock and card models. Inside `EmployeeFrame` it reads the
+ * frame's shared queue (no refetch, no socket reconnect per tab); elsewhere it loads its own.
+ */
 export function useEmployeeQueue({ user, enabled = true }) {
+  const shared = useContext(EmployeeQueueContext);
+  const own = useEmployeeQueueSource({ user, enabled: enabled && !shared });
+  const source = shared ?? own;
+  const [nowMs, setNowMs] = useState(Date.now());
+
+  // Lives in the page (not the frame) so the 1s tick never re-renders the shell.
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const cards = useMemo(() => buildAppointmentCardModels(source.queue, nowMs), [nowMs, source.queue]);
+  return { ...source, nowMs, cards };
+}
+
+/** Queue state, actions and the realtime socket. Call once per portal (EmployeeFrame does). */
+export function useEmployeeQueueSource({ user, enabled = true }) {
   const [queue, setQueue] = useState([]);
   const [queueLoading, setQueueLoading] = useState(false);
   const [queueError, setQueueError] = useState(null);
   const [mutatingId, setMutatingId] = useState(null);
-  const [nowMs, setNowMs] = useState(Date.now());
   const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   const loadQueue = useCallback(async () => {
@@ -27,11 +50,6 @@ export function useEmployeeQueue({ user, enabled = true }) {
     } catch (e) {
       setQueueError(e instanceof Error ? e.message : "Could not load your bookings");
     }
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -86,8 +104,6 @@ export function useEmployeeQueue({ user, enabled = true }) {
     };
   }, [enabled, loadQueue, user]);
 
-  const cards = useMemo(() => buildAppointmentCardModels(queue, nowMs), [nowMs, queue]);
-
   /** Resolves on success; throws (after a toast) on failure so buttons can show their error state. */
   async function startBooking(bookingId) {
     setMutatingId(bookingId);
@@ -123,16 +139,9 @@ export function useEmployeeQueue({ user, enabled = true }) {
     }
   }
 
-  return {
-    queue,
-    cards,
-    queueLoading,
-    queueError,
-    mutatingId,
-    nowMs,
-    realtimeConnected,
-    loadQueue,
-    startBooking,
-    completeBooking,
-  };
+  return useMemo(
+    () => ({ queue, queueLoading, queueError, mutatingId, realtimeConnected, loadQueue, startBooking, completeBooking }),
+    // startBooking/completeBooking only close over loadQueue and stable setters.
+    [queue, queueLoading, queueError, mutatingId, realtimeConnected, loadQueue]
+  );
 }

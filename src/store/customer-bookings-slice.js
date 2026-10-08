@@ -288,8 +288,11 @@ export const connectCustomerRealtime = createAsyncThunk(
       const token = await getFirebaseIdToken().catch(() => null);
       await connectCustomerBookingsSocket({
         token,
-        onConnect: () => {
+        owner: "customer-bookings",
+        onConnect: (info) => {
           dispatch(setCustomerRealtimeConnected(true));
+          // Pages fetch on mount; only a reconnect can have missed events.
+          if (!info?.reconnect) return;
           void dispatch(fetchCustomerBookings());
           void dispatch(fetchCustomerServices());
           void dispatch(fetchCustomerOffers());

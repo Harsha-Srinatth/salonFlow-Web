@@ -17,6 +17,8 @@ const socketRefs = new Map();
 const connectionRefCounts = new Map();
 /** key -> Map(callbackName -> Set<callback>) */
 const listenerRegistries = new Map();
+/** `${key}:${owner}` -> the callbacks that owner registered last (replaced on its next connect). */
+const ownerCallbacks = new Map();
 
 /** Server event name -> the callback option that consumes it. */
 const EVENT_CALLBACKS = [
@@ -89,8 +91,12 @@ function createSocket(key, initialToken, room) {
     withCredentials: true,
   });
 
+  let hasConnected = false;
   socket.on("connect", async () => {
-    emitToCallbacks(key, "onConnect");
+    // `reconnect` lets consumers refetch only after a drop (to catch missed events); the first
+    // connect follows the page's own initial fetch, so refetching then just doubles the load.
+    emitToCallbacks(key, "onConnect", { reconnect: hasConnected });
+    hasConnected = true;
     // Kept for older servers that still honour a client-chosen room; current servers
     // assign rooms from the authenticated identity and ignore this.
     if (isPayloadEncryptionEnabled()) {
@@ -110,9 +116,25 @@ function createSocket(key, initialToken, room) {
   return socket;
 }
 
-async function connectBookingsSocket({ token, room = "bookings:global", key = "default", ...callbacks }) {
+const CALLBACK_NAMES = [...LIFECYCLE_CALLBACKS, ...EVENT_CALLBACKS.map(([, callbackName]) => callbackName)];
+
+/**
+ * `owner` (optional) names a consumer that may connect many times while the socket stays up,
+ * e.g. a Redux thunk dispatched from a page that remounts per visit. Its previous callbacks are
+ * replaced instead of piling up (one more set of handlers per visit otherwise).
+ */
+async function connectBookingsSocket({ token, room = "bookings:global", key = "default", owner, ...callbacks }) {
   retainConnection(key);
-  for (const name of [...LIFECYCLE_CALLBACKS, ...EVENT_CALLBACKS.map(([, callbackName]) => callbackName)]) {
+  if (owner) {
+    const ownerKey = `${key}:${owner}`;
+    const previous = ownerCallbacks.get(ownerKey);
+    if (previous) {
+      const registry = listenerRegistries.get(key);
+      for (const name of CALLBACK_NAMES) if (previous[name]) registry?.get(name)?.delete(previous[name]);
+    }
+    ownerCallbacks.set(ownerKey, callbacks);
+  }
+  for (const name of CALLBACK_NAMES) {
     addCallback(key, name, callbacks[name]);
   }
   const existing = socketRefs.get(key);
@@ -121,7 +143,7 @@ async function connectBookingsSocket({ token, room = "bookings:global", key = "d
     // Late joiners that missed the connect event are told right away.
     if (existing.connected) {
       try {
-        callbacks.onConnect?.();
+        callbacks.onConnect?.({ reconnect: false, lateJoin: true });
       } catch (error) {
         console.error("socket onConnect listener failed", error);
       }
@@ -167,6 +189,7 @@ function disconnectByKey(key) {
   if (!releaseConnection(key)) return;
   const socket = socketRefs.get(key);
   listenerRegistries.delete(key);
+  for (const ownerKey of [...ownerCallbacks.keys()]) if (ownerKey.startsWith(`${key}:`)) ownerCallbacks.delete(ownerKey);
   if (!socket) return;
   try {
     if (typeof socket.removeAllListeners === "function") socket.removeAllListeners();

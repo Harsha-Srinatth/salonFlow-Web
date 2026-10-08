@@ -18,7 +18,7 @@ import { serviceImages } from "@/lib/service-details";
 import { iconForAudience, iconForCategory, iconForService } from "@/lib/service-icons";
 import { serviceImageUrl } from "@/lib/service-image";
 import { cn } from "@/lib/utils";
-import { connectAdminRealtime, disconnectAdminRealtime, fetchAdminServices, updateAdminServiceAsync } from "@/store/admin-portal-slice";
+import { fetchAdminServices, updateAdminServiceAsync } from "@/store/admin-portal-slice";
 import { AdminLayout } from "../portal/admin-layout";
 
 export const AUDIENCE_LABEL = { MEN: "Men", WOMEN: "Women", UNISEX: "Unisex", BOY: "Boy", GIRL: "Girl" };
@@ -142,13 +142,10 @@ export default function AdminServicesPage() {
     if (fetchAdminServices.rejected.match(result)) throw new Error(result.payload);
   };
 
+  // Live catalog updates come through AdminRealtimeBridge in the persistent admin frame.
   useEffect(() => {
-    void dispatch(connectAdminRealtime());
     load().catch(() => {});
-    return () => {
-      void dispatch(disconnectAdminRealtime());
-    };
-  }, [dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep links: ?new=1 opens a blank editor, ?edit=<id> opens that service once it has loaded.
   useEffect(() => {
