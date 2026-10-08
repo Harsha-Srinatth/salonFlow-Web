@@ -281,7 +281,7 @@ export default function AdminSettingsPage() {
           className="grid gap-5 lg:grid-cols-[170px_minmax(0,1fr)] xl:grid-cols-[170px_minmax(0,1fr)_360px]"
         >
           {/* Section navigation: chips on phones, sticky list on desktop */}
-          <nav aria-label="Settings sections" className="min-w-0 sticky top-[calc(var(--topbar-h)+var(--safe-top))] z-raised -mx-[var(--gutter)] bg-background/85 px-[var(--gutter)] py-2 backdrop-blur lg:top-[calc(var(--topbar-h)+1rem)] lg:mx-0 lg:self-start lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          <nav aria-label="Settings sections" className="min-w-0 sticky top-[calc(var(--topbar-h)+var(--safe-top))] z-raised -mx-[var(--gutter)] bg-background px-[var(--gutter)] py-2 lg:top-[calc(var(--topbar-h)+1rem)] lg:mx-0 lg:self-start lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
             <ul className="no-scrollbar flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
               {SECTIONS.map((section) => {
                 const active = activeSection === section.id;

@@ -90,7 +90,7 @@ export default function AdminStylistLiveMonitorPage() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
                     transition={spring.soft}
-                    className={cn("flex items-center gap-4 rounded-card border bg-card p-4 shadow-soft", state === "critical" ? "border-destructive/40" : "border-border/60")}
+                    className={cn("flex min-w-0 items-center gap-4 rounded-card border bg-card p-4 shadow-soft", state === "critical" ? "border-destructive/40" : "border-border/60")}
                   >
                     <ProgressRing value={Math.round(progress * 100)} size={72} stroke={7} tone={s.ring} label={`${booking.service} progress`} showValue={false}>
                       <AvatarBadge name={booking.customer} size="md" />

@@ -179,7 +179,7 @@ export default function UserProfilePage() {
           initial={reduce ? false : { opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring.soft}
-          className="aurora grain relative isolate flex flex-wrap items-center gap-4 overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border/60 sm:p-6"
+          className="relative overflow-hidden isolate flex flex-wrap items-center gap-4 rounded-card bg-card p-5 ring-1 ring-inset ring-border/60 sm:p-6"
         >
           <Avatar name={appUser.name} size="xl" className="relative z-[2] shadow-lift" />
           <div className="relative z-[2] min-w-0 flex-1 basis-40">

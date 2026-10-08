@@ -20,7 +20,7 @@ function useActiveHref(items, pathname) {
 }
 
 /**
- * The shell every portal uses: desktop glass sidebar + sticky top bar, mobile top bar + bottom tab
+ * The shell every portal uses: desktop sidebar + sticky top bar, mobile top bar + bottom tab
  * bar with a morphing active pill and a "More" sheet. Page content gets the shared PageTransition.
  * A subtle per-portal accent comes from `accent` (sets --portal-accent); everything else is shared.
  *
@@ -57,9 +57,9 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
       <OfflineBanner />
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-nav hidden w-[var(--sidebar-w)] flex-col border-r border-sidebar-border bg-sidebar/80 pl-safe backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-nav hidden w-[var(--sidebar-w)] flex-col border-r border-sidebar-border bg-sidebar pl-safe lg:flex">
         <Link to={brand.href ?? nav[0]?.href ?? "/"} className="flex items-center gap-3 px-5 pt-6 pb-5">
-          {brand.logo ?? <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">{brand.name.charAt(0)}</span>}
+          {brand.logo ?? <span className="grid size-10 place-items-center rounded-xl bg-portal font-display text-lg font-bold text-portal-foreground">{brand.name.charAt(0)}</span>}
           <span className="min-w-0">
             <span className="block truncate font-display text-lg font-bold">{brand.name}</span>
             {brand.tagline ? <span className="block truncate text-caption text-ink-neutral">{brand.tagline}</span> : null}
@@ -75,10 +75,10 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
                   key={item.href}
                   to={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={cn("group relative flex h-11 items-center gap-3 rounded-2xl px-3 text-sm font-medium transition-colors", active ? "text-portal" : "text-sidebar-muted hover:text-sidebar-foreground")}
+                  className={cn("group relative flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors duration-100", active ? "text-portal" : "text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground")}
                 >
-                  {active ? <motion.span layoutId="shell-side-pill" className="absolute inset-0 rounded-2xl bg-portal/12 ring-1 ring-inset ring-portal/20" transition={pillTransition} /> : null}
-                  <span className="relative grid size-8 place-items-center rounded-xl transition-transform duration-300 group-hover:scale-110">
+                  {active ? <motion.span layoutId="shell-side-pill" className="absolute inset-0 rounded-xl bg-portal/12" transition={pillTransition} /> : null}
+                  <span className="relative grid size-8 place-items-center rounded-lg">
                     <Icon className="size-[18px]" aria-hidden />
                   </span>
                   <span className="relative flex-1 truncate">{item.label}</span>
@@ -107,15 +107,13 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
 
       <div className="lg:pl-[var(--sidebar-w)]">
         {/* Top bar */}
-        <header className="glass-surface sticky top-0 z-sticky border-x-0 border-t-0 pt-safe">
+        <header className="sticky top-0 z-sticky border-b border-border bg-background pt-safe">
           <div className="mx-auto flex h-[var(--topbar-h)] max-w-[var(--content-max)] items-center gap-3 px-[var(--gutter)]">
             <Link to={brand.href ?? nav[0]?.href ?? "/"} className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal font-display font-bold text-portal-foreground lg:hidden" aria-label={`${brand.name} home`}>
               {brand.name.charAt(0)}
             </Link>
             <div className="min-w-0 flex-1">
-              <motion.h1 key={title} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft} className="truncate font-display text-headline font-semibold sm:text-title">
-                {title}
-              </motion.h1>
+              <h1 className="truncate font-display text-headline font-semibold sm:text-title">{title}</h1>
               {subtitle ? <p className="hidden truncate text-caption text-ink-neutral sm:block">{subtitle}</p> : null}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -131,7 +129,14 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-4 pb-[calc(var(--tabbar-h)+var(--safe-bottom)+1.5rem)] sm:pt-6 lg:pb-10">
+        {/* With a floating action button, phones get room below the content so the button never
+            sits on top of the last card's controls. */}
+        <main
+          className={cn(
+            "mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-4 sm:pt-6 lg:pb-10",
+            fab ? "pb-[calc(var(--tabbar-h)+var(--safe-bottom)+5.5rem)]" : "pb-[calc(var(--tabbar-h)+var(--safe-bottom)+1.5rem)]"
+          )}
+        >
           <PageTransition transitionKey={transitionKey}>{children}</PageTransition>
         </main>
       </div>
@@ -140,7 +145,7 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
 
       {/* Mobile bottom tab bar */}
       <LayoutGroup id="shell-tabs">
-        <nav aria-label="Main" className="glass-strong fixed inset-x-0 bottom-0 z-nav rounded-t-[1.5rem] border-b-0 pb-safe lg:hidden">
+        <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-nav border-t border-border bg-card pb-safe lg:hidden">
           <ul className="mx-auto flex h-[var(--tabbar-h)] max-w-lg items-stretch px-2">
             {[...tabItems, ...(moreItems.length ? [{ href: "#more", label: "More", icon: MenuIcon }] : [])].map((item) => {
               const isMore = item.href === "#more";
@@ -150,9 +155,9 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
                 <>
                   <span className="relative grid h-8 w-14 place-items-center">
                     {active ? <motion.span layoutId="shell-tab-pill" className="absolute inset-0 rounded-full bg-portal/14" transition={pillTransition} /> : null}
-                    <motion.span animate={{ y: active && !reduce ? -1 : 0, scale: active && !reduce ? 1.08 : 1 }} transition={spring.bouncy} className="relative grid">
+                    <span className="relative grid">
                       <Icon className="size-[22px]" aria-hidden strokeWidth={active ? 2.4 : 2} />
-                    </motion.span>
+                    </span>
                     {item.badge ? <span className="absolute top-0 right-2 size-2 rounded-full bg-destructive ring-2 ring-card" aria-hidden /> : null}
                   </span>
                   <span className="text-[11px] leading-none font-semibold">{item.label}</span>

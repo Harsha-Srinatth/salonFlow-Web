@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { createDedupedThunk } from "./in-flight";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import {
   connectCustomerBookingsSocket,
   disconnectCustomerBookingsSocket,
@@ -24,7 +25,7 @@ import { mergeMyEntriesWithBoard, pickActiveEntry } from "@/lib/queue-utils";
 
 const SNAPSHOT_CALLBACK = { current: null };
 
-export const fetchQueueBoard = createAsyncThunk("queue/fetchBoard", async (_, { rejectWithValue }) => {
+export const fetchQueueBoard = createDedupedThunk("queue/fetchBoard", async (_, { rejectWithValue }) => {
   try {
     return await fetchLiveQueueBoard();
   } catch (error) {
@@ -32,7 +33,7 @@ export const fetchQueueBoard = createAsyncThunk("queue/fetchBoard", async (_, { 
   }
 });
 
-export const fetchMyQueueStatus = createAsyncThunk("queue/fetchMine", async (_, { rejectWithValue }) => {
+export const fetchMyQueueStatus = createDedupedThunk("queue/fetchMine", async (_, { rejectWithValue }) => {
   try {
     return await fetchMyQueuePosition();
   } catch (error) {
@@ -52,6 +53,7 @@ export const connectQueueRealtime = createAsyncThunk(
       }
       await connectCustomerBookingsSocket({
         token,
+        owner: "queue",
         onConnect: () => dispatch(setQueueRealtimeConnected(true)),
         onDisconnect: () => dispatch(setQueueRealtimeConnected(false)),
         onQueueSnapshot: SNAPSHOT_CALLBACK.current,

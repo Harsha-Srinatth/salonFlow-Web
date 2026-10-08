@@ -17,7 +17,7 @@ export function QueuePosition({ position, peopleAhead = Math.max(0, (position ??
   const reduce = useReducedMotion();
   const inService = status === "STARTED";
   return (
-    <div className={cn("aurora grain relative overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border/60", className)}>
+    <div className={cn("relative overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border/60", className)}>
       <div className="relative z-[2] flex items-start justify-between gap-4">
         <div>
           <p className="text-caption font-semibold text-ink-neutral">{inService ? "You're in the chair" : "Your place"}</p>

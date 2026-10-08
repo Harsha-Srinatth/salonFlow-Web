@@ -1,4 +1,4 @@
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { toApiUrl } from "@/lib/api-base";
 
 async function notificationsFetch(path, init) {

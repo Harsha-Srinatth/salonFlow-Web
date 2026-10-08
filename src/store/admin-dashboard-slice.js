@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { createDedupedThunk } from "./in-flight";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { toApiUrl } from "@/lib/api-base";
 import { handleUnauthorizedStatus } from "@/lib/auth/session-manager";
 
@@ -19,7 +20,7 @@ async function apiFetch(path, init) {
   return response;
 }
 
-export const fetchAdminDashboardData = createAsyncThunk("adminDashboard/fetchData", async (_, { rejectWithValue }) => {
+export const fetchAdminDashboardData = createDedupedThunk("adminDashboard/fetchData", async (_, { rejectWithValue }) => {
   try {
     const [salonsRes, staffRes, servicesRes] = await Promise.all([
       apiFetch(toApiUrl("/api/admin/salons")),

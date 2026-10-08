@@ -1,13 +1,12 @@
 "use client";
 
-import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Baby, Clock, Images, Layers, Search, Sparkles, User, UserRound, Users, X } from "lucide-react";
 import { memo, useDeferredValue, useMemo, useState } from "react";
 import { serviceImageUrl } from "@/lib/service-image";
-import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
+import { AUDIENCE_LABEL, defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { iconForCategory } from "@/lib/service-icons";
 import { cn } from "@/lib/utils";
-import { haptic, interaction, spring } from "@/components/motion/presets";
+import { haptic } from "@/components/motion/presets";
 import { SkeletonShimmer } from "@/components/motion/skeleton-shimmer";
 import { EmptyState } from "@/components/kit/empty-state";
 import { UserCartToggle } from "@/components/kit-extra/user-cart-toggle";
@@ -62,8 +61,7 @@ export function servicePriceView(service, priced, variantName, membershipSegment
   return { ...resolved, original, final, percent, duration };
 }
 
-function FilterChip({ active, onClick, icon: Icon, children, layoutGroup }) {
-  const reduce = useReducedMotion();
+function FilterChip({ active, onClick, icon: Icon, children }) {
   return (
     <button
       type="button"
@@ -73,19 +71,24 @@ function FilterChip({ active, onClick, icon: Icon, children, layoutGroup }) {
       }}
       aria-pressed={active}
       className={cn(
-        "relative flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors",
-        active ? "text-portal-foreground" : "bg-card text-foreground ring-1 ring-inset ring-border/70 hover:ring-portal/40"
+        "flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-sm font-semibold transition-colors duration-100",
+        active ? "bg-portal text-portal-foreground" : "bg-card text-foreground ring-1 ring-inset ring-border hover:ring-portal/40"
       )}
     >
-      {active ? <motion.span layoutId={`${layoutGroup}-pill`} className="absolute inset-0 rounded-full bg-portal shadow-glow" transition={reduce ? { duration: 0 } : spring.snappy} /> : null}
-      {Icon ? <Icon className="relative size-4" aria-hidden /> : null}
-      <span className="relative">{children}</span>
+      {Icon ? <Icon className="size-4" aria-hidden /> : null}
+      <span>{children}</span>
     </button>
   );
 }
 
-const ServiceCard = memo(function ServiceCard({ service, selected, priced, variant, membershipSegment, hidden, onToggle, onSelectVariant, onOpenDetails, index }) {
-  const reduce = useReducedMotion();
+/** "Women", "Men", "Everyone", "Kids"… from the catalog's gender field. */
+function audienceLabel(service) {
+  const value = normalize(service.gender, "UNISEX");
+  if (normalize(service.category, "GENERAL") === KIDS_CATEGORY && value === "UNISEX") return "Kids";
+  return AUDIENCE_LABEL[value] ?? null;
+}
+
+const ServiceCard = memo(function ServiceCard({ service, selected, priced, variant, membershipSegment, onToggle, onSelectVariant, onOpenDetails, index }) {
   const Icon = iconForCategory(service.category ?? "");
   const variants = serviceVariants(service);
   const view = servicePriceView(service, priced, variant, membershipSegment);
@@ -94,23 +97,14 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
   const photoCount = Array.isArray(service.images) ? service.images.length : service.image ? 1 : 0;
   const [broken, setBroken] = useState(false);
   const image = service.image ?? service.images?.[0];
+  const audience = audienceLabel(service);
 
   return (
-    <motion.li
-      layout={!reduce}
-      initial={reduce ? false : { opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(index, 10) * 0.035 }}
-      className="min-w-0 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
-    >
-      <motion.div
-        layoutId={reduce ? undefined : `service-card-${service.id}`}
-        style={{ visibility: hidden ? "hidden" : "visible", borderRadius: 24 }}
-        whileHover={reduce ? undefined : interaction.cardHover}
+    <li className="min-w-0 [contain-intrinsic-size:auto_320px] [content-visibility:auto]">
+      <div
         className={cn(
-          "group relative flex h-full flex-col overflow-hidden bg-card shadow-soft ring-1 ring-inset transition-shadow hover:shadow-lift",
-          selected ? "ring-2 ring-portal shadow-glow" : "ring-border/60"
+          "relative flex h-full flex-col overflow-hidden rounded-card bg-card ring-1 ring-inset transition-shadow duration-150 hover:shadow-lift",
+          selected ? "ring-2 ring-portal" : "ring-border"
         )}
       >
         {/* Opens the details only; adding to the booking is the separate control. */}
@@ -125,32 +119,37 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
               <img
                 src={serviceImageUrl(image, 480, 360)}
                 alt=""
+                width={480}
+                height={360}
                 loading={index < 4 ? "eager" : "lazy"}
                 decoding="async"
                 onError={() => setBroken(true)}
-                className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+                className="size-full object-cover"
               />
             ) : (
-              <span className="aurora grid size-full place-items-center text-portal">
-                <Icon className="relative z-[2] size-10 opacity-80" aria-hidden />
+              <span className="grid size-full place-items-center text-portal">
+                <Icon className="size-10 opacity-70" aria-hidden />
               </span>
             )}
-            <span aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/45 to-transparent" />
             {hasOffer && view.percent ? (
-              <span className="absolute top-2.5 left-2.5 rounded-full bg-card/95 px-2 py-1 text-micro font-bold text-ink-success shadow-soft">−{view.percent.toFixed(0)}%</span>
+              <span className="absolute top-2 left-2 rounded-full bg-card px-2 py-0.5 text-micro font-bold text-ink-success">−{view.percent.toFixed(0)}%</span>
             ) : null}
             {photoCount > 1 ? (
-              <span className="absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-micro font-semibold text-white">
+              <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-micro font-semibold text-white">
                 <Images className="size-3" aria-hidden /> {photoCount}
               </span>
             ) : null}
-            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-micro font-semibold text-white backdrop-blur-sm">
-              <Clock className="size-3" aria-hidden /> {view.duration} min
-            </span>
           </span>
           <span className="flex flex-1 flex-col gap-1 p-3 pb-2 sm:p-4 sm:pb-2">
             <span className="line-clamp-2 text-[15px] leading-snug font-semibold">{service.name}</span>
-            <span className="mt-auto flex flex-wrap items-baseline gap-x-1.5 pr-12">
+            <span className="flex flex-wrap items-center gap-x-2 text-caption text-ink-neutral">
+              {audience ? <span>{audience}</span> : null}
+              {audience ? <span aria-hidden>·</span> : null}
+              <span className="inline-flex items-center gap-1">
+                <Clock className="size-3" aria-hidden /> {view.duration} min
+              </span>
+            </span>
+            <span className="mt-auto flex flex-wrap items-baseline gap-x-1.5 pt-1 pr-12">
               <span className="font-display text-lg font-bold tabular-nums">{formatRupees(view.final)}</span>
               {hasOffer ? <span className="text-caption text-ink-neutral line-through">{formatRupees(view.original)}</span> : null}
             </span>
@@ -174,16 +173,17 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
           </label>
         ) : null}
         <UserCartToggle added={selected} onChange={(next) => onToggle(service.id, next)} label={service.name} className={cn("absolute right-3", variants.length ? "bottom-[3.25rem]" : "bottom-3")} />
-      </motion.div>
-    </motion.li>
+      </div>
+    </li>
   );
 });
 
 /**
- * Customer service catalog: search, category and audience chips, a photo grid with an animated
- * add/remove control per card. Cards share a layoutId with the details dialog (desktop) so opening
- * details expands the card in place; `expandedId` hides the source card while it is expanded.
+ * Customer service catalog: search, audience and category chips, then the services. With no
+ * search or category filter they are grouped under category headings; otherwise one flat grid.
+ * `expandedId` is accepted for older call sites.
  */
+// eslint-disable-next-line no-unused-vars
 export function CustomerServicePicker({ services, loading, selectedIds, pricedServices, variantSelections, membershipSegment, expandedId, onToggle, onSelectVariant, onOpenDetails }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("ALL");
@@ -220,6 +220,24 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
     });
   }, [category, child, deferredQuery, audience, services]);
 
+  // Unfiltered: grouped by category (catalog order) so the menu reads like one. Filtered or
+  // searched: a single grid of the matches.
+  const sections = useMemo(() => {
+    if (category !== "ALL" || deferredQuery.trim() || categories.length < 2) return [{ key: "all", title: null, items: visible, offset: 0 }];
+    const byKey = new Map();
+    for (const service of visible) {
+      const key = normalize(service.category, "GENERAL");
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(service);
+    }
+    let offset = 0;
+    return [...byKey.entries()].map(([key, items]) => {
+      const section = { key, title: titleCase(key), icon: iconForCategory(key), items, offset };
+      offset += items.length;
+      return section;
+    });
+  }, [category, deferredQuery, categories.length, visible]);
+
   const variantFor = (service) => variantSelections?.[service.id] ?? localChoice[service.id] ?? "";
   const handleSelectVariant = (serviceId, name) => {
     setLocalChoice((current) => ({ ...current, [serviceId]: name }));
@@ -248,76 +266,59 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search services"
           aria-label="Search services"
-          className="h-12 w-full rounded-full bg-card pr-12 pl-12 text-base shadow-soft ring-1 ring-inset ring-border/70 outline-none transition-shadow focus-visible:shadow-glow focus-visible:ring-portal/50"
+          className="h-12 w-full rounded-full bg-card pr-12 pl-12 text-base ring-1 ring-inset ring-border outline-none focus-visible:ring-2 focus-visible:ring-portal/60"
         />
-        <AnimatePresence>
-          {query ? (
-            <motion.button
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={spring.bouncy}
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setQuery("")}
-              className="tap absolute top-1/2 right-3 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-muted"
-            >
-              <X className="size-4" aria-hidden />
-            </motion.button>
-          ) : null}
-        </AnimatePresence>
+        {query ? (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setQuery("")}
+            className="tap absolute top-1/2 right-3 grid size-8 -translate-y-1/2 place-items-center rounded-full bg-muted"
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        ) : null}
       </div>
 
       {audiences.length ? (
-        <LayoutGroup id="svc-audience">
-          <div className="no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-0.5" role="group" aria-label="Who is it for">
-            {audiences.map((item) => (
-              <FilterChip
-                key={item.value}
-                layoutGroup="svc-audience"
-                icon={item.icon}
-                active={audience === item.value}
-                onClick={() => {
-                  setAudience(item.value);
-                  setChild("ALL");
-                }}
-              >
-                {item.label}
-              </FilterChip>
-            ))}
-          </div>
-        </LayoutGroup>
+        <div className="no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-0.5" role="group" aria-label="Who is it for">
+          {audiences.map((item) => (
+            <FilterChip
+              key={item.value}
+              icon={item.icon}
+              active={audience === item.value}
+              onClick={() => {
+                setAudience(item.value);
+                setChild("ALL");
+              }}
+            >
+              {item.label}
+            </FilterChip>
+          ))}
+        </div>
       ) : null}
 
-      <AnimatePresence initial={false}>
-        {audience === "CHILDREN" ? (
-          <motion.div key="kids" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={spring.snappy}>
-            <LayoutGroup id="svc-child">
-              <div className="flex gap-2" role="group" aria-label="Children's services">
-                {CHILD_FILTERS.map((item) => (
-                  <FilterChip key={item.value} layoutGroup="svc-child" active={child === item.value} onClick={() => setChild(item.value)}>
-                    {item.label}
-                  </FilterChip>
-                ))}
-              </div>
-            </LayoutGroup>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+      {audience === "CHILDREN" ? (
+        <div className="flex gap-2" role="group" aria-label="Children's services">
+          {CHILD_FILTERS.map((item) => (
+            <FilterChip key={item.value} active={child === item.value} onClick={() => setChild(item.value)}>
+              {item.label}
+            </FilterChip>
+          ))}
+        </div>
+      ) : null}
 
       {categories.length > 1 ? (
-        <LayoutGroup id="svc-category">
-          <div className="no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-0.5" role="group" aria-label="Categories">
-            <FilterChip layoutGroup="svc-category" active={category === "ALL"} onClick={() => setCategory("ALL")} icon={Layers}>
-              All
+        <div className="no-scrollbar -mx-[var(--gutter)] flex gap-2 overflow-x-auto px-[var(--gutter)] py-0.5" role="group" aria-label="Categories">
+          <FilterChip active={category === "ALL"} onClick={() => setCategory("ALL")} icon={Layers}>
+            All
+          </FilterChip>
+          {categories.map(([key, count]) => (
+            <FilterChip key={key} active={category === key} onClick={() => setCategory(key)} icon={iconForCategory(key)}>
+              {titleCase(key)} <span className="opacity-70">{count}</span>
             </FilterChip>
-            {categories.map(([key, count]) => (
-              <FilterChip key={key} layoutGroup="svc-category" active={category === key} onClick={() => setCategory(key)} icon={iconForCategory(key)}>
-                {titleCase(key)} <span className="opacity-70">{count}</span>
-              </FilterChip>
-            ))}
-          </div>
-        </LayoutGroup>
+          ))}
+        </div>
       ) : null}
 
       {loading && !services.length ? (
@@ -333,25 +334,33 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
           ))}
         </ul>
       ) : visible.length ? (
-        <ul className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-4">
-          <AnimatePresence initial={false} mode="popLayout">
-            {visible.map((service, index) => (
-              <ServiceCard
-                key={service.id}
-                index={index}
-                service={service}
-                selected={selected.has(service.id)}
-                hidden={expandedId === service.id}
-                priced={pricedById.get(service.id)}
-                variant={variantFor(service)}
-                membershipSegment={membershipSegment}
-                onSelectVariant={handleSelectVariant}
-                onToggle={handleToggle}
-                onOpenDetails={onOpenDetails}
-              />
-            ))}
-          </AnimatePresence>
-        </ul>
+        sections.map((section) => (
+          <section key={section.key} aria-label={section.title ?? "Services"} className="space-y-3">
+            {section.title ? (
+              <h3 className="flex items-center gap-2 pt-2 text-sm font-semibold">
+                <section.icon className="size-4 text-portal" aria-hidden />
+                {section.title}
+                <span className="font-normal text-ink-neutral">· {section.items.length}</span>
+              </h3>
+            ) : null}
+            <ul className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-4">
+              {section.items.map((service, i) => (
+                <ServiceCard
+                  key={service.id}
+                  index={section.offset + i}
+                  service={service}
+                  selected={selected.has(service.id)}
+                  priced={pricedById.get(service.id)}
+                  variant={variantFor(service)}
+                  membershipSegment={membershipSegment}
+                  onSelectVariant={handleSelectVariant}
+                  onToggle={handleToggle}
+                  onOpenDetails={onOpenDetails}
+                />
+              ))}
+            </ul>
+          </section>
+        ))
       ) : (
         <EmptyState
           illustration="search"

@@ -29,7 +29,7 @@ export function CommandPalette({ open, onOpenChange, groups = [], placeholder = 
       open={open}
       onOpenChange={onOpenChange}
       label="Command palette"
-      overlayClassName="fixed inset-0 z-palette bg-[hsl(var(--scrim))] backdrop-blur-[3px]"
+      overlayClassName="fixed inset-0 z-palette bg-[hsl(var(--scrim))]"
       contentClassName="fixed inset-x-3 top-[max(12vh,calc(1rem+var(--safe-top)))] z-palette mx-auto max-w-xl outline-none"
     >
         <Dialog.Title className="sr-only">Command palette</Dialog.Title>

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { UserLayout } from "../portal/user-layout";
 import { useInvite } from "../portal/user-frame-context";
 import { useLoyalty } from "../lib/use-loyalty";
-import { drawRewardCard, fetchRewardVault } from "../lib/user-api";
+import { drawRewardCard, fetchRewardVault, peekUserResource, REWARD_VAULT_PATH } from "../lib/user-api";
 import { SectionHeading } from "../components/section-heading";
 
 const money = (n) => formatMoney(n);
@@ -72,7 +72,7 @@ function VoucherCard({ win, index }) {
       transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(index, 8) * 0.06 }}
       className={cn(
         "relative isolate flex items-stretch overflow-hidden rounded-card ring-1 ring-inset",
-        used ? "bg-muted/60 ring-border/60" : "shine shine-auto bg-[linear-gradient(120deg,hsl(var(--gold)/0.22),hsl(var(--card))_60%)] ring-gold/40"
+        used ? "bg-muted/60 ring-border/60" : "relative bg-gold/8 ring-gold/40"
       )}
     >
       <div className={cn("grid w-16 shrink-0 place-items-center border-r-2 border-dashed", used ? "border-border text-ink-neutral" : "border-gold/40 text-ink-warning")}>
@@ -95,7 +95,12 @@ export default function UserLoyaltyPage() {
   const openInvite = useInvite();
   const reduce = useReducedMotion();
   const { overview, loading, error, reload, referralCode, referralLink } = useLoyalty({ enabled: isUser });
-  const [vault, setVault] = useState({ cards: [], pendingDraws: [], wins: [], needsGender: false, loaded: false });
+  const [vault, setVault] = useState(() => {
+    const seen = peekUserResource(REWARD_VAULT_PATH);
+    return seen
+      ? { cards: seen.cards ?? [], pendingDraws: seen.pendingDraws ?? [], wins: seen.wins ?? [], needsGender: Boolean(seen.needsGender), loaded: true }
+      : { cards: [], pendingDraws: [], wins: [], needsGender: false, loaded: false };
+  });
   const [savingGender, setSavingGender] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [prize, setPrize] = useState(null);
@@ -167,7 +172,7 @@ export default function UserLoyaltyPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {/* Wallet */}
-              <section className="aurora grain relative isolate flex flex-col justify-between gap-5 overflow-hidden rounded-card bg-card p-6 ring-1 ring-inset ring-border/60" aria-label="Wallet">
+              <section className="relative overflow-hidden isolate flex flex-col justify-between gap-5 rounded-card bg-card p-6 ring-1 ring-inset ring-border/60" aria-label="Wallet">
                 <div className="relative z-[2]">
                   <p className="flex items-center gap-2 text-caption font-semibold text-ink-neutral">
                     <Wallet className="size-4" aria-hidden /> Wallet balance

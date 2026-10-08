@@ -67,7 +67,7 @@ export function FloatingActionButton({ icon: Icon = Plus, label, onClick, action
             else onClick?.();
           }}
           whileTap={reduce ? undefined : { scale: 0.92 }}
-          className="shine grid size-15 place-items-center rounded-[1.4rem] bg-portal text-portal-foreground shadow-glow"
+          className="relative grid size-15 place-items-center rounded-[1.4rem] bg-portal text-portal-foreground shadow-glow"
         >
           <motion.span animate={{ rotate: open ? 135 : 0 }} transition={spring.bouncy} className="grid">
             <Icon className="size-6" aria-hidden />

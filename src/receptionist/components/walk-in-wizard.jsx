@@ -198,7 +198,7 @@ export function WalkInWizard() {
 
   if (created) {
     return (
-      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={spring.soft} className="aurora grain relative mx-auto flex max-w-md flex-col items-center gap-4 overflow-hidden rounded-card border border-border/60 bg-card px-6 py-10 text-center shadow-soft">
+      <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} transition={spring.soft} className="relative overflow-hidden mx-auto flex max-w-md flex-col items-center gap-4 rounded-card border border-border/60 bg-card px-6 py-10 text-center shadow-soft">
         <div className="relative z-[2] flex flex-col items-center gap-3">
           <SuccessBurst size={96} label="Booking created" />
           <h2 className="font-display text-title font-bold">Booked!</h2>
@@ -276,10 +276,10 @@ export function WalkInWizard() {
           <motion.div
             key={STEPS[step].id}
             custom={direction}
-            initial={{ opacity: 0, x: direction * offset }}
+            initial={{ opacity: 0, x: direction * Math.min(offset, 12) }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -direction * offset }}
-            transition={spring.soft}
+            exit={{ opacity: 0, transition: { duration: 0 } }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
             <h2 className="mb-4 font-display text-title font-bold">{STEPS[step].label}</h2>
             {stepProps[step]}

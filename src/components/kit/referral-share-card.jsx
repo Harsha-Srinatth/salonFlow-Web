@@ -34,12 +34,7 @@ export function ReferralShareCard({ code, link, walletBalance, pendingCredit, pr
   };
 
   return (
-    <div className={cn("relative isolate overflow-hidden rounded-card p-5 text-white shadow-float sm:p-6", className)}>
-      <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--ink-info))_120%)]" />
-      {/* Keeps white text AA on the brighter dark-mode accents. */}
-      <div aria-hidden className="absolute inset-0 -z-[1] hidden bg-[hsl(222_45%_6%/0.5)] dark:block" />
-      <div aria-hidden className="grain absolute inset-0 -z-[1]" />
-      <motion.div aria-hidden className="absolute -top-10 -right-10 -z-[1] size-40 rounded-blob bg-white/15 blur-xl" animate={reduce ? undefined : { rotate: 360 }} transition={{ duration: 30, repeat: Infinity, ease: "linear" }} />
+    <div className={cn("relative isolate overflow-hidden rounded-card p-5 bg-primary text-primary-foreground sm:p-6", className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-1.5 text-caption font-semibold opacity-90">
@@ -48,7 +43,7 @@ export function ReferralShareCard({ code, link, walletBalance, pendingCredit, pr
           <p className="mt-1 font-display text-title font-bold">Invite friends</p>
         </div>
         {walletBalance != null ? (
-          <div className="rounded-2xl bg-white/15 px-3 py-2 text-right backdrop-blur">
+          <div className="rounded-2xl bg-primary-foreground/10 px-3 py-2 text-right">
             <p className="flex items-center justify-end gap-1 text-micro font-semibold opacity-90">
               <Wallet className="size-3" aria-hidden /> Wallet
             </p>
@@ -57,12 +52,12 @@ export function ReferralShareCard({ code, link, walletBalance, pendingCredit, pr
         ) : null}
       </div>
 
-      <div className="mt-5 flex items-center gap-2 rounded-2xl bg-black/15 p-1.5 pl-4 backdrop-blur">
+      <div className="mt-5 flex items-center gap-2 rounded-2xl bg-primary-foreground/10 p-1.5 pl-4">
         <span className="min-w-0 flex-1">
           <span className="block text-micro font-semibold uppercase opacity-80">Your code</span>
           <span className="block truncate font-mono text-lg font-bold tracking-[0.2em]">{code}</span>
         </span>
-        <motion.button type="button" whileTap={reduce ? undefined : { scale: 0.92 }} onClick={copy} aria-label="Copy invite link" className="grid size-11 place-items-center rounded-xl bg-white text-[hsl(222_45%_10%)]">
+        <motion.button type="button" whileTap={reduce ? undefined : { scale: 0.92 }} onClick={copy} aria-label="Copy invite link" className="grid size-11 place-items-center rounded-xl bg-primary-foreground text-primary">
           {copied ? (
             <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }} transition={spring.bouncy} className="grid">
               <Check className="size-5" strokeWidth={3} aria-hidden />
@@ -81,18 +76,18 @@ export function ReferralShareCard({ code, link, walletBalance, pendingCredit, pr
               {progress.current}/{progress.target}
             </span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/20" role="progressbar" aria-valuenow={Math.round(pct * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={progress.label}>
-            <motion.div className="h-full origin-left rounded-full bg-white" initial={{ scaleX: 0 }} whileInView={{ scaleX: pct }} viewport={{ once: true }} transition={spring.gentle} />
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-primary-foreground/20" role="progressbar" aria-valuenow={Math.round(pct * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={progress.label}>
+            <motion.div className="h-full origin-left rounded-full bg-primary-foreground" initial={{ scaleX: 0 }} whileInView={{ scaleX: pct }} viewport={{ once: true }} transition={spring.gentle} />
           </div>
         </div>
       ) : null}
 
       <div className="mt-5 flex items-center gap-2">
-        <motion.button type="button" whileTap={reduce ? undefined : { scale: 0.97 }} onClick={onInvite ?? share} className="shine inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-control bg-white text-sm font-bold text-[hsl(222_45%_10%)]">
+        <motion.button type="button" whileTap={reduce ? undefined : { scale: 0.97 }} onClick={onInvite ?? share} className="relative inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-control bg-primary-foreground text-sm font-bold text-primary">
           <Share2 className="size-4" aria-hidden /> Invite
         </motion.button>
         {pendingCredit ? (
-          <span className="inline-flex h-12 items-center gap-1.5 rounded-control bg-white/15 px-3 text-caption font-semibold">
+          <span className="inline-flex h-12 items-center gap-1.5 rounded-control bg-primary-foreground/10 px-3 text-caption font-semibold">
             <Hourglass className="size-3.5" aria-hidden />
             {formatMoney(pendingCredit)} verifying
           </span>
