@@ -64,7 +64,7 @@ function NextVisitCard({ booking, loading }) {
   if (loading) return <SkeletonShimmer className="h-56 rounded-card" />;
   if (!booking) {
     return (
-      <div className="aurora grain relative isolate flex h-full min-h-56 flex-col justify-between gap-6 overflow-hidden rounded-card bg-card p-6 ring-1 ring-inset ring-border/60">
+      <div className="relative overflow-hidden isolate flex h-full min-h-56 flex-col justify-between gap-6 rounded-card bg-card p-6 ring-1 ring-inset ring-border/60">
         <div className="relative z-[2]">
           <p className="flex items-center gap-1.5 text-caption font-semibold text-ink-neutral">
             <CalendarPlus className="size-4" aria-hidden /> No visit booked
@@ -81,11 +81,7 @@ function NextVisitCard({ booking, loading }) {
   }
   const dayIso = salonDateOf(booking.startsAt);
   return (
-    <div className="relative isolate flex h-full min-h-56 flex-col justify-between gap-5 overflow-hidden rounded-card p-6 text-white shadow-float">
-      <div aria-hidden className="absolute inset-0 -z-[1] bg-[linear-gradient(135deg,hsl(var(--portal-accent)),hsl(var(--ink-info))_130%)]" />
-      <div aria-hidden className="absolute inset-0 -z-[1] hidden bg-[hsl(222_45%_6%/0.55)] dark:block" />
-      <div aria-hidden className="grain absolute inset-0 -z-[1]" />
-      <motion.div aria-hidden className="absolute -right-12 -bottom-16 -z-[1] size-56 rounded-blob bg-white/12 blur-2xl" animate={reduce ? undefined : { rotate: 360 }} transition={{ duration: 40, repeat: Infinity, ease: "linear" }} />
+    <div className="relative isolate flex h-full min-h-56 flex-col justify-between gap-5 overflow-hidden rounded-card p-6 bg-primary text-primary-foreground">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-caption font-semibold opacity-90">
@@ -93,7 +89,7 @@ function NextVisitCard({ booking, loading }) {
           </p>
           <p className="mt-1.5 line-clamp-2 font-display text-title leading-tight font-bold">{booking.service ?? "Appointment"}</p>
         </div>
-        <StatusChip status={booking.status} booking={booking} audience="customer" className="bg-white/90! text-[hsl(222_45%_14%)]! ring-white/0!" />
+        <StatusChip status={booking.status} booking={booking} audience="customer" className="bg-primary-foreground! text-primary! ring-transparent!" />
       </div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1.5 text-sm">
@@ -108,7 +104,7 @@ function NextVisitCard({ booking, loading }) {
         </div>
         <UserCountdown to={booking.startsAt} className="text-[1.6rem]" />
       </div>
-      <Link to="/user-dashboard/booking-history" className="absolute inset-0 rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" aria-label="Manage your next visit" />
+      <Link to="/user-dashboard/booking-history" className="absolute inset-0 rounded-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-foreground" aria-label="Manage your next visit" />
     </div>
   );
 }
@@ -138,7 +134,6 @@ function QueueWidget() {
       className="group flex h-full items-center gap-4 rounded-card bg-card p-5 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift"
     >
       <span className="relative grid size-14 shrink-0 place-items-center rounded-2xl bg-info/12 text-ink-info">
-        <span aria-hidden className="kit-live-ping absolute inset-0 rounded-2xl bg-info/20" />
         <Hourglass className="relative size-6" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
@@ -302,7 +297,7 @@ export default function UserDashboardPage() {
             {!isMember ? (
               <Link
                 to="/user-dashboard/membership"
-                className="mt-4 flex items-center gap-3 rounded-card bg-card p-4 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift shine"
+                className="mt-4 flex items-center gap-3 rounded-card bg-card p-4 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift relative"
               >
                 <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/16 text-ink-warning">
                   <Crown className="size-5" aria-hidden />

@@ -162,7 +162,7 @@ function SlotChip({ slot, index, selected, onPick, reduce, groupId }) {
       </span>
       {limited && !off ? (
         <span className={cn("relative mt-0.5 inline-flex items-center gap-1 text-[10px] font-semibold leading-none", selected ? "opacity-90" : "text-ink-warning")}>
-          <span aria-hidden className="kit-filling-fast size-1.5 rounded-full bg-warning" />
+          <span aria-hidden className="size-1.5 rounded-full bg-warning" />
           {slot.seatsLeft ? `${slot.seatsLeft} left` : "Filling fast"}
         </span>
       ) : null}

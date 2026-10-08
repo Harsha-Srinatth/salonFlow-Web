@@ -30,7 +30,7 @@ export function BookingSuccess({ booked, onBookAnother, onInvite, canInvite }) {
 
   return (
     <div className="mx-auto flex max-w-lg flex-col items-center gap-5 py-4 text-center">
-      <div ref={ref} className="aurora grain relative isolate grid w-full place-items-center overflow-hidden rounded-card bg-card px-6 pt-10 pb-8 ring-1 ring-inset ring-border/60">
+      <div ref={ref} className="relative overflow-hidden isolate grid w-full place-items-center rounded-card bg-card px-6 pt-10 pb-8 ring-1 ring-inset ring-border/60">
         <SuccessBurst size={96} label="Booking confirmed" className="relative z-[2]" />
         <motion.h2 {...item(0)} className="relative z-[2] mt-4 font-display text-display-lg font-bold">
           You're booked
@@ -68,7 +68,7 @@ export function BookingSuccess({ booked, onBookAnother, onInvite, canInvite }) {
           type="button"
           onClick={onInvite}
           whileTap={reduce ? undefined : interaction.press}
-          className="shine flex w-full items-center gap-3 rounded-card bg-gold/14 p-4 text-left ring-1 ring-inset ring-gold/35"
+          className="relative flex w-full items-center gap-3 rounded-card bg-gold/14 p-4 text-left ring-1 ring-inset ring-gold/35"
         >
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gold/25 text-ink-warning">
             <Gift className="size-5" aria-hidden />

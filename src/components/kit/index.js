@@ -37,6 +37,5 @@ export { Rating } from "./rating";
 export { useRipple } from "./ripple";
 export { PortalShell } from "./portal-shell";
 export { AuthLayout } from "./auth-layout";
-export { AuroraBackground } from "./aurora-background";
 export { ReferralShareCard } from "./referral-share-card";
 export { InviteSheet } from "./invite-sheet";

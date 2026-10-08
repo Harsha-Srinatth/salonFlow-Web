@@ -39,7 +39,7 @@ function Cover({ service }) {
   const Icon = iconForService(service);
   if (!src || state === "error") {
     return (
-      <div className="grid size-full place-items-center bg-gradient-to-br from-portal/14 to-muted text-portal">
+      <div className="grid size-full place-items-center bg-muted text-portal">
         <Icon className="size-10" aria-hidden />
       </div>
     );

@@ -26,7 +26,7 @@ export function Avatar({ name, src, size = "md", status, ring = false, className
       {src && !broken ? (
         <img src={src} alt={name ?? ""} loading="lazy" decoding="async" onError={() => setBroken(true)} className="size-full rounded-full object-cover" />
       ) : (
-        <span aria-label={name} role="img" className="grid size-full place-items-center rounded-full" style={{ background: `linear-gradient(135deg, hsl(${h} 45% 42%), hsl(${(h + 40) % 360} 50% 34%))` }}>
+        <span aria-label={name} role="img" className="grid size-full place-items-center rounded-full" style={{ background: `hsl(${h} 30% 40%)` }}>
           {initials(name)}
         </span>
       )}

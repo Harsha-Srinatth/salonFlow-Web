@@ -11,7 +11,7 @@ export const endsLabel = (endAt) => (endAt ? `Ends ${formatIsoDate(salonDateOf(e
 /** Store-wide discount banner. */
 export function GlobalDiscountCard({ discount, action, className }) {
   return (
-    <div className={cn("aurora grain relative isolate flex h-full min-h-36 flex-col justify-between gap-4 overflow-hidden rounded-card bg-card p-5 ring-1 ring-inset ring-border/60 shine", className)}>
+    <div className={cn("relative overflow-hidden isolate flex h-full min-h-36 flex-col justify-between gap-4 rounded-card bg-card p-5 ring-1 ring-inset ring-border/60", className)}>
       <span className="relative z-[2] grid size-11 place-items-center rounded-2xl bg-portal text-portal-foreground shadow-glow">
         <Sparkles className="size-5" aria-hidden />
       </span>

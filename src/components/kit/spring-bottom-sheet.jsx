@@ -2,7 +2,7 @@ import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 
 /**
- * Mobile bottom sheet (vaul): drag-to-dismiss, optional snap points, blurred scrim, safe-area footer.
+ * Mobile bottom sheet (vaul): drag-to-dismiss, optional snap points, dimmed scrim, safe-area footer.
  * On wide screens it stays a bottom sheet capped at max-w-lg — use <ResponsiveModal> when desktop
  * should get a centered dialog instead.
  * @param {{ open?: boolean, onOpenChange?: (o:boolean)=>void, trigger?: React.ReactNode, title: string, description?: string,
@@ -13,7 +13,7 @@ export function SpringBottomSheet({ open, onOpenChange, trigger, title, descript
     <Drawer.Root open={open} onOpenChange={onOpenChange} snapPoints={snapPoints} dismissible={dismissible} repositionInputs>
       {trigger ? <Drawer.Trigger asChild>{trigger}</Drawer.Trigger> : null}
       <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 z-sheet bg-[hsl(var(--scrim))] backdrop-blur-[3px]" />
+        <Drawer.Overlay className="fixed inset-0 z-sheet bg-[hsl(var(--scrim))]" />
         <Drawer.Content
           className={cn(
             "glass-strong fixed inset-x-0 bottom-0 z-sheet mx-auto flex max-h-[92dvh] w-full max-w-lg flex-col rounded-t-sheet border-b-0 outline-none",

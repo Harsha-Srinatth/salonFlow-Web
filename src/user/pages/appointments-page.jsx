@@ -743,7 +743,7 @@ export default function UserAppointmentsPage() {
             {step === 4 ? (
               <StepPanel stepKey="pay" direction={direction}>
                 <div className="space-y-4">
-                  <div className="aurora grain relative isolate overflow-hidden rounded-card bg-card p-6 text-center ring-1 ring-inset ring-border/60">
+                  <div className="relative overflow-hidden isolate rounded-card bg-card p-6 text-center ring-1 ring-inset ring-border/60">
                     <p className="relative z-[2] text-caption font-semibold text-ink-neutral">{finalPayableAmount > 0 ? "To pay now" : "Nothing to pay"}</p>
                     <p className="relative z-[2] mt-1 font-display text-display-xl leading-none font-bold text-gradient-portal tabular-nums">{money(finalPayableAmount)}</p>
                     <p className="relative z-[2] mt-3 text-sm font-medium">{whenLabel}{selectedStylist ? ` · ${selectedStylist.name}` : ""}</p>

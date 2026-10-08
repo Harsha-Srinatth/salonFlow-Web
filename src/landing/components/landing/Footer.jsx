@@ -1,9 +1,7 @@
-import { motion, useReducedMotion } from "motion/react";
 import { ArrowUp, CalendarPlus, Clock, Facebook, Globe, Instagram, LogIn, Mail, MapPin, MessageCircle, Phone, ShieldCheck, Youtube } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
 import { formatAddress, telHref, useBusinessInfo, whatsappHref } from "@/lib/business-info";
-import { spring } from "@/components/motion/presets";
 import { NAV_LINKS, BOOK_HREF } from "./landing-data";
 import { BrandMark } from "./Navbar";
 
@@ -43,7 +41,6 @@ const rowLink = "inline-flex min-h-11 items-center gap-3 rounded-xl text-sm tran
 const iconTile = "grid size-9 shrink-0 place-items-center rounded-xl bg-portal/10 text-ink-primary";
 
 export default function Footer() {
-  const reduce = useReducedMotion();
   const { info, status } = useBusinessInfo();
   const [policyOpen, setPolicyOpen] = useState(false);
   // Stays mounted after the first open so the dialog can play its exit animation.
@@ -222,17 +219,10 @@ export default function Footer() {
           </nav>
         </div>
 
-        {/* Oversized wordmark that rises into place: the page's sign-off. */}
-        <motion.p
-          aria-hidden
-          initial={reduce ? false : { opacity: 0, y: 60 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={spring.gentle}
-          className="mt-14 text-center font-display text-[clamp(4rem,19vw,15rem)] leading-[0.8] font-bold tracking-tight text-gradient-portal select-none"
-        >
+        {/* Oversized wordmark: the page's sign-off. */}
+        <p aria-hidden className="mt-14 text-center font-display text-[clamp(4rem,19vw,15rem)] leading-[0.8] font-bold tracking-tight text-portal/90 select-none">
           {name}
-        </motion.p>
+        </p>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/70 pt-6 text-caption text-ink-neutral sm:flex-row">
           <p>

@@ -255,7 +255,7 @@ export function NavSection() {
           <div className="space-y-4">
             <AnimatedTabBar items={items} value={tab} onChange={setTab} />
             <AnimatedTabBar items={items} value={tab} onChange={setTab} variant="underline" />
-            <div className="aurora rounded-card p-4">
+            <div className="rounded-card bg-muted p-4">
               <AnimatedTabBar items={items} value={tab} onChange={setTab} variant="glass" size="sm" fullWidth />
             </div>
           </div>

@@ -131,7 +131,7 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
                 className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
             ) : (
-              <span className="aurora grid size-full place-items-center text-portal">
+              <span className="relative overflow-hidden grid size-full place-items-center text-portal">
                 <Icon className="relative z-[2] size-10 opacity-80" aria-hidden />
               </span>
             )}
@@ -144,7 +144,7 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
                 <Images className="size-3" aria-hidden /> {photoCount}
               </span>
             ) : null}
-            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-micro font-semibold text-white backdrop-blur-sm">
+            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-micro font-semibold text-white">
               <Clock className="size-3" aria-hidden /> {view.duration} min
             </span>
           </span>

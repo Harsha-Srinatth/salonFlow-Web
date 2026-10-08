@@ -3,8 +3,6 @@ import { Home, RotateCcw, Wifi } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { spring, variants } from "@/components/motion/presets";
-import { MagneticButton } from "@/components/motion/magnetic-button";
-import { AuroraBackground } from "@/components/kit/aurora-background";
 import { ButtonLoadingMorph, BUTTON_SIZES, BUTTON_VARIANTS, useAsyncAction } from "@/components/kit/button-loading-morph";
 import { Illustration } from "@/components/kit/illustrations";
 import { useOnlineStatus } from "@/components/kit/offline-banner";
@@ -41,18 +39,6 @@ function SnipIllustration() {
         {[-1, 1].map((dir) => (
           // Rotation about the pivot (0,0) via SMIL: transform-only and exact, no transform-origin guesswork.
           <g key={dir} transform={`rotate(${dir * 10})`}>
-            {reduce ? null : (
-              <animateTransform
-                attributeName="transform"
-                type="rotate"
-                values={`${dir * 16};${dir * 2};${dir * 16}`}
-                keyTimes="0;0.5;1"
-                calcMode="spline"
-                keySplines="0.65 0 0.35 1;0.65 0 0.35 1"
-                dur="1.6s"
-                repeatCount="indefinite"
-              />
-            )}
             <path d={`M0 0 L${dir * -5} -58 Q${dir * 1} -66 ${dir * 6} -56 Z`} fill="hsl(var(--foreground))" opacity="0.85" />
             <circle cx={dir * 13} cy="24" r="12" fill="none" stroke={P} strokeWidth="6" />
           </g>
@@ -65,13 +51,7 @@ function SnipIllustration() {
         [292, 60, 1.3],
       ].map(([x, y, d]) => (
         <g key={x} transform={`translate(${x} ${y})`}>
-          <motion.path
-            d="M0 -7 L1.8 -1.8 L7 0 L1.8 1.8 L0 7 L-1.8 1.8 L-7 0 L-1.8 -1.8 Z"
-            fill={A}
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-            animate={reduce ? undefined : { scale: [0.6, 1.1, 0.6], opacity: [0.4, 1, 0.4] }}
-            transition={{ duration: 1.8, repeat: Infinity, delay: d, ease: [0.2, 0, 0, 1] }}
-          />
+          <path d="M0 -7 L1.8 -1.8 L7 0 L1.8 1.8 L0 7 L-1.8 1.8 L-7 0 L-1.8 -1.8 Z" fill={A} opacity={0.4 + d * 0.4} />
         </g>
       ))}
     </svg>
@@ -98,10 +78,9 @@ export function LandingStatusPage({ kind = "notFound", onRetry, className }) {
 
   return (
     <main className={cn("relative isolate grid min-h-dvh place-items-center overflow-hidden px-[var(--gutter)] pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]", className)}>
-      <AuroraBackground />
       {/* A plain link (not the router) so it works even when the app state is what broke. */}
       <a href="/" className="absolute top-[calc(1rem+var(--safe-top))] left-[var(--gutter)] inline-flex h-11 items-center gap-2.5 rounded-full pr-3">
-        <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">S</span>
+        <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground">S</span>
         <span className="font-display text-xl font-bold">Sahasra</span>
       </a>
       <motion.div
@@ -132,11 +111,9 @@ export function LandingStatusPage({ kind = "notFound", onRetry, className }) {
         ) : null}
         <motion.div variants={variants.fadeUp} className="mt-7">
           {kind === "notFound" ? (
-            <MagneticButton>
-              <Link to="/" className={cn("inline-flex items-center justify-center font-semibold shine", BUTTON_VARIANTS.primary, BUTTON_SIZES.lg)}>
-                <Home className="size-5" aria-hidden /> Go home
-              </Link>
-            </MagneticButton>
+            <Link to="/" className={cn("inline-flex items-center justify-center font-semibold", BUTTON_VARIANTS.primary, BUTTON_SIZES.lg)}>
+              <Home className="size-5" aria-hidden /> Go home
+            </Link>
           ) : (
             <ButtonLoadingMorph size="lg" icon={RotateCcw} state={state} onClick={retry} loadingLabel="Reloading…" successLabel="Reloading">
               {kind === "offline" ? "Try again" : "Reload"}
