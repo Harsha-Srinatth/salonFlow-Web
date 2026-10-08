@@ -3,6 +3,8 @@ import { withFreshRecaptcha } from "@/lib/firebase/recaptcha";
 import { toApiUrl } from "@/lib/api-base";
 import { clearBrowserSessionState, clearServerSessions, handleUnauthorizedStatus } from "@/lib/auth/session-manager";
 import { getDeviceId } from "@/lib/device-id";
+import { SIGNUP_IN_PROGRESS_KEY } from "@/lib/auth/app-user";
+export { fetchCurrentAppUser, isSignupInProgress } from "@/lib/auth/app-user";
 import { createUserWithEmailAndPassword, linkWithPhoneNumber, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, signOut, } from "firebase/auth";
 const PENDING_SIGNUP_ROLE_KEY = "pending_signup_role";
 const PENDING_SIGNUP_PHONE_KEY = "pending_signup_phone";
@@ -10,25 +12,9 @@ const PENDING_SIGNUP_NAME_KEY = "pending_signup_name";
 const PENDING_SIGNUP_GENDER_KEY = "pending_signup_gender";
 const PENDING_SIGNUP_REFERRAL_KEY = "pending_signup_referral";
 const PENDING_VERIFIED_PHONE_KEY = "pending_verified_phone";
-const SIGNUP_IN_PROGRESS_KEY = "signup_in_progress";
 let phoneConfirmationResult = null;
 let staffPhoneConfirmationResult = null;
 let signupPhoneConfirmationResult = null;
-/**
- * Whether a signup is mid-verification in this tab.
- *
- * Signup holds a real Firebase session from its first step, long before the
- * account exists — so the usual "a Firebase user appeared, go fetch their app
- * profile" reflex in `AuthProvider` would fire against a registration that is
- * *designed* to be refused until both factors land. This flag lets that reflex
- * stand down. Kept in sessionStorage rather than a module variable so a reload
- * mid-signup does not resurrect the problem.
- */
-export function isSignupInProgress() {
-    if (typeof window === "undefined")
-        return false;
-    return window.sessionStorage.getItem(SIGNUP_IN_PROGRESS_KEY) === "1";
-}
 function markSignupInProgress(active) {
     if (typeof window === "undefined")
         return;
@@ -203,31 +189,6 @@ export async function signOutUser() {
     await signOut(firebaseAuth).catch(() => undefined);
     clearBrowserSessionState();
 }
-// Several places ask "who is signed in?" during the same page load (provider start-up and the
-// Firebase auth callback); share one in-flight request instead of sending three.
-let currentUserRequest = null;
-export function fetchCurrentAppUser() {
-    if (!currentUserRequest) {
-        currentUserRequest = loadCurrentAppUser().finally(() => {
-            currentUserRequest = null;
-        });
-    }
-    return currentUserRequest;
-}
-async function loadCurrentAppUser() {
-    try {
-        const response = await fetch(toApiUrl("/api/auth/me"), { credentials: "include" });
-        if (handleUnauthorizedStatus(response.status))
-            return null;
-        if (!response.ok)
-            return null;
-        const data = (await response.json());
-        return data.user ?? null;
-    }
-    catch {
-        return null;
-    }
-}
 export function onUserChange(callback) {
     return onAuthStateChanged(firebaseAuth, callback);
 }
@@ -249,7 +210,20 @@ export async function getFirebaseIdToken() {
  *   it a brand-new account lands with no password hash and rejects its own
  *   credentials at sign-in.
  */
-export async function syncSessionWithBackend(options = {}) {
+// The sign-in screen and AuthProvider's Firebase listener both sync right after a sign-in; share
+// one request between them (registration, which passes a password, always runs on its own).
+let sessionSyncRequest = null;
+export function syncSessionWithBackend(options = {}) {
+    if (options.password !== undefined)
+        return runSessionSync(options);
+    if (!sessionSyncRequest) {
+        sessionSyncRequest = runSessionSync(options).finally(() => {
+            sessionSyncRequest = null;
+        });
+    }
+    return sessionSyncRequest;
+}
+async function runSessionSync(options = {}) {
     const token = await getFirebaseIdToken();
     if (!token)
         return null;

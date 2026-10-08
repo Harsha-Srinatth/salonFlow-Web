@@ -50,7 +50,6 @@ export function ActivityFeed({ bookings, today }) {
     return (
       <div className="flex flex-col items-center gap-2 py-8 text-center">
         <span className="relative grid size-11 place-items-center rounded-2xl bg-portal/12 text-portal">
-          <span aria-hidden className="kit-live-ping absolute inset-0 rounded-2xl bg-portal/30" />
           <Radio className="relative size-5" aria-hidden />
         </span>
         <p className="font-display font-semibold">Listening for updates</p>

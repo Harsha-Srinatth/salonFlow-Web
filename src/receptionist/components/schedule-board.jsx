@@ -117,7 +117,7 @@ export function ScheduleList({ bookings, isCriticalDelay, onCancel }) {
     <div className="space-y-6">
       {groups.map(([day, items]) => (
         <section key={day} aria-label={salonRelativeDayLabel(day)}>
-          <h3 className="sticky top-[calc(var(--topbar-h)+var(--safe-top))] z-raised -mx-1 mb-2 rounded-xl bg-background/85 px-1 py-1.5 font-display text-headline font-semibold backdrop-blur">
+          <h3 className="sticky top-[calc(var(--topbar-h)+var(--safe-top))] z-raised -mx-1 mb-2 rounded-xl bg-background px-1 py-1.5 font-display text-headline font-semibold">
             {salonRelativeDayLabel(day)} <span className="text-caption font-semibold text-ink-neutral">· {items.length}</span>
           </h3>
           <ul className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">

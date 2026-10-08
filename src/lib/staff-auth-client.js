@@ -34,6 +34,7 @@ export async function staffLogin(email, password) {
     return data.user;
 }
 export async function staffLogout() {
+    cachedStaffMe = null;
     await clearServerSessions();
     clearBrowserSessionState();
 }
@@ -54,11 +55,31 @@ export async function staffApiFetch(path, init = {}) {
     }
     return response;
 }
-export async function fetchStaffMe() {
+// Every staff page, the shell and the notification bell ask "who is signed in?". One request per
+// session answers all of them; navigating between tabs reuses the cached user instead of
+// blanking the page behind a loader while /staff/me round-trips again.
+let cachedStaffMe = null;
+let staffMeRequest = null;
+/** The signed-in staff user if already known this session (synchronous). */
+export function peekStaffMe() {
+    return cachedStaffMe;
+}
+export function fetchStaffMe() {
+    if (cachedStaffMe)
+        return Promise.resolve(cachedStaffMe);
+    if (!staffMeRequest) {
+        staffMeRequest = loadStaffMe().finally(() => {
+            staffMeRequest = null;
+        });
+    }
+    return staffMeRequest;
+}
+async function loadStaffMe() {
     const res = await fetch(toApiUrl("/api/auth/staff/me"), { credentials: "include" });
     if (handleUnauthorizedStatus(res.status))
         return null;
     const data = await readJson(res);
+    cachedStaffMe = res.ok && data.user ? data.user : null;
     return data.user;
 }
 /** After Firebase Phone Auth confirm(), exchange ID token for staff password-setup JWT. */

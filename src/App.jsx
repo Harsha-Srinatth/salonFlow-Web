@@ -56,7 +56,9 @@ const lazyLayout = (loader, name) => lazy(() => loader().then((m) => ({ default:
 const AdminLayout = lazyLayout(() => import("@/admin/portal/admin-layout"), "AdminLayout")
 const AdminFrame = lazyLayout(() => import("@/admin/portal/admin-frame"), "AdminFrame")
 const EmployeeLayout = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeLayout")
+const EmployeeFrame = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeFrame")
 const ReceptionLayout = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionLayout")
+const ReceptionFrame = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionFrame")
 const UserLayout = lazyLayout(() => import("@/user/portal/user-layout"), "UserLayout")
 const UserFrame = lazyLayout(() => import("@/user/portal/user-frame"), "UserFrame")
 
@@ -139,16 +141,22 @@ function App() {
             </Route>
 
             <Route element={<RequireRole roles={["STAFF"]} fallback={employeeFallback} />}>
+             {/* One persistent shell, session, queue and socket for every stylist page. */}
+             <Route element={<EmployeeFrame />}>
               <Route path="/employee-dashboard" element={<EmployeeDashboardPage />} />
               <Route path="/employee-dashboard/appointments" element={<EmployeeAppointmentsPage />} />
               <Route path="/employee-dashboard/profile" element={<EmployeeProfilePage />} />
+             </Route>
             </Route>
 
             <Route element={<RequireRole roles={["RECEPTIONIST"]} fallback={receptionFallback} />}>
+             {/* One persistent shell, session, data bootstrap and socket for every reception page. */}
+             <Route element={<ReceptionFrame />}>
               <Route path="/reception-dashboard" element={<ReceptionDashboardPage />} />
               <Route path="/reception-dashboard/walk-in" element={<ReceptionWalkInPage />} />
               <Route path="/reception-dashboard/appointments" element={<ReceptionAppointmentsPage />} />
               <Route path="/reception-dashboard/profile" element={<ReceptionProfilePage />} />
+             </Route>
             </Route>
 
             <Route element={<RequireRole roles={["USER"]} fallback={userFallback} />}>

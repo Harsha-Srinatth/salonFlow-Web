@@ -147,7 +147,7 @@ export default function AdminDashboardPage() {
           initial={reduce ? false : { opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={spring.gentle}
-          className="admin-hero-surface grain relative overflow-hidden rounded-sheet p-5 text-white shadow-lift sm:p-7"
+          className="admin-hero-surface relative overflow-hidden rounded-sheet p-5 text-white shadow-lift sm:p-7"
         >
           <div className="relative flex items-center justify-between gap-4">
             <div className="min-w-0">

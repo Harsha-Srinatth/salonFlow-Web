@@ -21,7 +21,7 @@ export function StaffProfileCard({ user, roleLabel, roleIcon: RoleIcon, signOut,
   return (
     <FadeIn className="mx-auto max-w-xl space-y-4">
       <section className="overflow-hidden rounded-card border border-border/60 bg-card shadow-soft">
-        <div className="aurora grain relative h-24" aria-hidden />
+        <div className="relative overflow-hidden h-24" aria-hidden />
         <div className="relative -mt-12 flex flex-col items-center px-5 pb-6 text-center">
           <Avatar name={user.name} size="xl" ring className="ring-4 ring-card" />
           <h2 className="mt-3 font-display text-title font-bold">{user.name}</h2>

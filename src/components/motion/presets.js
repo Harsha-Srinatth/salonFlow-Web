@@ -5,18 +5,21 @@
  */
 import { useReducedMotion } from "motion/react";
 
-/** Springs (motion/react `transition` objects). */
+/**
+ * Springs (motion/react `transition` objects). Tuned to settle in ~200–300ms with little or no
+ * overshoot: motion confirms an action, it never makes anyone wait.
+ */
 export const spring = {
-  /** Default for most UI: cards, chips, pills. Settles quick with a hint of overshoot. */
-  soft: { type: "spring", stiffness: 260, damping: 26, mass: 0.9 },
+  /** Default for most UI: cards, chips, pills. */
+  soft: { type: "spring", stiffness: 420, damping: 38, mass: 0.8 },
   /** Small elements reacting to input: toggles, selection highlights, tab pills. */
-  snappy: { type: "spring", stiffness: 520, damping: 34, mass: 0.7 },
-  /** Playful pops: success icons, badges, confetti-adjacent moments. */
-  bouncy: { type: "spring", stiffness: 420, damping: 18, mass: 0.8 },
-  /** Large surfaces: bottom sheets, dialogs, page transitions. No visible wobble. */
-  sheet: { type: "spring", stiffness: 340, damping: 36, mass: 1 },
-  /** Slow, floaty: hero reveals, illustrations. */
-  gentle: { type: "spring", stiffness: 120, damping: 20, mass: 1 },
+  snappy: { type: "spring", stiffness: 600, damping: 40, mass: 0.6 },
+  /** Success icons and badges: a hint of pop, nothing more. */
+  bouncy: { type: "spring", stiffness: 520, damping: 30, mass: 0.7 },
+  /** Large surfaces: bottom sheets, dialogs. No visible wobble. */
+  sheet: { type: "spring", stiffness: 480, damping: 44, mass: 0.9 },
+  /** Kept for older call sites; same feel as `soft`. */
+  gentle: { type: "spring", stiffness: 420, damping: 38, mass: 0.8 },
 };
 
 /** Cubic-bezier eases for tween animations (opacity fades, progress bars). Never linear for UI. */
@@ -29,13 +32,13 @@ export const ease = {
 };
 
 /** Seconds. */
-export const duration = { instant: 0.12, fast: 0.2, base: 0.32, slow: 0.56, hero: 1 };
+export const duration = { instant: 0.1, fast: 0.15, base: 0.2, slow: 0.28, hero: 0.4 };
 
 /** Seconds between staggered children. */
-export const stagger = { tight: 0.03, base: 0.06, loose: 0.1 };
+export const stagger = { tight: 0.02, base: 0.03, loose: 0.05 };
 
 /** Distances (px) for entrances. Small on purpose: motion should whisper. */
-export const distance = { sm: 8, md: 16, lg: 32 };
+export const distance = { sm: 4, md: 8, lg: 16 };
 
 /** Ready-made variants. Use with initial="hidden" animate="show" exit="exit". */
 export const variants = {
@@ -70,14 +73,14 @@ export const variants = {
 /** Fixed interaction presets (contract item g). */
 export const interaction = {
   /** Card hover: lift 4px + lift shadow. */
-  cardHover: { y: -4, transition: spring.soft },
+  cardHover: { y: -2, transition: spring.soft },
   /** Press feedback for anything tappable. */
   press: { scale: 0.97, transition: spring.snappy },
   /** Page transitions in portal shells. */
   page: {
-    initial: { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0, transition: { ...spring.sheet, opacity: { duration: duration.base, ease: ease.out } } },
-    exit: { opacity: 0, y: -6, transition: { duration: duration.fast, ease: ease.out } },
+    initial: { opacity: 0 },
+    animate: { opacity: 1, transition: { duration: duration.fast, ease: ease.out } },
+    exit: { opacity: 0, transition: { duration: duration.instant, ease: ease.out } },
   },
 };
 

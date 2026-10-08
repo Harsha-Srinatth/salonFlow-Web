@@ -49,7 +49,7 @@ export function StaffDayTimeline({ items = [], renderItem, nowMs, layoutGroupId,
               >
                 <span className="w-16 shrink-0 text-right text-micro font-bold text-portal uppercase sm:w-[4.5rem]">Now</span>
                 <span aria-hidden className="relative z-[1] size-2.5 shrink-0 rounded-full bg-portal shadow-glow" />
-                <span aria-hidden className="h-0.5 flex-1 rounded-full bg-gradient-to-r from-portal to-transparent" />
+                <span aria-hidden className="h-0.5 flex-1 rounded-full bg-portal/30" />
               </motion.li>
             ) : (
               <TimelineRow key={row.item.id} item={row.item} index={row.index} reduce={reduce} past={nowIndex >= 0 && row.index < nowIndex}>
@@ -78,7 +78,6 @@ function TimelineRow({ item, index, reduce, past, children }) {
         {salonTimeLabel(item.startsAt)}
       </time>
       <span aria-hidden className="relative z-[1] mt-4.5 grid size-2.5 shrink-0 place-items-center">
-        {meta.live ? <span className={cn("kit-live-ping absolute inset-0 rounded-full", TONE_DOT[meta.tone])} /> : null}
         <span className={cn("relative size-2.5 rounded-full ring-4 ring-background", TONE_DOT[meta.tone])} />
       </span>
       <div className="min-w-0 flex-1">{children}</div>

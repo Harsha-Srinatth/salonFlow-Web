@@ -69,7 +69,7 @@ export default function ReceptionAppointmentsPage() {
   );
   const shown = view === "day" ? dayBookings : searched;
 
-  if (loading) return <BrandLoader fullScreen label="Loading schedule…" />;
+  if (loading) return <BrandLoader className="py-24" label="Loading schedule…" />;
   if (!user) return null;
 
   return (

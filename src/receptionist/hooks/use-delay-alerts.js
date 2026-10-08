@@ -9,7 +9,8 @@ export function useDelayAlerts(bookings = []) {
   const alertedRef = useRef(new Set());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    // Alerts fire 10+ minutes past plan and the pages show minutes, so a 5s clock is plenty.
+    const timer = window.setInterval(() => setNowMs(Date.now()), 5000);
     return () => window.clearInterval(timer);
   }, []);
 

@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
-import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { createDedupedThunk } from "./in-flight";
+import { getFirebaseIdToken } from "@/lib/auth/id-token";
 import { connectCustomerBookingsSocket, disconnectCustomerBookingsSocket } from "@/lib/realtime/admin-bookings-socket";
 import { toApiUrl } from "@/lib/api-base";
 import { handleUnauthorizedStatus } from "@/lib/auth/session-manager";
@@ -139,7 +140,7 @@ function writeCart(ids) {
   }
 }
 
-export const fetchCustomerBookings = createAsyncThunk("customerBookings/fetchBookings", async (_, { rejectWithValue }) => {
+export const fetchCustomerBookings = createDedupedThunk("customerBookings/fetchBookings", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/bookings"));
     const data = await res.json().catch(() => ({}));
@@ -150,7 +151,7 @@ export const fetchCustomerBookings = createAsyncThunk("customerBookings/fetchBoo
   }
 });
 
-export const fetchCustomerStylists = createAsyncThunk("customerBookings/fetchStylists", async (_, { rejectWithValue }) => {
+export const fetchCustomerStylists = createDedupedThunk("customerBookings/fetchStylists", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/stylists"));
     const data = await res.json().catch(() => ({}));
@@ -161,7 +162,7 @@ export const fetchCustomerStylists = createAsyncThunk("customerBookings/fetchSty
   }
 });
 
-export const fetchCustomerOffers = createAsyncThunk("customerBookings/fetchOffers", async (_, { rejectWithValue }) => {
+export const fetchCustomerOffers = createDedupedThunk("customerBookings/fetchOffers", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/offers"));
     const data = await res.json().catch(() => ({}));
@@ -172,7 +173,7 @@ export const fetchCustomerOffers = createAsyncThunk("customerBookings/fetchOffer
   }
 });
 
-export const fetchCustomerServices = createAsyncThunk("customerBookings/fetchServices", async (_, { rejectWithValue }) => {
+export const fetchCustomerServices = createDedupedThunk("customerBookings/fetchServices", async (_, { rejectWithValue }) => {
   try {
     const res = await apiFetch(toApiUrl("/api/customer/services"));
     const data = await res.json().catch(() => ({}));
@@ -288,8 +289,11 @@ export const connectCustomerRealtime = createAsyncThunk(
       const token = await getFirebaseIdToken().catch(() => null);
       await connectCustomerBookingsSocket({
         token,
-        onConnect: () => {
+        owner: "customer-bookings",
+        onConnect: (info) => {
           dispatch(setCustomerRealtimeConnected(true));
+          // Pages fetch on mount; only a reconnect can have missed events.
+          if (!info?.reconnect) return;
           void dispatch(fetchCustomerBookings());
           void dispatch(fetchCustomerServices());
           void dispatch(fetchCustomerOffers());
@@ -338,6 +342,8 @@ const customerBookingsSlice = createSlice({
     services: initialCachedServices,
     servicesLoading: false,
     slotsLoading: false,
+    slotsRequestId: null,
+    recommendedRequestId: null,
     offers: null,
     offersLoading: false,
     bookingForm: {
@@ -372,6 +378,9 @@ const customerBookingsSlice = createSlice({
       const { field } = action.payload;
       // A service can be in the booking once; duplicates (double taps, assistant suggestions) collapse.
       const value = field === "serviceIds" ? uniqueIds(action.payload.value) : action.payload.value;
+      // Re-tapping the selected day used to clear its slots without refetching them (the loader
+      // only re-runs when the date changes), leaving "No free times" on screen.
+      if (field === "bookingDate" && state.bookingForm.bookingDate === value) return;
       state.bookingForm[field] = value;
       if (field === "serviceIds") {
         writeCart(value);
@@ -398,7 +407,8 @@ const customerBookingsSlice = createSlice({
       if (field === "bookingDate") {
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
-        state.slots = [];
+        // The previous day's times stay on screen (dimmed, not selectable) until the new day's
+        // arrive, instead of flashing a skeleton; a failed load clears them below.
       }
       if (field === "startsAt") {
         state.bookingForm.stylistId = "";
@@ -576,18 +586,28 @@ const customerBookingsSlice = createSlice({
       .addCase(fetchCustomerOffers.rejected, (state) => {
         state.offersLoading = false;
       })
+      // Slots and recommendations are latest-wins: a slow response for an earlier date or
+      // service set must not overwrite the one the customer is looking at now.
+      .addCase(fetchRecommendedStylists.pending, (state, action) => {
+        state.recommendedRequestId = action.meta.requestId;
+      })
       .addCase(fetchRecommendedStylists.fulfilled, (state, action) => {
+        if (action.meta.requestId !== state.recommendedRequestId) return;
         state.recommendedStylists = action.payload;
       })
-      .addCase(fetchCustomerSlots.pending, (state) => {
+      .addCase(fetchCustomerSlots.pending, (state, action) => {
         state.slotsLoading = true;
+        state.slotsRequestId = action.meta.requestId;
       })
       .addCase(fetchCustomerSlots.fulfilled, (state, action) => {
+        if (action.meta.requestId !== state.slotsRequestId) return;
         state.slotsLoading = false;
         state.slots = action.payload;
       })
       .addCase(fetchCustomerSlots.rejected, (state, action) => {
+        if (action.meta.requestId !== state.slotsRequestId) return;
         state.slotsLoading = false;
+        state.slots = [];
         state.error = action.payload ?? "Could not load slots";
       })
       .addCase(fetchCustomerStylists.rejected, (state, action) => {

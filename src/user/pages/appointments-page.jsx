@@ -29,7 +29,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CustomerServicePicker, iconForCategory } from "@/components/services/customer-service-picker";
 import { ServiceDetailsSheet } from "@/components/services/service-details-sheet";
-import { AnimatedStepper, Avatar, BrandDots, BrandLoader, DateStrip, EmptyState, SlideToConfirm, TimeSlotPicker } from "@/components/kit";
+import { AnimatedStepper, Avatar, BrandDots, BrandLoader, DayTabs, EmptyState, SlideToConfirm, TimeSlotPicker } from "@/components/kit";
 import { haptic, interaction, spring } from "@/components/motion/presets";
 import { UserPriceBreakdown } from "@/components/kit-extra/user-price-breakdown";
 import { salonDateIso, salonRelativeDayLabel, salonTimeLabel } from "@/lib/salon-date";
@@ -97,10 +97,11 @@ function StepPanel({ stepKey, direction, children }) {
     <motion.section
       key={stepKey}
       custom={direction}
-      initial={reduce ? { opacity: 0 } : { opacity: 0, x: direction * 32 }}
+      // The outgoing step leaves instantly, so the next one is interactive right away.
+      initial={reduce ? { opacity: 0 } : { opacity: 0, x: direction * 12 }}
       animate={{ opacity: 1, x: 0 }}
-      exit={reduce ? { opacity: 0 } : { opacity: 0, x: direction * -24, transition: { duration: 0.16 } }}
-      transition={spring.sheet}
+      exit={{ opacity: 0, transition: { duration: 0 } }}
+      transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
       className="min-w-0"
     >
       {children}
@@ -221,6 +222,7 @@ export default function UserAppointmentsPage() {
         }),
     [services, bookingForm.serviceIds, bookingForm.variantSelections, appUser?.membershipSegment]
   );
+  const totalDurationMinutes = useMemo(() => selectedServices.reduce((sum, service) => sum + (Number(service.duration) || 0), 0), [selectedServices]);
   const detailService = useMemo(() => (detailsServiceId ? services.find((service) => service.id === detailsServiceId) ?? null : null), [services, detailsServiceId]);
 
   // Slots seen through the chosen stylist: times they are not free are shown as unavailable with the
@@ -292,8 +294,11 @@ export default function UserAppointmentsPage() {
     if (!bookingForm.serviceIds.length || !effectiveBookingDate) return undefined;
     return dispatch(fetchCustomerSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate, variantSelections: bookingForm.variantSelections }));
   }, [effectiveBookingDate, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
+  // Slots load ahead while services are being picked, so they're usually ready when the customer
+  // reaches the time step. A short debounce keeps rapid add/remove taps to one request.
   useEffect(() => {
-    void loadSlots();
+    const timer = window.setTimeout(() => void loadSlots(), 200);
+    return () => window.clearTimeout(timer);
   }, [loadSlots]);
 
   // The member rate depends on the customer's plan; keep the store's price estimate in step with it.
@@ -614,13 +619,10 @@ export default function UserAppointmentsPage() {
             {step === 2 ? (
               <StepPanel stepKey="time" direction={direction}>
                 <div className="space-y-6">
-                  <DateStrip
+                  <DayTabs
+                    days={[todayIso, tomorrowIso]}
                     value={effectiveBookingDate}
                     onChange={(iso) => dispatch(setCustomerBookingField({ field: "bookingDate", value: iso }))}
-                    days={2}
-                    minDate={todayIso}
-                    maxDate={tomorrowIso}
-                    expandable={false}
                     label="Day"
                   />
                   <div>
@@ -640,6 +642,7 @@ export default function UserAppointmentsPage() {
                       value={bookingForm.startsAt}
                       onChange={(value) => dispatch(setCustomerBookingField({ field: "startsAt", value }))}
                       loading={slotsLoading}
+                      durationMinutes={totalDurationMinutes}
                       empty={
                         <EmptyState
                           illustration="calendar"
@@ -743,7 +746,7 @@ export default function UserAppointmentsPage() {
             {step === 4 ? (
               <StepPanel stepKey="pay" direction={direction}>
                 <div className="space-y-4">
-                  <div className="aurora grain relative isolate overflow-hidden rounded-card bg-card p-6 text-center ring-1 ring-inset ring-border/60">
+                  <div className="relative overflow-hidden isolate rounded-card bg-card p-6 text-center ring-1 ring-inset ring-border/60">
                     <p className="relative z-[2] text-caption font-semibold text-ink-neutral">{finalPayableAmount > 0 ? "To pay now" : "Nothing to pay"}</p>
                     <p className="relative z-[2] mt-1 font-display text-display-xl leading-none font-bold text-gradient-portal tabular-nums">{money(finalPayableAmount)}</p>
                     <p className="relative z-[2] mt-3 text-sm font-medium">{whenLabel}{selectedStylist ? ` · ${selectedStylist.name}` : ""}</p>

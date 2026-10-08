@@ -90,7 +90,7 @@ export function RewardReveal({ reward, revealed: revealedProp, onReveal, foilLab
   return (
     <div className={cn("w-full max-w-sm", className)}>
       <div ref={wrapRef} className="relative aspect-[16/10] w-full select-none overflow-hidden rounded-card bg-card shadow-lift ring-1 ring-inset ring-border/60">
-        <div className="aurora absolute inset-0 grid place-items-center p-5 text-center">
+        <div className="absolute inset-0 grid overflow-hidden place-items-center p-5 text-center">
           <motion.div initial={false} animate={revealed && !reduce ? { scale: [0.6, 1.12, 1], rotate: [-8, 4, 0] } : { scale: 1 }} transition={spring.bouncy} className="flex flex-col items-center gap-2">
             <span className="grid size-14 place-items-center rounded-2xl bg-gold/20 text-ink-warning ring-1 ring-inset ring-gold/40">
               <Icon className="size-7" aria-hidden />
