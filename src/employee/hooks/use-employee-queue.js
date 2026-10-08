@@ -52,8 +52,11 @@ export function useEmployeeQueueSource({ user, enabled = true }) {
     }
   }, []);
 
+  // The queue is a cookie-authenticated call, so it doesn't wait for the user profile: it loads in
+  // parallel with /staff/me (the route guard has already checked the role). Switching stylist
+  // always goes through sign-out, so it doesn't need to reload when `user` arrives.
   useEffect(() => {
-    if (!enabled || !user) return;
+    if (!enabled) return;
     let mounted = true;
     setQueueLoading(true);
     void loadQueue().finally(() => {
@@ -62,7 +65,7 @@ export function useEmployeeQueueSource({ user, enabled = true }) {
     return () => {
       mounted = false;
     };
-  }, [enabled, loadQueue, user]);
+  }, [enabled, loadQueue]);
 
   useEffect(() => {
     if (!enabled || !user) return;

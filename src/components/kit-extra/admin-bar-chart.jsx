@@ -28,8 +28,7 @@ function bin(data, max, aggregate) {
 }
 
 /**
- * Admin bar chart (visx scales + motion). Bars grow from the baseline the first time the chart
- * scrolls into view (scaleY only, so it stays on the compositor). Hover, tap or arrow keys show a
+ * Admin bar chart (visx scales). Bars render at full height straight away (no grow-in). Hover, tap or arrow keys show a
  * tooltip; there is also a screen-reader list of every value. Below 420px wide, neighbouring bars
  * are merged (sum or avg) and ticks thin out, so it stays readable at 360px.
  *
@@ -95,7 +94,7 @@ export function AdminBarChart({ data = [], format = (n) => `${Math.round(n)}`, h
               const fill = d.highlight ? "hsl(var(--portal-accent))" : value > 0 ? "hsl(var(--portal-accent) / 0.45)" : "hsl(var(--muted))";
               return (
                 <g key={d.key}>
-                  <motion.rect
+                  <rect
                     x={bx}
                     y={top}
                     width={bw}
@@ -106,11 +105,6 @@ export function AdminBarChart({ data = [], format = (n) => `${Math.round(n)}`, h
                     strokeWidth={d.current ? 1.5 : 0}
                     opacity={on || active == null ? 1 : 0.55}
                     className="transition-opacity duration-200"
-                    style={{ originY: 1 }}
-                    initial={reduce ? false : { scaleY: 0 }}
-                    whileInView={{ scaleY: 1 }}
-                    viewport={{ once: true, amount: 0.4 }}
-                    transition={{ ...spring.gentle, delay: reduce ? 0 : Math.min(i, 24) * 0.018 }}
                   />
                   {/* Full-height hit area: easy to tap on a phone. */}
                   <rect x={bx - (x.step() - bw) / 2} y={0} width={x.step()} height={innerH} fill="transparent" onPointerEnter={(e) => e.pointerType === "mouse" && setActive(i)} onPointerDown={() => setActive((cur) => (cur === i ? null : i))} />

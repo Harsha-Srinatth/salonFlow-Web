@@ -58,8 +58,8 @@ function EmployeeShell({ title, subtitle, actions, realtimeConnected, user, chil
  * socket for the whole shift. Tabs swap inside it and read the shared queue.
  */
 export function EmployeeFrame() {
-  const { loading, user } = useEmployeeSession();
-  const queue = useEmployeeQueueSource({ user, enabled: Boolean(user) });
+  const { user } = useEmployeeSession();
+  const queue = useEmployeeQueueSource({ user, enabled: true });
   const [meta, setMetaState] = useState({ title: "", subtitle: "" });
   const [slot, setSlot] = useState(null);
 
@@ -81,13 +81,11 @@ export function EmployeeFrame() {
           user={user}
           actions={<span ref={setSlot} className="flex items-center gap-1 empty:hidden" />}
         >
-          {loading && !user ? (
-            <BrandLoader className="py-24" label="Loading your shift…" />
-          ) : user ? (
-            <Suspense fallback={<BrandLoader className="py-24" />}>
-              <Outlet />
-            </Suspense>
-          ) : null}
+          {/* The page chunk loads in parallel with the session lookup (pages show their own loader
+              until the shared, de-duplicated /staff/me resolves) instead of after it. */}
+          <Suspense fallback={<BrandLoader className="py-24" label="Loading your shift…" />}>
+            <Outlet />
+          </Suspense>
         </EmployeeShell>
       </EmployeeQueueContext.Provider>
     </EmployeeFrameContext.Provider>

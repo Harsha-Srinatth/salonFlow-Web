@@ -129,7 +129,14 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-4 pb-[calc(var(--tabbar-h)+var(--safe-bottom)+1.5rem)] sm:pt-6 lg:pb-10">
+        {/* With a floating action button, phones get room below the content so the button never
+            sits on top of the last card's controls. */}
+        <main
+          className={cn(
+            "mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-4 sm:pt-6 lg:pb-10",
+            fab ? "pb-[calc(var(--tabbar-h)+var(--safe-bottom)+5.5rem)]" : "pb-[calc(var(--tabbar-h)+var(--safe-bottom)+1.5rem)]"
+          )}
+        >
           <PageTransition transitionKey={transitionKey}>{children}</PageTransition>
         </main>
       </div>

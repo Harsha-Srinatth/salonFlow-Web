@@ -84,6 +84,7 @@ function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hid
       fab={
         hideFab ? null : (
           <FloatingActionButton
+            className="lg:hidden"
             label="Quick actions"
             actions={[
               { id: "walk-in", label: "New walk-in", icon: UserPlus, onClick: () => navigate(RECEPTION_WALK_IN) },
@@ -106,9 +107,11 @@ function ReceptionShell({ title, subtitle, actions, realtimeConnected, user, hid
  * bookings/queue/stylists/services stay loaded instead of being refetched per tab.
  */
 export function ReceptionFrame() {
-  const { loading, user } = useReceptionSession();
+  const { user } = useReceptionSession();
   const realtimeConnected = useSelector((state) => state.receptionBookings.realtimeConnected);
-  useReceptionBootstrap({ enabled: Boolean(user) });
+  // Cookie-authenticated and already role-checked by the route guard: load the desk's data in
+  // parallel with /staff/me rather than after it.
+  useReceptionBootstrap({ enabled: true });
   const [meta, setMetaState] = useState({ title: "", subtitle: "", hideFab: false });
   const [slot, setSlot] = useState(null);
 
@@ -131,13 +134,11 @@ export function ReceptionFrame() {
         user={user}
         actions={<span ref={setSlot} className="flex items-center gap-1 empty:hidden" />}
       >
-        {loading && !user ? (
-          <BrandLoader className="py-24" label="Opening the desk…" />
-        ) : user ? (
-          <Suspense fallback={<BrandLoader className="py-24" />}>
-            <Outlet />
-          </Suspense>
-        ) : null}
+        {/* The page chunk loads in parallel with the session lookup (pages show their own loader
+            until the shared, de-duplicated /staff/me resolves) instead of after it. */}
+        <Suspense fallback={<BrandLoader className="py-24" label="Opening the desk…" />}>
+          <Outlet />
+        </Suspense>
       </ReceptionShell>
     </ReceptionFrameContext.Provider>
   );
