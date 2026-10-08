@@ -36,7 +36,7 @@ const ACCOUNT_NOT_FOUND_MESSAGES = new Set(["ACCOUNT_NOT_FOUND", "Phone number i
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { appUser, loading, refresh } = useAuth()
+  const { appUser, loading, refresh, setSignedInUser } = useAuth()
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -80,7 +80,8 @@ export default function LoginPage() {
         user = await signInWithAppPassword(email, password)
       }
 
-      await refresh()
+      setSignedInUser(user)
+      void refresh().catch(() => undefined)
       navigate(getDashboardPathByRole(user.role), { replace: true })
       toast.success("Welcome back", { description: "You're signed in." })
     } catch (error) {
@@ -153,6 +154,7 @@ export default function LoginPage() {
       const result = await verifyPhoneOtp(code.trim())
       clearOtpVerifyGuards("customer", e164)
       if (result.appUser?.role) {
+        setSignedInUser(result.appUser)
         toast.success("Phone verified and signed in")
         navigate(getDashboardPathByRole(result.appUser.role), { replace: true })
       } else {
@@ -180,6 +182,7 @@ export default function LoginPage() {
       await signInWithGoogle()
       const syncedUser = await syncSessionWithBackend()
       if (syncedUser?.role) {
+        setSignedInUser(syncedUser)
         toast.success("Welcome back", { description: "Signed in with Google." })
         navigate(getDashboardPathByRole(syncedUser.role), { replace: true })
       } else {

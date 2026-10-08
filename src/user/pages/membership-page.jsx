@@ -15,7 +15,7 @@ import { formatIsoDate, salonDateOf } from "@/lib/salon-date";
 import { cn } from "@/lib/utils";
 import { notify } from "@/lib/notify";
 import { UserLayout } from "../portal/user-layout";
-import { fetchMembership } from "../lib/user-api";
+import { fetchMembership, MEMBERSHIP_PATH, peekUserResource } from "../lib/user-api";
 import { SectionHeading } from "../components/section-heading";
 
 const PERKS = [
@@ -182,7 +182,7 @@ function ResultDialog({ result, onClose }) {
 export default function UserMembershipPage() {
   const { appUser, refresh } = useAuth();
   const isUser = appUser?.role === "USER";
-  const [membership, setMembership] = useState(null);
+  const [membership, setMembership] = useState(() => peekUserResource(MEMBERSHIP_PATH) ?? null);
   const [loadError, setLoadError] = useState(null);
   const [chosen, setChosen] = useState(null);
   const [busy, setBusy] = useState(false);

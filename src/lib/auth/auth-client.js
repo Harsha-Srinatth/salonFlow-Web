@@ -210,7 +210,20 @@ export async function getFirebaseIdToken() {
  *   it a brand-new account lands with no password hash and rejects its own
  *   credentials at sign-in.
  */
-export async function syncSessionWithBackend(options = {}) {
+// The sign-in screen and AuthProvider's Firebase listener both sync right after a sign-in; share
+// one request between them (registration, which passes a password, always runs on its own).
+let sessionSyncRequest = null;
+export function syncSessionWithBackend(options = {}) {
+    if (options.password !== undefined)
+        return runSessionSync(options);
+    if (!sessionSyncRequest) {
+        sessionSyncRequest = runSessionSync(options).finally(() => {
+            sessionSyncRequest = null;
+        });
+    }
+    return sessionSyncRequest;
+}
+async function runSessionSync(options = {}) {
     const token = await getFirebaseIdToken();
     if (!token)
         return null;

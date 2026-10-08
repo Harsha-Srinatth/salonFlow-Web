@@ -292,8 +292,11 @@ export default function UserAppointmentsPage() {
     if (!bookingForm.serviceIds.length || !effectiveBookingDate) return undefined;
     return dispatch(fetchCustomerSlots({ serviceIds: bookingForm.serviceIds, date: effectiveBookingDate, variantSelections: bookingForm.variantSelections }));
   }, [effectiveBookingDate, bookingForm.serviceIds, bookingForm.variantSelections, dispatch]);
+  // Slots load ahead while services are being picked, so they're usually ready when the customer
+  // reaches the time step. A short debounce keeps rapid add/remove taps to one request.
   useEffect(() => {
-    void loadSlots();
+    const timer = window.setTimeout(() => void loadSlots(), 200);
+    return () => window.clearTimeout(timer);
   }, [loadSlots]);
 
   // The member rate depends on the customer's plan; keep the store's price estimate in step with it.

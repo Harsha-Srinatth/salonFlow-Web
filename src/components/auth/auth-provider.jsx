@@ -41,6 +41,14 @@ export function AuthProvider({ children }) {
         const user = await fetchCurrentAppUser();
         setAppUser(user);
     }, [firebaseUser]);
+    // Sign-in screens already hold the user returned by the login call: hand it over directly so
+    // navigation doesn't wait on another /me round trip, and the role guard never sees a gap.
+    const setSignedInUser = useCallback((user) => {
+        if (!user?.role)
+            return;
+        setAppUser(user);
+        setLoading(false);
+    }, []);
     const logout = useCallback(async () => {
         const { signOutUser } = await loadAuthClient();
         await signOutUser();
@@ -124,8 +132,8 @@ export function AuthProvider({ children }) {
             writeSignedInHint(Boolean(appUser?.role));
     }, [appUser, loading]);
     const value = useMemo(() => {
-        return { firebaseUser, appUser, loading, refresh, logout };
-    }, [firebaseUser, appUser, loading, refresh, logout]);
+        return { firebaseUser, appUser, loading, refresh, setSignedInUser, logout };
+    }, [firebaseUser, appUser, loading, refresh, setSignedInUser, logout]);
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {

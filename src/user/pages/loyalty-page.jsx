@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { UserLayout } from "../portal/user-layout";
 import { useInvite } from "../portal/user-frame-context";
 import { useLoyalty } from "../lib/use-loyalty";
-import { drawRewardCard, fetchRewardVault } from "../lib/user-api";
+import { drawRewardCard, fetchRewardVault, peekUserResource, REWARD_VAULT_PATH } from "../lib/user-api";
 import { SectionHeading } from "../components/section-heading";
 
 const money = (n) => formatMoney(n);
@@ -95,7 +95,12 @@ export default function UserLoyaltyPage() {
   const openInvite = useInvite();
   const reduce = useReducedMotion();
   const { overview, loading, error, reload, referralCode, referralLink } = useLoyalty({ enabled: isUser });
-  const [vault, setVault] = useState({ cards: [], pendingDraws: [], wins: [], needsGender: false, loaded: false });
+  const [vault, setVault] = useState(() => {
+    const seen = peekUserResource(REWARD_VAULT_PATH);
+    return seen
+      ? { cards: seen.cards ?? [], pendingDraws: seen.pendingDraws ?? [], wins: seen.wins ?? [], needsGender: Boolean(seen.needsGender), loaded: true }
+      : { cards: [], pendingDraws: [], wins: [], needsGender: false, loaded: false };
+  });
   const [savingGender, setSavingGender] = useState(false);
   const [drawing, setDrawing] = useState(false);
   const [prize, setPrize] = useState(null);
