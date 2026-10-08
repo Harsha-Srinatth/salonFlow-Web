@@ -407,7 +407,8 @@ const customerBookingsSlice = createSlice({
       if (field === "bookingDate") {
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
-        state.slots = [];
+        // The previous day's times stay on screen (dimmed, not selectable) until the new day's
+        // arrive, instead of flashing a skeleton; a failed load clears them below.
       }
       if (field === "startsAt") {
         state.bookingForm.stylistId = "";
@@ -606,6 +607,7 @@ const customerBookingsSlice = createSlice({
       .addCase(fetchCustomerSlots.rejected, (state, action) => {
         if (action.meta.requestId !== state.slotsRequestId) return;
         state.slotsLoading = false;
+        state.slots = [];
         state.error = action.payload ?? "Could not load slots";
       })
       .addCase(fetchCustomerStylists.rejected, (state, action) => {

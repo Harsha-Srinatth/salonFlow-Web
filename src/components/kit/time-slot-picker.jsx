@@ -102,7 +102,8 @@ export function TimeSlotPicker({ slots = [], value, onChange, loading = false, d
   };
 
   return (
-    <div className={cn("space-y-4", loading && "opacity-60 transition-opacity", className)} aria-busy={loading || undefined}>
+    // While a new list loads, the current one stays visible but can't be picked from.
+    <div className={cn("space-y-4", loading && "opacity-60 transition-opacity", className)} aria-busy={loading || undefined} inert={loading || undefined}>
       {/* Overview: how many times are open, and quick filters by part of day. */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <p className="text-sm text-ink-neutral">
