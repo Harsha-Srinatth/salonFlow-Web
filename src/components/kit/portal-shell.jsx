@@ -112,7 +112,7 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
         <header className="glass-surface sticky top-0 z-sticky border-x-0 border-t-0 pt-safe">
           <div className="mx-auto flex h-[var(--topbar-h)] max-w-[var(--content-max)] items-center gap-3 px-[var(--gutter)]">
             <Link to={brand.href ?? nav[0]?.href ?? "/"} className="grid shrink-0 place-items-center lg:hidden" aria-label={`${brand.name} home`}>
-              <BrandLogo variant="mark" markClassName="h-9" />
+              <BrandLogo variant="horizontal" wideClassName="h-8" />
             </Link>
             <div className="min-w-0 flex-1">
               <motion.h1 key={title} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft} className="truncate font-display text-headline font-semibold sm:text-title">

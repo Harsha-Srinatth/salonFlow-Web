@@ -18,7 +18,7 @@ export function AuthLayout({ title, subtitle, highlights = [], brand = "Sahasra"
       <section className="relative isolate overflow-hidden px-6 pt-[calc(1.75rem+var(--safe-top))] pb-20 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <AuroraBackground />
         <Link to="/" aria-label={`${brand} home`} className="inline-flex items-center">
-          <BrandLogo markClassName="h-12" wideClassName="h-14" />
+          <BrandLogo markClassName="h-12" wideClassName="h-16" />
         </Link>
         <motion.div className="mt-8 lg:mt-0" variants={variants.stagger(0.08, 0.1)} initial={reduce ? false : "hidden"} animate="show">
           <motion.h1 variants={variants.fadeUp} className="font-display text-display-lg font-bold lg:text-display-xl">

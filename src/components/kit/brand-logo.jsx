@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 // Dark-green artwork disappears on dark surfaces, so it sits on a soft light chip there.
-const darkChip = "dark:rounded-xl dark:bg-white/90 dark:p-1";
+const darkChip = "dark:box-content dark:rounded-xl dark:bg-white/90 dark:p-1";
 // The mark ships on an opaque white square; multiply makes that square vanish on light surfaces.
 const markBlend = "mix-blend-multiply dark:mix-blend-normal";
 
@@ -17,7 +17,7 @@ export function BrandLogo({ variant = "responsive", className, markClassName = "
   if (variant === "horizontal") return <img src="/logo-horizontal.png" alt={alt} width="2172" height="724" className={cn("w-auto", wideClassName, darkChip, className)} />;
   return (
     <span className={cn("inline-flex items-center", className)}>
-      <img src="/logo-mark.png" alt={alt} width="1254" height="1254" className={cn("w-auto sm:hidden", markClassName, markBlend, darkChip)} />
+      <img src="/logo-horizontal.png" alt={alt} width="2172" height="724" className={cn("w-auto sm:hidden", markClassName, darkChip)} />
       <img src="/logo-horizontal.png" alt="" aria-hidden="true" width="2172" height="724" className={cn("hidden w-auto sm:block", wideClassName, darkChip)} />
     </span>
   );
