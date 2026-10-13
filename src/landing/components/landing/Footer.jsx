@@ -1,4 +1,3 @@
-import { motion, useReducedMotion } from "motion/react";
 import { ArrowUp, CalendarPlus, Clock, Facebook, Globe, Instagram, LogIn, Mail, MapPin, MessageCircle, Phone, ShieldCheck, Youtube } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
@@ -40,10 +39,15 @@ function FooterHeading({ children }) {
 }
 
 const rowLink = "inline-flex min-h-11 items-center gap-3 rounded-xl text-sm transition-colors hover:text-ink-primary";
+// Used until the admin sets privacy / terms URLs in Settings.
+const LEGAL_FALLBACK = {
+  privacy: "https://pixel-perfection-studio-725.lovable.app",
+  terms: "https://www.privacypolicies.com/live/0e3f5c6b-1d8e-4f7c-9b2e-1f2e3c4d5e6f",
+};
+const legalLink = "inline-flex min-h-11 items-center rounded-lg px-3 font-medium transition-colors hover:text-ink-primary";
 const iconTile = "grid size-9 shrink-0 place-items-center rounded-xl bg-portal/10 text-ink-primary";
 
 export default function Footer() {
-  const reduce = useReducedMotion();
   const { info, status } = useBusinessInfo();
   const [policyOpen, setPolicyOpen] = useState(false);
   // Stays mounted after the first open so the dialog can play its exit animation.
@@ -204,42 +208,24 @@ export default function Footer() {
                   </button>
                 </li>
               ) : null}
-              {profile.privacyUrl ? (
-                <li>
-                  <a href={profile.privacyUrl} target="_blank" rel="noopener noreferrer" className={rowLink}>
-                    Privacy
-                  </a>
-                </li>
-              ) : null}
-              {profile.termsUrl ? (
-                <li>
-                  <a href={profile.termsUrl} target="_blank" rel="noopener noreferrer" className={rowLink}>
-                    Terms
-                  </a>
-                </li>
-              ) : null}
             </ul>
           </nav>
         </div>
 
-        {/* Oversized wordmark that rises into place: the page's sign-off. */}
-        <motion.p
-          aria-hidden
-          initial={reduce ? false : { opacity: 0, y: 60 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={spring.gentle}
-          className="mt-14 text-center font-display text-[clamp(4rem,19vw,15rem)] leading-[0.8] font-bold tracking-tight text-gradient-portal select-none"
-        >
-          {name}
-        </motion.p>
-
-        <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/70 pt-6 text-caption text-ink-neutral sm:flex-row">
-          <p>
+        <div className="mt-12 grid items-center gap-x-6 gap-y-2 border-t border-border/70 pt-4 text-caption text-ink-neutral sm:grid-cols-[1fr_auto_1fr]">
+          <p className="text-center sm:text-left">
             © {year} {name}. All rights reserved.
           </p>
-          {status === "ready" && (!profile.privacyUrl || !profile.termsUrl) ? <NotConfigured what="Privacy / terms links" /> : null}
-          <button type="button" onClick={() => window.scrollTo({ top: 0 })} className="inline-flex h-11 items-center gap-2 rounded-full px-4 font-semibold text-foreground transition-colors hover:bg-muted">
+          <nav aria-label="Legal" className="flex items-center justify-center gap-1">
+            <a href={profile.privacyUrl || LEGAL_FALLBACK.privacy} target="_blank" rel="noopener noreferrer" className={legalLink}>
+              Privacy Policy
+            </a>
+            <span aria-hidden className="h-4 w-px bg-border" />
+            <a href={profile.termsUrl || LEGAL_FALLBACK.terms} target="_blank" rel="noopener noreferrer" className={legalLink}>
+              Terms of Service
+            </a>
+          </nav>
+          <button type="button" onClick={() => window.scrollTo({ top: 0 })} className="inline-flex h-11 items-center gap-2 justify-self-center rounded-full px-4 font-semibold text-foreground transition-colors hover:bg-muted sm:justify-self-end">
             <ArrowUp className="size-4" aria-hidden /> Top
           </button>
         </div>

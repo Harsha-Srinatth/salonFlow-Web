@@ -3,6 +3,7 @@ import { CalendarPlus, LogIn, Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/kit/brand-logo";
 import { haptic, spring, stagger } from "@/components/motion/presets";
 import { MagneticButton } from "@/components/motion/magnetic-button";
 import { BUTTON_VARIANTS } from "@/components/kit/button-loading-morph";
@@ -33,10 +34,7 @@ const SECTION_IDS = NAV_LINKS.map((l) => l.id);
 
 export function BrandMark({ className }) {
   return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">S</span>
-      <span className="font-display text-xl font-bold tracking-tight">Sahasra</span>
-    </span>
+    <BrandLogo className={className} markClassName="h-10" wideClassName="h-11" />
   );
 }
 

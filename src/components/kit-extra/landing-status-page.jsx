@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { spring, variants } from "@/components/motion/presets";
 import { MagneticButton } from "@/components/motion/magnetic-button";
 import { AuroraBackground } from "@/components/kit/aurora-background";
+import { BrandLogo } from "@/components/kit/brand-logo";
 import { ButtonLoadingMorph, BUTTON_SIZES, BUTTON_VARIANTS, useAsyncAction } from "@/components/kit/button-loading-morph";
 import { Illustration } from "@/components/kit/illustrations";
 import { useOnlineStatus } from "@/components/kit/offline-banner";
@@ -100,9 +101,8 @@ export function LandingStatusPage({ kind = "notFound", onRetry, className }) {
     <main className={cn("relative isolate grid min-h-dvh place-items-center overflow-hidden px-[var(--gutter)] pt-[calc(1.5rem+var(--safe-top))] pb-[calc(1.5rem+var(--safe-bottom))]", className)}>
       <AuroraBackground />
       {/* A plain link (not the router) so it works even when the app state is what broke. */}
-      <a href="/" className="absolute top-[calc(1rem+var(--safe-top))] left-[var(--gutter)] inline-flex h-11 items-center gap-2.5 rounded-full pr-3">
-        <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">S</span>
-        <span className="font-display text-xl font-bold">Sahasra</span>
+      <a href="/" aria-label="Sahasra home" className="absolute top-[calc(1rem+var(--safe-top))] left-[var(--gutter)] inline-flex items-center rounded-full pr-3">
+        <BrandLogo markClassName="h-11" wideClassName="h-12" />
       </a>
       <motion.div
         variants={variants.stagger(0.08, 0.05)}

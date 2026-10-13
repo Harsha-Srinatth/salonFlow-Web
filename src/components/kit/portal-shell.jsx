@@ -10,6 +10,7 @@ import { IconButton } from "./icon-button";
 import { SpringBottomSheet } from "./spring-bottom-sheet";
 import { CommandPalette } from "./command-palette";
 import { OfflineBanner } from "./offline-banner";
+import { BrandLogo } from "./brand-logo";
 import { Avatar } from "./avatar";
 
 function useActiveHref(items, pathname) {
@@ -59,11 +60,12 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-nav hidden w-[var(--sidebar-w)] flex-col border-r border-sidebar-border bg-sidebar/80 pl-safe backdrop-blur-xl lg:flex">
         <Link to={brand.href ?? nav[0]?.href ?? "/"} className="flex items-center gap-3 px-5 pt-6 pb-5">
-          {brand.logo ?? <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">{brand.name.charAt(0)}</span>}
-          <span className="min-w-0">
-            <span className="block truncate font-display text-lg font-bold">{brand.name}</span>
-            {brand.tagline ? <span className="block truncate text-caption text-ink-neutral">{brand.tagline}</span> : null}
-          </span>
+          {brand.logo ?? (
+            <span className="flex min-w-0 flex-col gap-1">
+              <BrandLogo variant="horizontal" wideClassName="h-11 self-start" />
+              {brand.tagline ? <span className="block truncate text-caption text-ink-neutral">{brand.tagline}</span> : null}
+            </span>
+          )}
         </Link>
         <LayoutGroup id="shell-sidebar">
           <nav aria-label="Main" className="admin-scrollbar flex-1 space-y-1 overflow-y-auto px-3">
@@ -109,8 +111,8 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
         {/* Top bar */}
         <header className="glass-surface sticky top-0 z-sticky border-x-0 border-t-0 pt-safe">
           <div className="mx-auto flex h-[var(--topbar-h)] max-w-[var(--content-max)] items-center gap-3 px-[var(--gutter)]">
-            <Link to={brand.href ?? nav[0]?.href ?? "/"} className="grid size-9 shrink-0 place-items-center rounded-xl bg-portal font-display font-bold text-portal-foreground lg:hidden" aria-label={`${brand.name} home`}>
-              {brand.name.charAt(0)}
+            <Link to={brand.href ?? nav[0]?.href ?? "/"} className="grid shrink-0 place-items-center lg:hidden" aria-label={`${brand.name} home`}>
+              <BrandLogo variant="mark" markClassName="h-9" />
             </Link>
             <div className="min-w-0 flex-1">
               <motion.h1 key={title} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft} className="truncate font-display text-headline font-semibold sm:text-title">

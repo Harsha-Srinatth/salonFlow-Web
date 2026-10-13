@@ -2,6 +2,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { spring, variants } from "@/components/motion/presets";
+import { BrandLogo } from "./brand-logo";
 import { AuroraBackground } from "./aurora-background";
 
 /**
@@ -16,9 +17,8 @@ export function AuthLayout({ title, subtitle, highlights = [], brand = "Sahasra"
     <div className={cn("relative isolate grid min-h-dvh lg:grid-cols-[1.05fr_1fr]", className)}>
       <section className="relative isolate overflow-hidden px-6 pt-[calc(1.75rem+var(--safe-top))] pb-20 lg:flex lg:flex-col lg:justify-between lg:p-12">
         <AuroraBackground />
-        <Link to="/" className="inline-flex items-center gap-2.5">
-          <span className="grid size-10 place-items-center rounded-2xl bg-portal font-display text-lg font-bold text-portal-foreground shadow-glow">{brand.charAt(0)}</span>
-          <span className="font-display text-xl font-bold">{brand}</span>
+        <Link to="/" aria-label={`${brand} home`} className="inline-flex items-center">
+          <BrandLogo markClassName="h-12" wideClassName="h-14" />
         </Link>
         <motion.div className="mt-8 lg:mt-0" variants={variants.stagger(0.08, 0.1)} initial={reduce ? false : "hidden"} animate="show">
           <motion.h1 variants={variants.fadeUp} className="font-display text-display-lg font-bold lg:text-display-xl">
