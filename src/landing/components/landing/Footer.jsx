@@ -61,12 +61,12 @@ export default function Footer() {
   const policy = info?.cancellationPolicy ?? [];
 
   return (
-    <footer className="relative overflow-hidden border-t border-border/70 bg-card pb-[calc(6rem+var(--safe-bottom))] md:pb-[calc(2rem+var(--safe-bottom))]" aria-labelledby="footer-heading">
+    <footer className="relative overflow-hidden border-t border-border/70 bg-card pb-[calc(6rem+var(--safe-bottom))] md:pb-[calc(1rem+var(--safe-bottom))]" aria-labelledby="footer-heading">
       <h2 id="footer-heading" className="sr-only">
         {name} contact and links
       </h2>
-      <div className="mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-14">
-        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-12">
+      <div className="mx-auto w-full max-w-[var(--content-max)] px-[var(--gutter)] pt-10">
+        <div className="grid gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <Link to="/" aria-label={`${name} home`} className="inline-flex rounded-full">
               <BrandMark />
@@ -97,7 +97,7 @@ export default function Footer() {
 
           <div className="lg:col-span-3">
             <FooterHeading>Contact</FooterHeading>
-            <ul className="mt-3 space-y-1">
+            <ul className="mt-2 space-y-1">
               {status === "loading" ? <li className="kit-shimmer h-24 rounded-xl" aria-hidden="true" /> : null}
               {profile.phone ? (
                 <li>
@@ -140,7 +140,7 @@ export default function Footer() {
 
           <div className="lg:col-span-3">
             <FooterHeading>Visit</FooterHeading>
-            <ul className="mt-3 space-y-3 text-sm">
+            <ul className="mt-2 space-y-3 text-sm">
               {address ? (
                 <li className="flex gap-3">
                   <span className={iconTile}>
@@ -180,21 +180,21 @@ export default function Footer() {
 
           <nav className="lg:col-span-2" aria-label="Footer">
             <FooterHeading>Explore</FooterHeading>
-            <ul className="mt-3">
+            <ul className="mt-2">
               {NAV_LINKS.map(({ id, label }) => (
                 <li key={id}>
-                  <a href={`#${id}`} className={rowLink}>
+                  <a href={`#${id}`} className={`${rowLink} !min-h-9`}>
                     {label}
                   </a>
                 </li>
               ))}
               <li>
-                <Link to={BOOK_HREF} className={rowLink}>
+                <Link to={BOOK_HREF} className={`${rowLink} !min-h-9`}>
                   <CalendarPlus className="size-4" aria-hidden /> Book
                 </Link>
               </li>
               <li>
-                <Link to="/auth/login" className={rowLink}>
+                <Link to="/auth/login" className={`${rowLink} !min-h-9`}>
                   <LogIn className="size-4" aria-hidden /> Sign in
                 </Link>
               </li>
@@ -203,7 +203,7 @@ export default function Footer() {
                   <button type="button" onClick={() => {
                       setPolicyMounted(true);
                       setPolicyOpen(true);
-                    }} className={`${rowLink} text-left`}>
+                    }} className={`${rowLink} !min-h-9 text-left`}>
                     <ShieldCheck className="size-4" aria-hidden /> Refunds
                   </button>
                 </li>
@@ -212,7 +212,7 @@ export default function Footer() {
           </nav>
         </div>
 
-        <div className="mt-12 grid items-center gap-x-6 gap-y-2 border-t border-border/70 pt-4 text-caption text-ink-neutral sm:grid-cols-[1fr_auto_1fr]">
+        <div className="mt-8 grid items-center gap-x-6 gap-y-2 border-t border-border/70 pt-4 text-caption text-ink-neutral sm:grid-cols-[1fr_auto_1fr]">
           <p className="text-center sm:text-left">
             © {year} {name}. All rights reserved.
           </p>
