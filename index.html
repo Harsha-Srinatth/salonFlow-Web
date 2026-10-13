@@ -5,12 +5,7 @@
       (function () {
         try {
           var stored = localStorage.getItem("theme");
-          var theme =
-            stored === "dark" || stored === "light"
-              ? stored
-              : window.matchMedia("(prefers-color-scheme: dark)").matches
-                ? "dark"
-                : "light";
+          var theme = stored === "dark" ? "dark" : "light";
           document.documentElement.classList.add(theme);
           document.documentElement.style.colorScheme = theme;
         } catch (e) {
@@ -27,8 +22,8 @@
       rel="stylesheet"
     />
     <title>Sahasra Family Salon</title>
-    <link rel="icon" type="image/png" href="/favicon.png?v=5" />
-    <link rel="apple-touch-icon" href="/favicon.png?v=5" />
+    <link rel="icon" type="image/png" href="/favicon-rounded.png?v=6" />
+    <link rel="apple-touch-icon" href="/favicon-rounded.png?v=6" />
     <meta name="theme-color" content="#0f4d2a" />
   </head>
   <body>
