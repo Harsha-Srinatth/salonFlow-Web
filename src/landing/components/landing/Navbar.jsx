@@ -34,7 +34,7 @@ const SECTION_IDS = NAV_LINKS.map((l) => l.id);
 
 export function BrandMark({ className }) {
   return (
-    <BrandLogo className={className} markClassName="h-10" wideClassName="h-11" />
+    <BrandLogo className={className} markClassName="h-11" wideClassName="h-12" />
   );
 }
 
