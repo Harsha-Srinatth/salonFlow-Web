@@ -35,8 +35,12 @@ export function PullToRefresh({ onRefresh, disabled = false, children, className
     const onMove = (e) => {
       if (start.current == null || busy.current) return;
       const dy = e.touches[0].clientY - start.current;
-      if (dy <= 0 || window.scrollY > 0) {
-        y.set(0);
+      // The page started scrolling (or the finger went up): this gesture is a normal scroll, not a pull.
+      // Forget it entirely so reaching the top mid-scroll can never offset the content.
+      if (window.scrollY > 0 || dy <= 0) {
+        if (window.scrollY > 0) start.current = null;
+        if (y.get() !== 0) y.set(0);
+        setArmed(false);
         return;
       }
       const pulled = Math.min(MAX, dy * 0.5);
@@ -67,12 +71,18 @@ export function PullToRefresh({ onRefresh, disabled = false, children, className
         animate(y, 0, spring.bouncy);
       }
     };
+    // Safety net: never leave the content offset when idle (e.g. a touchend lost to a scroll takeover).
+    const onScroll = () => {
+      if (!busy.current && start.current == null && y.get() !== 0) y.set(0);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("touchstart", onStart, { passive: true });
     window.addEventListener("touchmove", onMove, { passive: true });
     window.addEventListener("touchend", onEnd);
     window.addEventListener("touchcancel", onEnd);
     return () => {
       root.style.overscrollBehaviorY = prev;
+      window.removeEventListener("scroll", onScroll);
       window.removeEventListener("touchstart", onStart);
       window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", onEnd);

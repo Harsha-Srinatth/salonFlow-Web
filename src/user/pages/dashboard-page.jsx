@@ -135,7 +135,7 @@ function QueueWidget() {
   return (
     <Link
       to="/user-dashboard/queue"
-      className="group flex h-full items-center gap-4 rounded-card bg-card p-5 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift"
+      className="group flex items-center gap-4 rounded-card lg:h-full bg-card p-5 shadow-soft ring-1 ring-inset ring-border/60 transition-shadow hover:shadow-lift"
     >
       <span className="relative grid size-14 shrink-0 place-items-center rounded-2xl bg-info/12 text-ink-info">
         <span aria-hidden className="kit-live-ping absolute inset-0 rounded-2xl bg-info/20" />
