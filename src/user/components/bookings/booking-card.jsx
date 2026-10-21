@@ -1,4 +1,5 @@
 import { motion, useReducedMotion } from "motion/react";
+import { useEffect, useState } from "react";
 import { Ban, CalendarSync, Clock, MessageSquareHeart, ReceiptText, RotateCcw, ShieldAlert, Trash2, UserRound, Wallet } from "lucide-react";
 import { BookingTimeline, Rating, StatusChip } from "@/components/kit";
 import { BrandDots } from "@/components/kit/brand-loader";
@@ -28,8 +29,21 @@ function Action({ icon: Icon, children, onClick, tone, disabled, busy }) {
   );
 }
 
+/**
+ * Ticks by itself, so only a card that is actually counting down re-renders each second
+ * (the page used to re-render every card, every second).
+ */
+function AutoCompleteCountdown({ booking }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return formatCountdownMs(getPendingAutoCompleteCountdownMs(booking, now));
+}
+
 /** One booking: date tile, details, status, lifecycle timeline (upcoming) and its actions. */
-export function BookingCard({ booking, index, nowMs, feedback, deleting, onInvoice, onReview, onCancel, onReschedule, onRemove, onRebook, reviewedRef }) {
+export function BookingCard({ booking, index, feedback, deleting, onInvoice, onReview, onCancel, onReschedule, onRemove, onRebook, reviewedRef }) {
   const reduce = useReducedMotion();
   const status = normalizeBookingStatus(booking.status);
   const dayIso = salonDateOf(booking.startsAt);
@@ -75,7 +89,7 @@ export function BookingCard({ booking, index, nowMs, feedback, deleting, onInvoi
 
       {pendingAuto ? (
         <p className="flex items-center gap-2 rounded-2xl bg-info/12 px-3 py-2 text-sm font-semibold text-ink-info">
-          <BrandDots size={4} /> Wraps up in {formatCountdownMs(getPendingAutoCompleteCountdownMs(booking, nowMs))}
+          <BrandDots size={4} /> Wraps up in <AutoCompleteCountdown booking={booking} />
         </p>
       ) : null}
       {isNoShowBooking(booking) ? (

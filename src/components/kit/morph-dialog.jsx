@@ -8,7 +8,7 @@ import { TONE_CLASSES } from "./status-meta";
 const SIZES = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-2xl", xl: "max-w-4xl" };
 
 /**
- * Centered dialog that springs in from a slightly smaller, blurred state (desktop confirmations,
+ * Centered dialog that springs in from a slightly smaller state (transform + opacity only) (desktop confirmations,
  * forms, details). Pass the same `layoutId` to a <motion.*> trigger for a shared-element expand.
  * @param {{ open: boolean, onOpenChange: (o:boolean)=>void, title: string, description?: string, icon?: any,
  *   tone?: keyof TONE_CLASSES, layoutId?: string, size?: keyof SIZES, footer?: React.ReactNode, hideClose?: boolean, className?: string }} props
@@ -22,7 +22,7 @@ export function MorphDialog({ open, onOpenChange, title, description, icon: Icon
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
               <motion.div
-                className="fixed inset-0 z-modal bg-[hsl(var(--scrim))] backdrop-blur-[3px]"
+                className="fixed inset-0 z-modal bg-[hsl(var(--scrim))]"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -33,10 +33,10 @@ export function MorphDialog({ open, onOpenChange, title, description, icon: Icon
               <Dialog.Content asChild forceMount>
                 <motion.div
                   layoutId={reduce ? undefined : layoutId}
-                  className={cn("glass-strong pointer-events-auto flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-sheet outline-none", SIZES[size] ?? SIZES.md, className)}
-                  initial={layoutId ? undefined : { opacity: 0, scale: 0.92, y: 16, filter: "blur(6px)" }}
-                  animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-                  exit={{ opacity: 0, scale: 0.95, y: 8, filter: "blur(4px)", transition: { duration: duration.fast, ease: ease.out } }}
+                  className={cn("sheet-surface pointer-events-auto flex max-h-[88dvh] w-full flex-col overflow-hidden rounded-sheet outline-none", SIZES[size] ?? SIZES.md, className)}
+                  initial={layoutId ? undefined : { opacity: 0, scale: 0.94, y: 16 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.96, y: 8, transition: { duration: duration.fast, ease: ease.out } }}
                   transition={spring.sheet}
                 >
                   <div className="flex items-start gap-3 px-5 pt-5 pb-3 sm:px-6">

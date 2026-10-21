@@ -26,7 +26,10 @@ export function getFirebaseAuthErrorMessage(error) {
       return "Open the link we emailed you to confirm your address, then we'll finish creating your account."
     }
     if (error.message === "PHONE_NOT_VERIFIED") {
-      return "Enter the code we sent by SMS to confirm your number."
+      return "Enter the code we sent on WhatsApp to confirm your number."
+    }
+    if (error.message === "PHONE_ALREADY_REGISTERED") {
+      return "This phone number is already registered. Sign in instead."
     }
     if (error.message === "PHONE_MISMATCH") {
       return "That's not the number we verified. Go back and re-verify the number you want on the account."

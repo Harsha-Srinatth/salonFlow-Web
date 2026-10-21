@@ -29,12 +29,12 @@ export function CommandPalette({ open, onOpenChange, groups = [], placeholder = 
       open={open}
       onOpenChange={onOpenChange}
       label="Command palette"
-      overlayClassName="fixed inset-0 z-palette bg-[hsl(var(--scrim))] backdrop-blur-[3px]"
+      overlayClassName="fixed inset-0 z-palette bg-[hsl(var(--scrim))]"
       contentClassName="fixed inset-x-3 top-[max(12vh,calc(1rem+var(--safe-top)))] z-palette mx-auto max-w-xl outline-none"
     >
         <Dialog.Title className="sr-only">Command palette</Dialog.Title>
         <Dialog.Description className="sr-only">Type to search, use the arrow keys to move and Enter to run.</Dialog.Description>
-        <motion.div initial={{ opacity: 0, scale: 0.96, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={spring.sheet} className="glass-strong overflow-hidden rounded-sheet">
+        <motion.div initial={{ opacity: 0, scale: 0.96, y: -8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={spring.sheet} className="sheet-surface overflow-hidden rounded-sheet">
           <div className="flex items-center gap-3 border-b border-border/60 px-4">
             <Search className="size-5 text-ink-neutral" aria-hidden />
             <Command.Input placeholder={placeholder} className="h-14 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-neutral focus-visible:outline-none" />

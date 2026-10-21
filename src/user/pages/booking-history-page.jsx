@@ -51,7 +51,6 @@ export default function UserBookingHistoryPage() {
   const [cancelTarget, setCancelTarget] = useState(null); // { booking, mode: "cancel" | "reschedule" }
   const [removeTarget, setRemoveTarget] = useState(null);
   const [invoiceTarget, setInvoiceTarget] = useState(null);
-  const [nowMs, setNowMs] = useState(Date.now());
   const [loadedOnce, setLoadedOnce] = useState(false);
 
   const [feedbackByBooking, setFeedbackByBooking] = useState({});
@@ -61,11 +60,6 @@ export default function UserBookingHistoryPage() {
   const [reviewIsComplaint, setReviewIsComplaint] = useState(false);
   const [justReviewed, setJustReviewed] = useState(null);
   const reviewedRefs = useRef({});
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const loadFeedback = useCallback(async () => {
     try {
@@ -268,7 +262,6 @@ export default function UserBookingHistoryPage() {
                     key={booking.id}
                     booking={booking}
                     index={index}
-                    nowMs={nowMs}
                     feedback={feedbackByBooking[booking.id]}
                     deleting={deletingBookingId === booking.id}
                     reviewedRef={(el) => (reviewedRefs.current[booking.id] = el)}

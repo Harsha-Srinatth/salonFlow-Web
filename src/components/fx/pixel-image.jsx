@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { ImageGeneration } from "img-fx";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+
+// three.js + img-fx are ~450 KB; load them only when a box is big enough to use the shader.
+const ImageGeneration = lazy(() => import("img-fx").then((m) => ({ default: m.ImageGeneration })));
 import { cn } from "@/lib/utils";
 
 const REVEAL_WATCHDOG_MS = 2500;
@@ -131,9 +133,11 @@ function GlLoader({ src, preset, ready, onDone, onFail }) {
   }).current;
 
   return (
-    <ImageGeneration ref={handle} preset={preset} images={images} onCycle={onCycle} style={{ position: "absolute", inset: 0 }} {...GL_IMAGE_PROPS}>
-      <div style={{ width: "100%", height: "100%" }} />
-    </ImageGeneration>
+    <Suspense fallback={null}>
+      <ImageGeneration ref={handle} preset={preset} images={images} onCycle={onCycle} style={{ position: "absolute", inset: 0 }} {...GL_IMAGE_PROPS}>
+        <div style={{ width: "100%", height: "100%" }} />
+      </ImageGeneration>
+    </Suspense>
   );
 }
 

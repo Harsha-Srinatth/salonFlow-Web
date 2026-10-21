@@ -75,8 +75,8 @@ export const interaction = {
   press: { scale: 0.97, transition: spring.snappy },
   /** Page transitions in portal shells. */
   page: {
-    initial: { opacity: 0, y: 12 },
-    animate: { opacity: 1, y: 0, transition: { ...spring.sheet, opacity: { duration: duration.base, ease: ease.out } } },
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0, transition: { duration: duration.fast, ease: ease.out } },
     exit: { opacity: 0, y: -6, transition: { duration: duration.fast, ease: ease.out } },
   },
 };

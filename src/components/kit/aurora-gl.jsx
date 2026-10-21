@@ -50,9 +50,14 @@ export default function AuroraGL({ className }) {
     const io = new IntersectionObserver(([e]) => (visible = e.isIntersecting));
     io.observe(host);
     let frame = 0;
+    let last = 0;
     const loop = (t) => {
       frame = requestAnimationFrame(loop);
       if (!visible || document.hidden) return;
+      // The aurora drifts slowly; ~30fps is visually identical and halves GPU time, leaving
+      // frame budget for scrolling and the rest of the page.
+      if (t - last < 32) return;
+      last = t;
       program.uniforms.uTime.value = t / 1000;
       renderer.render({ scene: mesh });
     };

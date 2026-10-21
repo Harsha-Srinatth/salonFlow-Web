@@ -29,7 +29,8 @@ export function AuroraBackground({ webgl = false, animated = true, grain = true,
   }, [webgl]);
   return (
     <div aria-hidden className={cn("pointer-events-none absolute inset-0 -z-[1] overflow-hidden", grain && "grain", className)}>
-      <div className={cn("aurora absolute inset-0", animated && "aurora-animated")} />
+      {/* When the shader is running it covers this layer, so don't also animate the CSS blobs under it. */}
+      <div className={cn("aurora absolute inset-0", animated && !gl && "aurora-animated")} />
       {gl ? (
         <Suspense fallback={null}>
           <AuroraGL className="absolute inset-0 size-full opacity-70" />

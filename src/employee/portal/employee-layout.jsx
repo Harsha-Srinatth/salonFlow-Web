@@ -7,6 +7,7 @@ import { staffLogout } from "@/lib/staff-auth-client";
 import { employeeNavItems } from "@/employee/portal/nav-config";
 import { LogOut } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { createShellFrame } from "@/components/kit/shell-frame";
 
 export function EmployeeSignOutButton() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export function EmployeeSignOutButton() {
  * `pageTitle`/`pageSubtitle` names are kept because App.jsx renders `<EmployeeLayout pageTitle="">`
  * as the route fallback.
  */
-export function EmployeeLayout({ pageTitle, pageSubtitle, actions, realtimeConnected, user, children }) {
+function EmployeeShell({ pageTitle, pageSubtitle, actions, realtimeConnected, user, children }) {
   return (
     <PortalShell
       brand={{ name: "Sahasra", tagline: "Stylist floor", href: employeeNavItems[0].href }}
@@ -52,3 +53,9 @@ export function EmployeeLayout({ pageTitle, pageSubtitle, actions, realtimeConne
     </PortalShell>
   );
 }
+
+/**
+ * `EmployeeFrame` is the persistent route layout (App.jsx); pages keep rendering `<EmployeeLayout>`,
+ * which inside the frame only reports its title/state instead of remounting the whole shell.
+ */
+export const { Frame: EmployeeFrame, Layout: EmployeeLayout } = createShellFrame(EmployeeShell);

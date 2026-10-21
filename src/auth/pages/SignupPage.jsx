@@ -339,7 +339,7 @@ export default function SignupPage() {
     setOtpSent(true)
     setOtp("")
     setOtpInvalid(false)
-    toast.success("Code sent by SMS")
+    toast.success("Code sent on WhatsApp")
   }
 
   /** Step 1, email route: creates the sign-in and mails the confirmation link. */
@@ -590,7 +590,7 @@ export default function SignupPage() {
                   </ButtonLoadingMorph>
                 ) : (
                   <motion.div variants={variants.scaleIn} initial="hidden" animate="show" className="space-y-3 rounded-2xl bg-card p-4 ring-1 ring-inset ring-border">
-                    <p className="text-center text-sm font-semibold">Enter the 6-digit code sent to {signupPhone}</p>
+                    <p className="text-center text-sm font-semibold">Enter the 6-digit WhatsApp code sent to {signupPhone}</p>
                     <OtpInput
                       value={otp}
                       onChange={next => {

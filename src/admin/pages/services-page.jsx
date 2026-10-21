@@ -1,11 +1,10 @@
 "use client";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Clock, Eye, EyeOff, Images, Layers, Pencil, Plus, Scissors, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { ButtonLoadingMorph, ErrorState, IconButton, PriceTag, StatCard } from "@/components/kit";
-import { interaction, spring } from "@/components/motion";
 import { EmptyState } from "@/admin/components/empty-state";
 import { FilterTabs } from "@/admin/components/filter-tabs";
 import { ServiceEditorDrawer } from "@/admin/components/service-editor-drawer";
@@ -18,7 +17,7 @@ import { serviceImages } from "@/lib/service-details";
 import { iconForAudience, iconForCategory, iconForService } from "@/lib/service-icons";
 import { serviceImageUrl } from "@/lib/service-image";
 import { cn } from "@/lib/utils";
-import { connectAdminRealtime, disconnectAdminRealtime, fetchAdminServices, updateAdminServiceAsync } from "@/store/admin-portal-slice";
+import { fetchAdminServices, updateAdminServiceAsync } from "@/store/admin-portal-slice";
 import { AdminLayout } from "../portal/admin-layout";
 
 export const AUDIENCE_LABEL = { MEN: "Men", WOMEN: "Women", UNISEX: "Unisex", BOY: "Boy", GIRL: "Girl" };
@@ -52,31 +51,27 @@ function Cover({ service }) {
   );
 }
 
-function ServiceCard({ service, index, onEdit, onToggle }) {
-  const reduce = useReducedMotion();
+const ServiceCard = memo(function ServiceCard({ service, index, onEdit, onToggle }) {
   const photos = serviceImages(service).length;
   const price = Number(service.basePrice ?? 0);
   const member = service.memberPrice == null || service.memberPrice === "" ? null : Number(service.memberPrice);
   const variants = Array.isArray(service.variants) ? service.variants.length : 0;
   const AudienceIcon = iconForAudience(service.gender);
   const CategoryIcon = iconForCategory(service.category);
+  // Plain element + CSS motion: with ~150 services, per-card `layout` springs and blurred chips made
+  // the grid stall whenever a filter, the editor drawer or a toggle re-rendered it.
   return (
-    <motion.article
-      layout={!reduce}
-      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      whileHover={reduce ? undefined : interaction.cardHover}
-      transition={{ ...spring.soft, delay: Math.min(index, 10) * 0.04 }}
-      className={cn("group relative flex flex-col overflow-hidden rounded-card border border-border/60 bg-card shadow-soft transition-shadow hover:shadow-lift", !service.isActive && "opacity-75")}
+    <article
+      style={{ "--enter-delay": `${Math.min(index, 10) * 40}ms` }}
+      className={cn("enter-rise hover-lift cv-auto group relative flex flex-col overflow-hidden rounded-card border border-border/60 bg-card shadow-soft", !service.isActive && "opacity-75")}
     >
-      <button type="button" onClick={onEdit} aria-label={`Edit ${service.name}`} className="relative block aspect-[16/10] w-full overflow-hidden text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-portal">
+      <button type="button" onClick={() => onEdit(service.id)} aria-label={`Edit ${service.name}`} className="relative block aspect-[16/10] w-full overflow-hidden text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-portal">
         <Cover service={service} />
-        <span className="glass-strong absolute top-2 left-2 inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold">
+        <span className="photo-chip absolute top-2 left-2 inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold">
           <CategoryIcon className="size-3.5" aria-hidden /> {categoryOf(service)}
         </span>
         {photos > 1 ? (
-          <span className="glass-strong absolute right-2 bottom-2 inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold">
+          <span className="photo-chip absolute right-2 bottom-2 inline-flex h-7 items-center gap-1 rounded-full px-2.5 text-[11px] font-semibold">
             <Images className="size-3.5" aria-hidden /> {photos}
           </span>
         ) : null}
@@ -104,18 +99,18 @@ function ServiceCard({ service, index, onEdit, onToggle }) {
         </ul>
         <div className="mt-auto flex items-center justify-between border-t border-border/50 pt-3">
           <span className="flex items-center gap-2.5 text-caption font-semibold">
-            <Switch checked={Boolean(service.isActive)} onChange={onToggle} label={service.isActive ? `Hide ${service.name}` : `Show ${service.name}`} />
+            <Switch checked={Boolean(service.isActive)} onChange={() => void onToggle(service)} label={service.isActive ? `Hide ${service.name}` : `Show ${service.name}`} />
             <span className={cn("inline-flex items-center gap-1", service.isActive ? "text-ink-success" : "text-ink-neutral")}>
               {service.isActive ? <Eye className="size-3.5" aria-hidden /> : <EyeOff className="size-3.5" aria-hidden />}
               {service.isActive ? "Live" : "Hidden"}
             </span>
           </span>
-          <IconButton icon={Pencil} label={`Edit ${service.name}`} variant="soft" onClick={onEdit} />
+          <IconButton icon={Pencil} label={`Edit ${service.name}`} variant="soft" onClick={() => onEdit(service.id)} />
         </div>
       </div>
-    </motion.article>
+    </article>
   );
-}
+});
 
 export default function AdminServicesPage() {
   const dispatch = useDispatch();
@@ -142,12 +137,10 @@ export default function AdminServicesPage() {
     if (fetchAdminServices.rejected.match(result)) throw new Error(result.payload);
   };
 
+  // The socket is owned by AdminRealtimeBridge in the frame. Connecting/disconnecting here as well
+  // tore the shared socket down every time you left this tab.
   useEffect(() => {
-    void dispatch(connectAdminRealtime());
     load().catch(() => {});
-    return () => {
-      void dispatch(disconnectAdminRealtime());
-    };
   }, [dispatch]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep links: ?new=1 opens a blank editor, ?edit=<id> opens that service once it has loaded.
@@ -169,21 +162,23 @@ export default function AdminServicesPage() {
     return counts;
   }, [services]);
 
+  // Typing stays responsive: the grid re-filters at lower priority than the input.
+  const deferredSearch = useDeferredValue(searchText);
   const filteredServices = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
+    const query = deferredSearch.trim().toLowerCase();
     return services.filter((service) => {
       if (activeCategory !== "ALL" && categoryOf(service) !== activeCategory) return false;
       if (audience === "KIDS" ? !isKids(service.gender) : audience !== "ALL" && service.gender !== audience) return false;
       if (!query) return true;
       return `${service.name ?? ""} ${service.category ?? ""} ${service.gender ?? ""}`.toLowerCase().includes(query);
     });
-  }, [activeCategory, audience, searchText, services]);
+  }, [activeCategory, audience, deferredSearch, services]);
 
   const editing = editor.serviceId ? services.find((s) => s.id === editor.serviceId) ?? null : null;
   const activeCount = services.filter((s) => s.isActive).length;
   const photoless = services.filter((s) => !serviceImages(s).length).length;
 
-  async function toggleActive(service) {
+  const toggleActive = useCallback(async (service) => {
     const next = !service.isActive;
     const [cover = "", ...gallery] = serviceImages(service);
     const result = await dispatch(
@@ -207,7 +202,8 @@ export default function AdminServicesPage() {
     );
     if (updateAdminServiceAsync.rejected.match(result)) notify.error(result.payload ?? "Could not update service");
     else notify.success(next ? `${service.name} is live` : `${service.name} is hidden`);
-  }
+  }, [dispatch]);
+  const openEditor = useCallback((serviceId) => setEditor({ open: true, serviceId }), []);
 
   const resetFilters = () => {
     setSearchText("");
@@ -270,13 +266,11 @@ export default function AdminServicesPage() {
             onAction={services.length ? resetFilters : () => setEditor({ open: true, serviceId: null })}
           />
         ) : (
-          <motion.div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <AnimatePresence mode="popLayout">
-              {filteredServices.map((service, index) => (
-                <ServiceCard key={service.id} service={service} index={index} onEdit={() => setEditor({ open: true, serviceId: service.id })} onToggle={() => void toggleActive(service)} />
-              ))}
-            </AnimatePresence>
-          </motion.div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredServices.map((service, index) => (
+              <ServiceCard key={service.id} service={service} index={index} onEdit={openEditor} onToggle={toggleActive} />
+            ))}
+          </div>
         )}
       </div>
 

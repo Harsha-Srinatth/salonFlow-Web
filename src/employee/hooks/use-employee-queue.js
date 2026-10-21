@@ -29,10 +29,14 @@ export function useEmployeeQueue({ user, enabled = true }) {
     }
   }, []);
 
+  // Per-second only while a service is running (its elapsed timer is on screen); otherwise the
+  // labels are minute-level, so don't re-render the whole stylist dashboard every second.
+  const hasRunning = queue.some((b) => b.status === "STARTED");
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    setNowMs(Date.now());
+    const timer = window.setInterval(() => setNowMs(Date.now()), hasRunning ? 1000 : 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [hasRunning]);
 
   useEffect(() => {
     if (!enabled || !user) return;

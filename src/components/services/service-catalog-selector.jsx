@@ -1,12 +1,12 @@
 "use client";
 
-import { PixelImage } from "@/components/fx/pixel-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
+import { serviceImageUrl } from "@/lib/service-image";
 import { useMemo, useState } from "react";
 
 function offerSourceLabel(source) {
@@ -65,6 +65,24 @@ function normalizeGender(value) {
  * - onSelectService: (service) => void (single)
  * - label: string
  */
+/**
+ * 56px thumbnail: plain lazy <img> that fades in. A per-thumbnail canvas mosaic animation across
+ * the whole menu made the walk-in service list stutter while scrolling.
+ */
+function ServiceThumb({ src, alt }) {
+  const [ready, setReady] = useState(false);
+  return (
+    <img
+      src={serviceImageUrl(src, 112, 112)}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onLoad={() => setReady(true)}
+      className={`h-full w-full object-cover transition-opacity duration-300 ${ready ? "opacity-100" : "opacity-0"}`}
+    />
+  );
+}
+
 export function ServiceCatalogSelector({
   services,
   mode,
@@ -184,7 +202,7 @@ export function ServiceCatalogSelector({
                 <div className="flex items-start gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted/20">
                     {service.image ? (
-                      <PixelImage src={service.image} alt={service.name} className="h-full w-full" />
+                      <ServiceThumb src={service.image} alt={service.name} />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>
                     )}
@@ -216,7 +234,7 @@ export function ServiceCatalogSelector({
                 <div className="flex flex-1 items-start gap-3">
                   <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border bg-muted/20">
                     {service.image ? (
-                      <PixelImage src={service.image} alt={service.name} className="h-full w-full" />
+                      <ServiceThumb src={service.image} alt={service.name} />
                     ) : (
                       <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">No image</div>
                     )}

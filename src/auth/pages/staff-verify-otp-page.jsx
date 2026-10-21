@@ -11,8 +11,7 @@ import {
   recordOtpSend,
   recordOtpVerifyFailure,
 } from "@/lib/otp-throttle"
-import { confirmStaffFirebasePhoneOtp, sendStaffFirebasePhoneOtp } from "@/lib/auth/auth-client"
-import { verifyStaffPhoneWithFirebaseIdToken } from "@/lib/staff-auth-client"
+import { sendStaffWhatsAppOtp, verifyStaffWhatsAppOtp } from "@/lib/auth/auth-client"
 import { ButtonLoadingMorph } from "@/components/kit/button-loading-morph"
 import { FloatingLabelInput } from "@/components/kit/floating-label-input"
 import { OtpInput } from "@/components/kit/otp-input"
@@ -42,12 +41,12 @@ export default function StaffVerifyOtpPage() {
     setSubmitting(true)
     try {
       assertCanSendOtp("staff", e164)
-      await sendStaffFirebasePhoneOtp(e164)
+      await sendStaffWhatsAppOtp(e164)
       recordOtpSend("staff", e164)
       setSmsSent(true)
-      toast.success("SMS sent — enter the code from Firebase")
+      toast.success("Code sent on WhatsApp")
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send SMS")
+      toast.error(error instanceof Error ? error.message : "Failed to send the code")
     } finally {
       setSubmitting(false)
     }
@@ -57,15 +56,14 @@ export default function StaffVerifyOtpPage() {
     event?.preventDefault()
     const e164 = toE164Phone(phone)
     if (!code.trim() || submitting) {
-      toast.error("Enter the SMS code")
+      toast.error("Enter the code from WhatsApp")
       return
     }
 
     setSubmitting(true)
     try {
       assertOtpVerifyNotLocked("staff", e164)
-      const idToken = await confirmStaffFirebasePhoneOtp(code.trim())
-      const setupToken = await verifyStaffPhoneWithFirebaseIdToken(idToken)
+      const setupToken = await verifyStaffWhatsAppOtp(e164, code.trim())
       clearOtpVerifyGuards("staff", e164)
       window.sessionStorage.setItem(SETUP_TOKEN_KEY, setupToken)
       toast.success("Phone verified — set your password")
@@ -85,7 +83,7 @@ export default function StaffVerifyOtpPage() {
       subtitleLink="/auth/login"
       subtitleLinkLabel="Sign in"
       sideTitle="Staff setup"
-      sideDescription="Use the exact number your admin saved. We'll text you a code."
+      sideDescription="Use the exact number your admin saved. We'll send you a code on WhatsApp."
       sideCards={[
         { icon: ShieldCheck, text: "One-time check" },
         { icon: Smartphone, text: "Same phone as admin record" },
@@ -113,7 +111,7 @@ export default function StaffVerifyOtpPage() {
 
         {smsSent ? (
           <div className="space-y-2">
-            <p className="text-center text-sm text-ink-neutral">Enter the code from the SMS</p>
+            <p className="text-center text-sm text-ink-neutral">Enter the code we sent on WhatsApp</p>
             <OtpInput value={otp} onChange={setOtp} onComplete={code => void handleVerifyFirebase(undefined, code)} disabled={submitting} />
           </div>
         ) : null}

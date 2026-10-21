@@ -58,7 +58,7 @@ export function PortalShell({ brand, nav, tabs, title, subtitle, actions, user, 
       <OfflineBanner />
 
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-nav hidden w-[var(--sidebar-w)] flex-col border-r border-sidebar-border bg-sidebar/80 pl-safe backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-nav hidden w-[var(--sidebar-w)] flex-col border-r border-sidebar-border bg-sidebar pl-safe lg:flex">
         <Link to={brand.href ?? nav[0]?.href ?? "/"} className="flex items-center gap-3 px-5 pt-6 pb-5">
           {brand.logo ?? (
             <span className="flex min-w-0 flex-col gap-1">

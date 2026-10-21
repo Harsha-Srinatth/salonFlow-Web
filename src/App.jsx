@@ -58,6 +58,8 @@ const AdminFrame = lazyLayout(() => import("@/admin/portal/admin-frame"), "Admin
 const EmployeeLayout = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeLayout")
 const ReceptionLayout = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionLayout")
 const UserLayout = lazyLayout(() => import("@/user/portal/user-layout"), "UserLayout")
+const EmployeeFrame = lazyLayout(() => import("@/employee/portal/employee-layout"), "EmployeeFrame")
+const ReceptionFrame = lazyLayout(() => import("@/receptionist/portal/reception-layout"), "ReceptionFrame")
 const UserFrame = lazyLayout(() => import("@/user/portal/user-frame"), "UserFrame")
 
 // Shown inside each portal's own shell, so the sidebar/header stay put while a page chunk loads.
@@ -139,16 +141,20 @@ function App() {
             </Route>
 
             <Route element={<RequireRole roles={["STAFF"]} fallback={employeeFallback} />}>
+             <Route element={<EmployeeFrame />}>
               <Route path="/employee-dashboard" element={<EmployeeDashboardPage />} />
               <Route path="/employee-dashboard/appointments" element={<EmployeeAppointmentsPage />} />
               <Route path="/employee-dashboard/profile" element={<EmployeeProfilePage />} />
+             </Route>
             </Route>
 
             <Route element={<RequireRole roles={["RECEPTIONIST"]} fallback={receptionFallback} />}>
+             <Route element={<ReceptionFrame />}>
               <Route path="/reception-dashboard" element={<ReceptionDashboardPage />} />
               <Route path="/reception-dashboard/walk-in" element={<ReceptionWalkInPage />} />
               <Route path="/reception-dashboard/appointments" element={<ReceptionAppointmentsPage />} />
               <Route path="/reception-dashboard/profile" element={<ReceptionProfilePage />} />
+             </Route>
             </Route>
 
             <Route element={<RequireRole roles={["USER"]} fallback={userFallback} />}>

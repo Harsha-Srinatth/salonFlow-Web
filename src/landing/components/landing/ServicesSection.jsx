@@ -105,7 +105,7 @@ export default function ServicesSection({ items = SERVICE_CATEGORIES }) {
         const tween = gsap.to(track, {
           x: () => -distance(),
           ease: "none",
-          scrollTrigger: { trigger: pinRef.current, start: "top top", end: () => `+=${distance()}`, pin: true, scrub: 0.8, invalidateOnRefresh: true },
+          scrollTrigger: { trigger: pinRef.current, start: "top top", end: () => `+=${distance()}`, pin: true, scrub: 0.35, anticipatePin: 1, invalidateOnRefresh: true },
         });
         requestAnimationFrame(() => ScrollTrigger.refresh());
         return () => {

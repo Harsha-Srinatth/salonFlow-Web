@@ -128,7 +128,7 @@ export default function LoginPage() {
       await sendPhoneOtp(e164)
       recordOtpSend("customer", e164)
       setOtpSent(true)
-      toast.success("OTP sent to your phone")
+      toast.success("Code sent on WhatsApp")
     } catch (error) {
       toast.error(getFirebaseAuthErrorMessage(error))
     } finally {
@@ -153,6 +153,9 @@ export default function LoginPage() {
       const result = await verifyPhoneOtp(code.trim())
       clearOtpVerifyGuards("customer", e164)
       if (result.appUser?.role) {
+        // The session is an HTTP-only cookie now (no Firebase user), so the auth
+        // context has to re-read /me before the dashboard guard looks at it.
+        await refresh()
         toast.success("Phone verified and signed in")
         navigate(getDashboardPathByRole(result.appUser.role), { replace: true })
       } else {
@@ -290,7 +293,7 @@ export default function LoginPage() {
             ) : (
               <>
                 <p className="text-center text-sm text-ink-neutral">
-                  Code sent to <span className="font-semibold text-foreground tabular-nums">+91 {phone}</span>
+                  WhatsApp code sent to <span className="font-semibold text-foreground tabular-nums">+91 {phone}</span>
                 </p>
                 <OtpInput
                   value={otp}

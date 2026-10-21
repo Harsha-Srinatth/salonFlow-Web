@@ -7,7 +7,7 @@ import { serviceImageUrl } from "@/lib/service-image";
 import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { iconForCategory } from "@/lib/service-icons";
 import { cn } from "@/lib/utils";
-import { haptic, interaction, spring } from "@/components/motion/presets";
+import { haptic, spring } from "@/components/motion/presets";
 import { SkeletonShimmer } from "@/components/motion/skeleton-shimmer";
 import { EmptyState } from "@/components/kit/empty-state";
 import { UserCartToggle } from "@/components/kit-extra/user-cart-toggle";
@@ -96,18 +96,14 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
   const image = service.image ?? service.images?.[0];
 
   return (
-    <motion.li
-      layout={!reduce}
-      initial={reduce ? false : { opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ ...spring.soft, delay: reduce ? 0 : Math.min(index, 10) * 0.035 }}
-      className="min-w-0 [contain-intrinsic-size:auto_300px] [content-visibility:auto]"
-    >
+    // Entrance + hover run in CSS (compositor only). No `layout` on the list item: measuring every
+    // card on each filter/toggle render is what made the catalog stall. The layoutId stays so the
+    // card still morphs into the details dialog when opened.
+    <li style={{ "--enter-delay": `${Math.min(index, 10) * 35}ms` }} className="enter-rise min-w-0 [contain-intrinsic-size:auto_300px] [content-visibility:auto]">
+      <div className="hover-lift h-full rounded-[24px]">
       <motion.div
         layoutId={reduce ? undefined : `service-card-${service.id}`}
         style={{ visibility: hidden ? "hidden" : "visible", borderRadius: 24 }}
-        whileHover={reduce ? undefined : interaction.cardHover}
         className={cn(
           "group relative flex h-full flex-col overflow-hidden bg-card shadow-soft ring-1 ring-inset transition-shadow hover:shadow-lift",
           selected ? "ring-2 ring-portal shadow-glow" : "ring-border/60"
@@ -131,7 +127,7 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
                 className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
             ) : (
-              <span className="aurora grid size-full place-items-center text-portal">
+              <span className="grid size-full place-items-center bg-gradient-to-br from-portal/16 via-muted to-accent/14 text-portal">
                 <Icon className="relative z-[2] size-10 opacity-80" aria-hidden />
               </span>
             )}
@@ -144,7 +140,7 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
                 <Images className="size-3" aria-hidden /> {photoCount}
               </span>
             ) : null}
-            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-micro font-semibold text-white backdrop-blur-sm">
+            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-micro font-semibold text-white">
               <Clock className="size-3" aria-hidden /> {view.duration} min
             </span>
           </span>
@@ -175,7 +171,8 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
         ) : null}
         <UserCartToggle added={selected} onChange={(next) => onToggle(service.id, next)} label={service.name} className={cn("absolute right-3", variants.length ? "bottom-[3.25rem]" : "bottom-3")} />
       </motion.div>
-    </motion.li>
+      </div>
+    </li>
   );
 });
 
@@ -334,7 +331,6 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
         </ul>
       ) : visible.length ? (
         <ul className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 2xl:grid-cols-4">
-          <AnimatePresence initial={false} mode="popLayout">
             {visible.map((service, index) => (
               <ServiceCard
                 key={service.id}
@@ -350,7 +346,6 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
                 onOpenDetails={onOpenDetails}
               />
             ))}
-          </AnimatePresence>
         </ul>
       ) : (
         <EmptyState

@@ -1,9 +1,8 @@
 import { firebaseAuth, googleProvider } from "@/lib/firebase/client";
-import { withFreshRecaptcha } from "@/lib/firebase/recaptcha";
 import { toApiUrl } from "@/lib/api-base";
 import { clearBrowserSessionState, clearServerSessions, handleUnauthorizedStatus } from "@/lib/auth/session-manager";
 import { getDeviceId } from "@/lib/device-id";
-import { createUserWithEmailAndPassword, linkWithPhoneNumber, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPhoneNumber, signInWithPopup, signOut, } from "firebase/auth";
+import { createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, } from "firebase/auth";
 const PENDING_SIGNUP_ROLE_KEY = "pending_signup_role";
 const PENDING_SIGNUP_PHONE_KEY = "pending_signup_phone";
 const PENDING_SIGNUP_NAME_KEY = "pending_signup_name";
@@ -11,9 +10,8 @@ const PENDING_SIGNUP_GENDER_KEY = "pending_signup_gender";
 const PENDING_SIGNUP_REFERRAL_KEY = "pending_signup_referral";
 const PENDING_VERIFIED_PHONE_KEY = "pending_verified_phone";
 const SIGNUP_IN_PROGRESS_KEY = "signup_in_progress";
-let phoneConfirmationResult = null;
-let staffPhoneConfirmationResult = null;
-let signupPhoneConfirmationResult = null;
+const PENDING_PHONE_PROOF_KEY = "pending_phone_proof";
+const PENDING_PHONE_PROOF_PHONE_KEY = "pending_phone_proof_phone";
 /**
  * Whether a signup is mid-verification in this tab.
  *
@@ -272,6 +270,7 @@ export async function syncSessionWithBackend(options = {}) {
         ? window.sessionStorage.getItem(PENDING_SIGNUP_REFERRAL_KEY)
         : null;
     const phoneForSync = pendingPhone ?? pendingSignupPhone;
+    const pendingPhoneProof = readPhoneProof();
     const deviceId = getDeviceId();
     const response = await fetch(toApiUrl("/api/auth/session"), {
         method: "POST",
@@ -290,6 +289,8 @@ export async function syncSessionWithBackend(options = {}) {
         body: JSON.stringify({
             ...(pendingSignupGender ? { gender: pendingSignupGender } : {}),
             ...(options.password ? { password: options.password } : {}),
+            // Single-use WhatsApp phone proof; only read by the server on registration.
+            ...(pendingPhoneProof ? { phoneProof: pendingPhoneProof } : {}),
         }),
     });
     if (response.status === 429) {
@@ -353,100 +354,128 @@ export function setPendingSignupReferralCode(code) {
     if (!normalized) return;
     window.sessionStorage.setItem(PENDING_SIGNUP_REFERRAL_KEY, normalized);
 }
+// ---------------------------------------------------------------------------
+// Phone verification by WhatsApp OTP (the backend sends the code from the salon's
+// WhatsApp Business number). Replaces Firebase SMS: no reCAPTCHA, no Firebase phone
+// credential. Login gets an HTTP-only app cookie; signup gets a single-use proof that
+// registration (`/api/auth/session`) spends.
+
+/** Server codes the pages branch on; everything else surfaces the server's own message. */
+const PASSTHROUGH_OTP_CODES = new Set(["ACCOUNT_NOT_FOUND", "PHONE_ALREADY_REGISTERED", "PHONE_NOT_VERIFIED"]);
+let pendingLoginPhone = null;
+let pendingSignupOtpPhone = null;
+function otpError(data, fallback) {
+    const code = typeof data?.error === "string" ? data.error : "";
+    const error = new Error(PASSTHROUGH_OTP_CODES.has(code) ? code : data?.message ?? (code || fallback));
+    error.code = code ? `whatsapp/${code}` : "whatsapp/error";
+    if (data?.retryAfterSeconds)
+        error.retryAfterSeconds = data.retryAfterSeconds;
+    if (data?.attemptsRemaining !== undefined)
+        error.attemptsRemaining = data.attemptsRemaining;
+    return error;
+}
+async function postOtp(path, body) {
+    const response = await fetch(toApiUrl(path), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok)
+        throw otpError(data, "Verification failed");
+    return data;
+}
+function readPhoneProof(phone) {
+    if (typeof window === "undefined")
+        return null;
+    const storedPhone = window.sessionStorage.getItem(PENDING_PHONE_PROOF_PHONE_KEY);
+    const proof = window.sessionStorage.getItem(PENDING_PHONE_PROOF_KEY);
+    if (!proof || (phone && storedPhone !== phone))
+        return null;
+    return proof;
+}
+function clearPhoneProof() {
+    if (typeof window === "undefined")
+        return;
+    window.sessionStorage.removeItem(PENDING_PHONE_PROOF_KEY);
+    window.sessionStorage.removeItem(PENDING_PHONE_PROOF_PHONE_KEY);
+}
+/** Login "Phone OTP" tab: sends the code on WhatsApp (only to a number with an account). */
 export async function sendPhoneOtp(phone) {
-    phoneConfirmationResult = await withFreshRecaptcha(verifier => signInWithPhoneNumber(firebaseAuth, phone, verifier));
+    const data = await postOtp("/api/auth/whatsapp-otp/request", { phone, purpose: "LOGIN" });
+    pendingLoginPhone = data.phone ?? phone;
+    return data;
 }
-/** Firebase SMS for staff onboarding. */
-export async function sendStaffFirebasePhoneOtp(phone) {
-    staffPhoneConfirmationResult = await withFreshRecaptcha(verifier => signInWithPhoneNumber(firebaseAuth, phone, verifier));
-}
-export async function confirmStaffFirebasePhoneOtp(code) {
-    if (!staffPhoneConfirmationResult) {
-        throw new Error("SMS code not requested yet");
-    }
-    const credential = await staffPhoneConfirmationResult.confirm(code);
-    const idToken = await credential.user.getIdToken(true);
-    staffPhoneConfirmationResult = null;
-    await signOut(firebaseAuth);
-    return idToken;
-}
+/** Confirms the login code; the server sets the app session cookie. */
 export async function verifyPhoneOtp(code) {
-    if (!phoneConfirmationResult) {
+    if (!pendingLoginPhone) {
         throw new Error("OTP not requested yet");
     }
-    const credential = await phoneConfirmationResult.confirm(code);
-    const normalizedPhone = credential.user.phoneNumber;
-    if (!normalizedPhone) {
-        throw new Error("Phone number is missing from verified user");
-    }
-    if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(PENDING_VERIFIED_PHONE_KEY, normalizedPhone);
-    }
-    const syncedUser = await syncSessionWithBackend();
-    return { firebaseUser: credential.user, appUser: syncedUser };
+    const data = await postOtp("/api/auth/whatsapp-otp/verify", { phone: pendingLoginPhone, purpose: "LOGIN", code });
+    pendingLoginPhone = null;
+    // A stale Firebase session (e.g. an earlier Google sign-in) must not shadow the cookie.
+    await signOut(firebaseAuth).catch(() => undefined);
+    return { firebaseUser: null, appUser: data.user ?? null };
+}
+/** Staff onboarding: code on WhatsApp to the number on the staff record. */
+export async function sendStaffWhatsAppOtp(phone) {
+    return postOtp("/api/auth/staff/whatsapp-otp/request", { phone });
+}
+/** Staff onboarding: exchanges the code for the short-lived password-setup token. */
+export async function verifyStaffWhatsAppOtp(phone, code) {
+    const data = await postOtp("/api/auth/staff/whatsapp-otp/verify", { phone, code });
+    if (!data.setupToken)
+        throw new Error("Invalid server response");
+    return data.setupToken;
 }
 /**
- * Signup phone verification: links the phone number to the *already signed-in* Firebase user
- * (created via email/password or Google) instead of creating a second, separate credential.
- * Keeps signup on the same real-SMS-verification standard as the login "Phone OTP" tab.
+ * Signup phone verification on WhatsApp.
  *
- * Returns `"already-verified"` when this user has the number attached already, which
- * happens whenever someone re-enters the verification step after confirming the SMS —
- * a reload, or a second pass while waiting on the email. Firebase answers that with
- * `auth/provider-already-linked`, and treating it as an error stranded people at a
- * step they had in fact finished.
+ * Returns `"already-verified"` when this tab already holds a proof for this number
+ * (a reload, or a second pass while waiting on the email), so the customer is not
+ * sent a second code for a step they finished.
  *
  * @param {string} phone E.164
  * @returns {Promise<"sent" | "already-verified">}
  */
 export async function sendSignupPhoneOtp(phone) {
-    const user = firebaseAuth.currentUser;
-    if (!user) {
-        throw new Error("Create your account first, then verify your phone.");
-    }
-    if (user.phoneNumber === phone)
+    if (readPhoneProof(phone))
         return "already-verified";
-    try {
-        signupPhoneConfirmationResult = await withFreshRecaptcha(verifier => linkWithPhoneNumber(user, phone, verifier));
-        return "sent";
-    }
-    catch (error) {
-        if (error?.code === "auth/provider-already-linked")
-            return "already-verified";
-        throw error;
-    }
+    const data = await postOtp("/api/auth/whatsapp-otp/request", { phone, purpose: "SIGNUP" });
+    pendingSignupOtpPhone = data.phone ?? phone;
+    return "sent";
 }
 /**
- * Confirms the signup SMS code and links the number, without registering yet.
- * Registration is deliberately a separate step (`completeVerifiedSignup`) because
- * it may only run once the email is confirmed too, and the two factors finish in
- * whichever order the customer happens to complete them.
+ * Confirms the signup code and keeps the server's proof for registration, without
+ * registering yet: registration also needs the confirmed email, and the two factors
+ * finish in whichever order the customer completes them.
  *
  * @param {string} code
- * @returns {Promise<string>} the E.164 number Firebase confirmed
+ * @returns {Promise<string>} the E.164 number that was verified
  */
 export async function verifySignupPhoneOtp(code) {
-    if (!signupPhoneConfirmationResult) {
+    if (!pendingSignupOtpPhone) {
         throw new Error("OTP not requested yet");
     }
-    const result = await signupPhoneConfirmationResult.confirm(code);
-    signupPhoneConfirmationResult = null;
-    const normalizedPhone = result.user.phoneNumber;
-    if (!normalizedPhone) {
-        throw new Error("Phone number is missing from verified user");
+    const data = await postOtp("/api/auth/whatsapp-otp/verify", { phone: pendingSignupOtpPhone, purpose: "SIGNUP", code });
+    pendingSignupOtpPhone = null;
+    if (!data.phoneProof || !data.phone) {
+        throw new Error("Invalid server response");
     }
     if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(PENDING_VERIFIED_PHONE_KEY, normalizedPhone);
+        window.sessionStorage.setItem(PENDING_PHONE_PROOF_KEY, data.phoneProof);
+        window.sessionStorage.setItem(PENDING_PHONE_PROOF_PHONE_KEY, data.phone);
+        window.sessionStorage.setItem(PENDING_VERIFIED_PHONE_KEY, data.phone);
     }
-    return normalizedPhone;
+    return data.phone;
 }
 /**
  * Creates the app account, once and only once both factors are confirmed.
  *
- * The server re-checks both from the ID token's own claims and refuses the
- * registration otherwise, so this is the convenient path rather than the
- * enforcement — the guarantee lives in `describeRegistrationVerificationFailure`
- * on the backend.
+ * The server re-checks both — the email from the Firebase ID token's own claims, the
+ * phone from the WhatsApp proof — and refuses the registration otherwise, so this is
+ * the convenient path rather than the enforcement.
  *
  * @param {string} [signupPassword] persisted as the app login password
  * @returns {Promise<object>} the created app user
@@ -456,14 +485,25 @@ export async function completeVerifiedSignup(signupPassword) {
     if (!user)
         throw new Error("Your signup session expired. Please start again.");
     await user.reload();
-    if (!user.phoneNumber)
+    const proofPhone = typeof window !== "undefined" ? window.sessionStorage.getItem(PENDING_PHONE_PROOF_PHONE_KEY) : null;
+    if (!readPhoneProof() && !user.phoneNumber)
         throw new Error("PHONE_NOT_VERIFIED");
     if (!user.emailVerified)
         throw new Error("EMAIL_NOT_VERIFIED");
     if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(PENDING_VERIFIED_PHONE_KEY, user.phoneNumber);
+        window.sessionStorage.setItem(PENDING_VERIFIED_PHONE_KEY, proofPhone ?? user.phoneNumber);
     }
-    const appUser = await syncSessionWithBackend({ password: signupPassword });
+    let appUser;
+    try {
+        appUser = await syncSessionWithBackend({ password: signupPassword });
+    }
+    catch (error) {
+        // An expired or already-spent proof cannot be retried: make the page ask again.
+        if (error instanceof Error && error.message === "PHONE_NOT_VERIFIED")
+            clearPhoneProof();
+        throw error;
+    }
+    clearPhoneProof();
     // Only after the row exists: clearing earlier would let `AuthProvider` race
     // this call with a sync of its own against an account still being created.
     markSignupInProgress(false);

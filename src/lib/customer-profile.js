@@ -54,3 +54,36 @@ export function calculateAge(dateOfBirth) {
   if (today.slice(5) < dob.slice(5)) age -= 1;
   return age >= 0 ? age : null;
 }
+
+async function customerFetch(path, init = {}) {
+  const token = await getFirebaseIdToken().catch(() => null);
+  const res = await fetch(toApiUrl(path), {
+    ...init,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? "Request failed");
+  return data;
+}
+
+/**
+ * Whether the customer receives offers on WhatsApp. Booking confirmations and
+ * reminders are not affected by this setting.
+ *
+ * @returns {Promise<{ marketingOptIn: boolean, optedOutAt: string | null }>}
+ */
+export function getWhatsAppPreferences() {
+  return customerFetch("/api/customer/whatsapp-preferences");
+}
+
+/** @param {boolean} marketingOptIn */
+export function setWhatsAppOffersOptIn(marketingOptIn) {
+  return customerFetch("/api/customer/whatsapp-preferences", {
+    method: "PUT",
+    body: JSON.stringify({ marketingOptIn }),
+  });
+}

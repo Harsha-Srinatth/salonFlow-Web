@@ -33,7 +33,9 @@ function FloatingChip({ className, delay = 0, children, glass = false }) {
       <motion.div
         animate={reduce ? undefined : { y: [0, -8, 0] }}
         transition={{ duration: 4 + delay * 2, repeat: Infinity, ease: [0.45, 0, 0.55, 1] }}
-        className={cn("flex items-center gap-3 rounded-2xl px-4 py-3", glass ? "glass-surface" : "border border-border/70 bg-card shadow-lift")}
+        // A backdrop-filter on an element that moves forever re-blurs every frame, so the "glass" chip
+        // is a translucent solid with the glass border/highlight instead.
+        className={cn("flex items-center gap-3 rounded-2xl px-4 py-3", glass ? "border border-[hsl(var(--glass-border))] bg-card/90 shadow-lift" : "border border-border/70 bg-card shadow-lift")}
       >
         {children}
       </motion.div>
@@ -152,7 +154,7 @@ export default function HeroSection() {
             initial={reduce ? false : "hidden"}
             animate="show"
             variants={variants.fadeUp}
-            className="glass-surface inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-caption font-semibold"
+            className="inline-flex h-9 items-center gap-2 rounded-full border border-[hsl(var(--glass-border))] bg-card/85 px-3.5 text-caption font-semibold shadow-soft"
           >
             <Sparkles className="size-4 text-ink-primary" aria-hidden /> Unisex &amp; family salon
           </motion.p>

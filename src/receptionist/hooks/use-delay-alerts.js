@@ -9,7 +9,9 @@ export function useDelayAlerts(bookings = []) {
   const alertedRef = useRef(new Set());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    // Labels and the 10-minute overtime check are minute-level; a 1s tick re-rendered the whole
+    // reception board (and re-measured every card's layout animation) every second.
+    const timer = window.setInterval(() => setNowMs(Date.now()), 15_000);
     return () => window.clearInterval(timer);
   }, []);
 

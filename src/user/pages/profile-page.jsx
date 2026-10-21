@@ -1,13 +1,13 @@
 "use client";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
-import { Cake, Check, ChevronRight, Crown, Gift, LogOut, Mail, Moon, Pencil, Phone, Sun, User, UserRound, X } from "lucide-react";
+import { Cake, Check, ChevronRight, Crown, Gift, LogOut, Mail, MessageCircle, Moon, Pencil, Phone, Sun, User, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useAppThemeToggle } from "@/components/theme-provider";
 import { Avatar, BrandLoader, ButtonLoadingMorph, FloatingLabelInput, useAsyncAction } from "@/components/kit";
 import { haptic, spring } from "@/components/motion/presets";
-import { calculateAge, updateCustomerProfile } from "@/lib/customer-profile";
+import { calculateAge, getWhatsAppPreferences, setWhatsAppOffersOptIn, updateCustomerProfile } from "@/lib/customer-profile";
 import { formatPhone } from "@/lib/format";
 import { formatIsoDate } from "@/lib/salon-date";
 import { notify } from "@/lib/notify";
@@ -96,6 +96,14 @@ function InfoRow({ icon: Icon, label, children }) {
   );
 }
 
+function ToggleKnob({ on, reduce }) {
+  return (
+    <span className={cn("flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition-colors", on ? "bg-portal" : "bg-muted-foreground/30")} aria-hidden>
+      <motion.span layout={!reduce} transition={spring.snappy} className={cn("size-6 rounded-full bg-white shadow-soft", on && "ml-auto")} />
+    </span>
+  );
+}
+
 function SettingRow({ icon: Icon, label, onClick, to, trailing, tone }) {
   const cls = cn("flex h-14 w-full items-center gap-3 rounded-2xl px-3 text-left text-sm font-semibold transition-colors hover:bg-muted", tone === "danger" && "text-ink-destructive hover:bg-destructive/10");
   const inner = (
@@ -128,6 +136,35 @@ export default function UserProfilePage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: "", gender: "", dateOfBirth: "" });
   const save = useAsyncAction({ successMs: 700 });
+  // WhatsApp offers consent: null until loaded, never assumed "on".
+  const [offersOptIn, setOffersOptIn] = useState(null);
+  const [savingOffers, setSavingOffers] = useState(false);
+
+  useEffect(() => {
+    if (!appUser?.id) return;
+    let cancelled = false;
+    getWhatsAppPreferences()
+      .then((pref) => !cancelled && setOffersOptIn(Boolean(pref.marketingOptIn)))
+      .catch(() => !cancelled && setOffersOptIn(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [appUser?.id]);
+
+  async function toggleOffers() {
+    if (offersOptIn === null || savingOffers) return;
+    const next = !offersOptIn;
+    setSavingOffers(true);
+    try {
+      const pref = await setWhatsAppOffersOptIn(next);
+      setOffersOptIn(Boolean(pref.marketingOptIn));
+      notify.success(next ? "You'll get offers on WhatsApp" : "WhatsApp offers turned off");
+    } catch (error) {
+      notify.error("Couldn't update WhatsApp offers", { description: error.message });
+    } finally {
+      setSavingOffers(false);
+    }
+  }
 
   // Re-seed the draft whenever the editor opens or the saved profile changes.
   useEffect(() => {
@@ -281,6 +318,12 @@ export default function UserProfilePage() {
                 <motion.span layout={!reduce} transition={spring.snappy} className={cn("size-6 rounded-full bg-white shadow-soft", isDark && "ml-auto")} />
               </span>
             }
+          />
+          <SettingRow
+            icon={MessageCircle}
+            label="Offers on WhatsApp"
+            onClick={toggleOffers}
+            trailing={<ToggleKnob on={Boolean(offersOptIn)} reduce={reduce} />}
           />
           <SettingRow icon={Gift} label="Invite a friend" onClick={openInvite} />
           <SettingRow icon={Crown} label="Membership" to="/user-dashboard/membership" />

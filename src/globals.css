@@ -350,13 +350,20 @@
   }
 
   body {
-    @apply min-h-screen bg-background font-sans text-foreground antialiased;
-    background-image: linear-gradient(
-      135deg,
-      hsl(var(--background)) 0%,
-      hsl(var(--secondary)) 100%
-    );
-    background-attachment: fixed;
+    /* No body background: html paints the base colour and body::before the gradient on top of it. */
+    @apply min-h-screen font-sans text-foreground antialiased;
+  }
+
+  /* The page gradient lives on its own fixed, composited layer. `background-attachment: fixed`
+     on body forced a full-viewport repaint on every scroll frame (the main source of scroll jank). */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--secondary)) 100%);
+    transform: translateZ(0);
   }
 
   h1,
@@ -630,15 +637,15 @@
   background: hsl(var(--glass-bg) / var(--glass-alpha));
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--shadow-soft), inset 0 1px 0 hsl(var(--glass-highlight));
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 @utility glass-strong {
   background: hsl(var(--glass-bg) / calc(var(--glass-alpha) + 0.2));
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--shadow-float), inset 0 1px 0 hsl(var(--glass-highlight));
-  -webkit-backdrop-filter: blur(24px) saturate(1.5);
-  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
 }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass-surface, .glass-strong { background: hsl(var(--card)); }
@@ -673,10 +680,11 @@
     pointer-events: none;
     opacity: var(--aurora-opacity);
     background:
-      radial-gradient(40% 35% at 20% 25%, hsl(var(--aurora-1)) 0%, transparent 70%),
-      radial-gradient(35% 30% at 80% 20%, hsl(var(--aurora-2)) 0%, transparent 70%),
-      radial-gradient(45% 40% at 60% 85%, hsl(var(--aurora-3)) 0%, transparent 70%);
-    filter: blur(40px);
+      radial-gradient(48% 42% at 20% 25%, hsl(var(--aurora-1)) 0%, hsl(var(--aurora-1) / 0.45) 35%, transparent 78%),
+      radial-gradient(42% 38% at 80% 20%, hsl(var(--aurora-2)) 0%, hsl(var(--aurora-2) / 0.45) 35%, transparent 78%),
+      radial-gradient(54% 48% at 60% 85%, hsl(var(--aurora-3)) 0%, hsl(var(--aurora-3) / 0.45) 35%, transparent 78%);
+    /* No filter: blur() here — the wide gradient falloff gives the same softness without an
+       offscreen blur pass on every repaint of every card that uses it. */
   }
 }
 @utility aurora-animated {
@@ -798,8 +806,8 @@
   background: hsl(var(--glass-bg) / calc(var(--glass-alpha) + 0.22));
   border: 1px solid hsl(var(--glass-border));
   box-shadow: var(--shadow-float), inset 0 1px 0 hsl(var(--glass-highlight));
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   overflow: hidden;
   font-family: var(--font-sans);
 }
@@ -915,4 +923,51 @@
   .kit-dot { animation: kit-pulse-soft 1.4s ease-in-out infinite; transform: none; }
   .kit-loader-reduced { animation: kit-pulse-soft 1.6s ease-in-out infinite; }
   .kit-ripple { display: none; }
+}
+
+/* Long card/row lists: the browser skips layout + paint for items outside the viewport.
+   `auto` remembers each item's real size after first render so the scrollbar doesn't jump. */
+@utility cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}
+@utility cv-auto-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
+}
+
+/* Solid chip for labels sitting on photos inside lists (a blurred chip per card is too costly). */
+@utility photo-chip {
+  background: hsl(var(--card) / 0.92);
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--shadow-soft);
+}
+
+/* Compositor-only motion for lists (transform + opacity, no layout measuring, no JS per frame).
+   enter-rise: set --enter-delay inline for a stagger. `backwards` fill so the animation never pins
+   transform afterwards and hover-lift can still move the card. */
+@keyframes kit-rise {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@utility enter-rise {
+  animation: kit-rise 420ms var(--ease-out-expo) backwards;
+  animation-delay: var(--enter-delay, 0ms);
+}
+@utility hover-lift {
+  transition: transform 280ms var(--ease-spring), box-shadow 280ms var(--ease-out-expo);
+  &:hover { transform: translate3d(0, -4px, 0); box-shadow: var(--shadow-lift); }
+  &:active { transform: translate3d(0, -1px, 0) scale(0.99); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .enter-rise { animation: none; }
+  .hover-lift, .hover-lift:hover, .hover-lift:active { transform: none; }
+}
+
+/* Modal / sheet surface. Solid on purpose: the scrim already separates it from the page, and a
+   backdrop-filter on a large surface that springs in re-blurs the whole page every frame. */
+@utility sheet-surface {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--glass-border));
+  box-shadow: var(--shadow-float), inset 0 1px 0 hsl(var(--glass-highlight));
 }

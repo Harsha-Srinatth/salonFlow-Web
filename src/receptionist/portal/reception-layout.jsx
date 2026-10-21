@@ -15,6 +15,7 @@ import { CalendarSearch, CreditCard, LogOut, Search, UserPlus } from "lucide-rea
 import { useMemo } from "react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
+import { createShellFrame } from "@/components/kit/shell-frame";
 
 export function ReceptionSignOutButton() {
   const navigate = useNavigate();
@@ -38,7 +39,7 @@ export function ReceptionSignOutButton() {
  * `pageTitle`/`pageSubtitle` names are kept because App.jsx renders `<ReceptionLayout pageTitle="">`
  * as the route fallback.
  */
-export function ReceptionLayout({ pageTitle, pageSubtitle, actions, realtimeConnected, user, hideFab = false, children }) {
+function ReceptionShell({ pageTitle, pageSubtitle, actions, realtimeConnected, user, hideFab = false, children }) {
   const navigate = useNavigate();
   const bookings = useSelector((state) => state.receptionBookings?.bookings ?? []);
 
@@ -101,3 +102,9 @@ export function ReceptionLayout({ pageTitle, pageSubtitle, actions, realtimeConn
     </PortalShell>
   );
 }
+
+/**
+ * `ReceptionFrame` is the persistent route layout (App.jsx); pages keep rendering `<ReceptionLayout>`,
+ * which inside the frame only reports its title/state instead of remounting the whole shell.
+ */
+export const { Frame: ReceptionFrame, Layout: ReceptionLayout } = createShellFrame(ReceptionShell);
