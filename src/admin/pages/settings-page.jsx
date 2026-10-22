@@ -11,6 +11,7 @@ import { SkeletonCard, SkeletonText, spring } from "@/components/motion";
 import { dateTimeOf } from "@/admin/lib/safe-format";
 import { useUnsavedGuard } from "@/admin/lib/use-unsaved-guard";
 import { AdminInsightsPanel } from "@/admin/components/admin-insights-panel";
+import { Switch } from "@/admin/components/switch";
 import { apiJson } from "@/lib/api-json";
 import { cn } from "@/lib/utils";
 import { AdminLayout } from "../portal/admin-layout";
@@ -40,6 +41,7 @@ const EMPTY_PROFILE = {
   lateArrivalPolicy: "",
   generalPolicy: "",
   faq: [],
+  hours: { opensAt: "08:00", closesAt: "23:00", lunchFrom: "13:00", lunchTo: "13:30" },
 };
 
 const FIELD_LABELS = {
@@ -55,6 +57,7 @@ const SECTIONS = [
   { id: "business", label: "Business", icon: Store, keys: ["businessName", "tagline", "about"] },
   { id: "contact", label: "Contact", icon: Mail, keys: ["phone", "supportEmail"] },
   { id: "location", label: "Location", icon: MapPin, keys: ["addressLine1", "city", "postalCode", "mapsUrl"] },
+  { id: "hours", label: "Hours", icon: Clock, keys: [], custom: "hours" },
   { id: "salons", label: "Salons", icon: Building2, keys: [], custom: "salons" },
   { id: "online", label: "Online", icon: Globe, keys: ["website", "instagram", "privacyUrl", "termsUrl"] },
   { id: "policies", label: "Policies", icon: ScrollText, keys: ["paymentPolicy", "lateArrivalPolicy"] },
@@ -67,6 +70,9 @@ function buildSalonAddress(form) {
     .map((value) => `${value ?? ""}`.trim())
     .filter(Boolean)
     .join(", ");
+}
+function minutesToHhmm(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 
@@ -81,7 +87,55 @@ function validateProfile(p) {
   if (!isEmail(p.supportEmail)) errors.supportEmail = "Check the email";
   if (!isPhone(p.phone)) errors.phone = "At least 10 digits";
   if (!isPhone(p.whatsapp)) errors.whatsapp = "At least 10 digits";
+  const h = p.hours ?? {};
+  const open = toMinutes(h.opensAt);
+  const close = toMinutes(h.closesAt);
+  if (open === null) errors.opensAt = "Set a time";
+  if (close === null) errors.closesAt = "Set a time";
+  else if (open !== null && close - open < 60) errors.closesAt = "At least an hour after opening";
+  if (h.lunchFrom || h.lunchTo) {
+    const from = toMinutes(h.lunchFrom);
+    const to = toMinutes(h.lunchTo);
+    if (from === null || to === null) errors.lunch = "Set both lunch times";
+    else if (to <= from) errors.lunch = "Lunch must end after it starts";
+    else if (open !== null && close !== null && (from < open || to > close)) errors.lunch = "Lunch must be inside opening hours";
+  }
   return errors;
+}
+
+function toMinutes(value) {
+  const match = /^(\d{2}):(\d{2})$/.exec(`${value ?? ""}`.trim());
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+}
+
+function timeLabel(value) {
+  const minutes = toMinutes(value);
+  if (minutes === null) return "—";
+  const h = Math.floor(minutes / 60);
+  return `${h % 12 || 12}:${String(minutes % 60).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+}
+
+/** Native time input (good wheel picker on phones) styled like the kit's fields. */
+function TimeField({ id, label, value, onChange, error, disabled }) {
+  return (
+    <label htmlFor={id} className={cn("block min-w-0", disabled && "opacity-50")}>
+      <span className="mb-1 block text-caption font-semibold text-ink-neutral">{label}</span>
+      <input
+        id={id}
+        type="time"
+        step={900}
+        value={value ?? ""}
+        disabled={disabled}
+        aria-invalid={error ? true : undefined}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-12 w-full min-w-0 rounded-control border bg-background px-3 text-base tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-portal/40",
+          error ? "border-destructive" : "border-input"
+        )}
+      />
+      {error ? <span className="mt-1 block text-caption text-ink-destructive">{error}</span> : null}
+    </label>
+  );
 }
 
 function Section({ id, icon: Icon, title, description, complete, children, index }) {
@@ -94,7 +148,7 @@ function Section({ id, icon: Icon, title, description, complete, children, index
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "0px 0px -8% 0px" }}
       transition={{ ...spring.soft, delay: Math.min(index, 2) * 0.05 }}
-      className="scroll-mt-[calc(var(--topbar-h)+1rem)] overflow-hidden rounded-card border border-border/60 bg-card shadow-soft"
+      className="scroll-mt-[calc(var(--topbar-h)+var(--safe-top)+4.5rem)] overflow-hidden rounded-card lg:scroll-mt-[calc(var(--topbar-h)+2rem)] border border-border/60 bg-card shadow-soft"
     >
       <header className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -159,7 +213,7 @@ export default function AdminSettingsPage() {
   }
 
   const applyProfile = useCallback((data) => {
-    const next = { ...EMPTY_PROFILE, ...(data.profile ?? {}) };
+    const next = { ...EMPTY_PROFILE, ...(data.profile ?? {}), hours: { ...EMPTY_PROFILE.hours, ...(data.profile?.hours ?? {}) } };
     setProfile(next);
     setSaved(next);
     setFaqIds(next.faq.map(newId));
@@ -217,12 +271,15 @@ export default function AdminSettingsPage() {
   }, [status]);
 
   const set = (field) => (value) => setProfile((current) => ({ ...current, [field]: value }));
+  const setHours = (field) => (value) => setProfile((current) => ({ ...current, hours: { ...current.hours, [field]: value } }));
+  const hasLunch = Boolean(profile.hours.lunchFrom || profile.hours.lunchTo);
   /** FloatingLabelInput bound to a profile field, with inline format validation. */
   const input = (field, label, props = {}) => <FloatingLabelInput id={`bp-${field}`} label={label} value={profile[field] ?? ""} error={errors[field]} success={!errors[field] && filled(profile[field]) && props.type && props.type !== "text"} onChange={(e) => set(field)(e.target.value)} {...props} />;
   const area = (field, label, maxLength, props = {}) => <FloatingLabelInput as="textarea" id={`bp-${field}`} label={label} maxLength={maxLength} value={profile[field] ?? ""} hint={`${`${profile[field] ?? ""}`.length}/${maxLength}`} onChange={(e) => set(field)(e.target.value)} {...props} />;
 
   const sectionComplete = (section) => {
     if (section.custom === "salons") return salons.length > 0;
+    if (section.custom === "hours") return !errors.opensAt && !errors.closesAt && !errors.lunch;
     if (section.custom === "faq") return profile.faq.some((f) => filled(f.question) && filled(f.answer));
     return section.keys.every((k) => filled(profile[k]));
   };
@@ -240,7 +297,7 @@ export default function AdminSettingsPage() {
     }
     try {
       applyProfile(await apiJson("/api/admin/business-profile", { method: "PUT", auth: true, body: profile }));
-      toast.success("Profile saved", { description: "Website footer and assistant updated" });
+      toast.success("Profile saved", { description: "Booking hours, website footer and assistant updated" });
     } catch (error) {
       toast.error(error.message);
       throw error;
@@ -334,7 +391,7 @@ export default function AdminSettingsPage() {
               </div>
             </Section>
 
-            <Section index={2} id="location" icon={MapPin} title="Location" description={meta.hours ? `Hours from booking: ${meta.hours.days}, ${meta.hours.opens}–${meta.hours.closes}` : undefined} complete={sectionComplete(SECTIONS[2])}>
+            <Section index={2} id="location" icon={MapPin} title="Location" complete={sectionComplete(SECTIONS[2])}>
               <div className="grid gap-3 md:grid-cols-2">
                 {input("addressLine1", "Address line 1", { icon: MapPin, maxLength: 200 })}
                 {input("addressLine2", "Address line 2", { maxLength: 200 })}
@@ -344,14 +401,47 @@ export default function AdminSettingsPage() {
                 {input("country", "Country", { maxLength: 80 })}
                 <div className="md:col-span-2">{input("mapsUrl", "Google Maps link", { type: "url", icon: Link2 })}</div>
               </div>
-              {meta.hours ? (
-                <p className="mt-3 flex items-center gap-1.5 text-caption text-ink-neutral">
-                  <Clock className="size-3.5" aria-hidden /> Lunch {meta.hours.lunchBreak.from}–{meta.hours.lunchBreak.to}
-                </p>
-              ) : null}
             </Section>
 
-            <Section index={3} id="salons" icon={Building2} title={`Salons · ${salons.length}`} complete={salons.length > 0}>
+            <Section index={3} id="hours" icon={Clock} title="Opening hours" description="Booking slots, the footer and the assistant all use these" complete={sectionComplete(SECTIONS[3])}>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <TimeField id="bp-opens" label="Opens" value={profile.hours.opensAt} error={errors.opensAt} onChange={setHours("opensAt")} />
+                  <TimeField id="bp-closes" label="Closes" value={profile.hours.closesAt} error={errors.closesAt} onChange={setHours("closesAt")} />
+                </div>
+                <div className="space-y-3 rounded-2xl bg-muted/40 p-3 ring-1 ring-inset ring-border/60">
+                  <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                    Lunch break
+                    <Switch
+                      label="Lunch break"
+                      checked={hasLunch}
+                      onChange={(on) =>
+                        setProfile((current) => ({
+                          ...current,
+                          hours: { ...current.hours, ...(on ? { lunchFrom: saved.hours.lunchFrom || "13:00", lunchTo: saved.hours.lunchTo || "13:30" } : { lunchFrom: "", lunchTo: "" }) },
+                        }))
+                      }
+                    />
+                  </div>
+                  {hasLunch ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      <TimeField id="bp-lunch-from" label="From" value={profile.hours.lunchFrom} onChange={setHours("lunchFrom")} />
+                      <TimeField id="bp-lunch-to" label="To" value={profile.hours.lunchTo} onChange={setHours("lunchTo")} />
+                    </div>
+                  ) : null}
+                  {errors.lunch ? <p className="text-caption text-ink-destructive">{errors.lunch}</p> : null}
+                </div>
+                <p className="flex items-start gap-2 rounded-xl bg-muted px-3 py-2 text-caption text-ink-neutral">
+                  <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                  <span>
+                    A booking must finish by {timeLabel(profile.hours.closesAt)}, so the last start time is earlier for longer bookings (a 30 min service can start until{" "}
+                    {timeLabel(toMinutes(profile.hours.closesAt) === null ? "" : minutesToHhmm(toMinutes(profile.hours.closesAt) - 30))}). Existing bookings are not moved.
+                  </span>
+                </p>
+              </div>
+            </Section>
+
+            <Section index={4} id="salons" icon={Building2} title={`Salons · ${salons.length}`} complete={salons.length > 0}>
               <div className="space-y-5" onKeyDown={(e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") e.preventDefault(); }}>
                 {salons.length ? (
                   <ul className="grid gap-3 sm:grid-cols-2">
@@ -408,7 +498,7 @@ export default function AdminSettingsPage() {
               </div>
             </Section>
 
-            <Section index={4} id="online" icon={Globe} title="Online" description="Only filled links show. https:// only." complete={sectionComplete(SECTIONS[4])}>
+            <Section index={5} id="online" icon={Globe} title="Online" description="Only filled links show. https:// only." complete={sectionComplete(SECTIONS[5])}>
               <div className="grid gap-3 md:grid-cols-2">
                 {input("website", "Website", { type: "url", icon: Globe })}
                 {input("instagram", "Instagram", { type: "url", icon: Instagram })}
@@ -420,7 +510,7 @@ export default function AdminSettingsPage() {
               </div>
             </Section>
 
-            <Section index={5} id="policies" icon={ScrollText} title="Policies" description="Refund rules come from booking. The assistant quotes these." complete={sectionComplete(SECTIONS[5])}>
+            <Section index={6} id="policies" icon={ScrollText} title="Policies" description="Refund rules come from booking. The assistant quotes these." complete={sectionComplete(SECTIONS[6])}>
               <div className="grid gap-3">
                 {area("paymentPolicy", "Payments", 1500)}
                 {area("lateArrivalPolicy", "Late arrival", 1500)}
@@ -428,7 +518,7 @@ export default function AdminSettingsPage() {
               </div>
             </Section>
 
-            <Section index={6} id="faq" icon={HelpCircle} title={`FAQ · ${profile.faq.length}`} description="The assistant answers these word for word" complete={sectionComplete(SECTIONS[6])}>
+            <Section index={7} id="faq" icon={HelpCircle} title={`FAQ · ${profile.faq.length}`} description="The assistant answers these word for word" complete={sectionComplete(SECTIONS[7])}>
               <div className="space-y-3">
                 <AnimatePresence initial={false}>
                   {profile.faq.map((item, index) => (

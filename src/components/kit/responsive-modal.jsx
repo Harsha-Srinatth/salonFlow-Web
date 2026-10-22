@@ -7,7 +7,7 @@ import { ButtonLoadingMorph, useAsyncAction } from "./button-loading-morph";
 /**
  * SpringBottomSheet below 768px, MorphDialog above. Same props as MorphDialog.
  */
-export function ResponsiveModal({ open, onOpenChange, title, description, icon, tone, footer, size, layoutId, children, className }) {
+export function ResponsiveModal({ open, onOpenChange, title, description, icon, tone, footer, size, layoutId, handleOnly, children, className }) {
   const desktop = useMediaQuery("(min-width: 768px)");
   if (desktop) {
     return (
@@ -17,7 +17,7 @@ export function ResponsiveModal({ open, onOpenChange, title, description, icon, 
     );
   }
   return (
-    <SpringBottomSheet open={open} onOpenChange={onOpenChange} title={title} description={description} icon={icon} footer={footer} className={className}>
+    <SpringBottomSheet open={open} onOpenChange={onOpenChange} title={title} description={description} icon={icon} footer={footer} handleOnly={handleOnly} className={className}>
       {children}
     </SpringBottomSheet>
   );

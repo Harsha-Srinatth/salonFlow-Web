@@ -60,7 +60,7 @@ export function MorphDialog({ open, onOpenChange, title, description, icon: Icon
                       </Dialog.Close>
                     )}
                   </div>
-                  {children ? <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 sm:px-6">{children}</div> : null}
+                  {children ? <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-1 pb-5 sm:px-6">{children}</div> : null}
                   {footer ? <div className="flex flex-col-reverse gap-2 border-t border-border/60 px-5 py-4 sm:flex-row sm:justify-end sm:px-6">{footer}</div> : null}
                 </motion.div>
               </Dialog.Content>

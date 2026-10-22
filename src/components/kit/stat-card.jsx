@@ -52,15 +52,15 @@ export function StatCard({ icon: Icon, label, value, format, delta, deltaLabel =
       whileHover={reduce ? undefined : interaction.cardHover}
       whileTap={onClick && !reduce ? interaction.press : undefined}
       transition={spring.soft}
-      className={cn("relative flex w-full flex-col overflow-hidden rounded-card border border-border/60 bg-card p-4 text-left shadow-soft transition-shadow hover:shadow-lift", className)}
+      className={cn("@container relative flex w-full min-w-0 flex-col overflow-hidden rounded-card border border-border/60 bg-card p-4 text-left shadow-soft transition-shadow hover:shadow-lift", className)}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 flex-col items-start gap-2 @[11rem]:flex-row @[11rem]:items-center @[11rem]:gap-3">
         {Icon ? (
           <span className={cn("grid size-10 shrink-0 place-items-center rounded-2xl ring-1 ring-inset", TONE_CLASSES[tone] ?? TONE_CLASSES.primary)}>
             <Icon className="size-5" aria-hidden />
           </span>
         ) : null}
-        <span className="truncate text-caption font-semibold text-ink-neutral">{label}</span>
+        <span className="line-clamp-2 min-w-0 text-caption leading-snug font-semibold text-ink-neutral">{label}</span>
       </div>
       <AnimatedCounter value={value} format={format} className="mt-3 font-display text-[1.75rem] leading-none font-bold tracking-tight" />
       {delta != null ? (

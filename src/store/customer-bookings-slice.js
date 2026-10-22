@@ -203,6 +203,12 @@ export const fetchRecommendedStylists = createAsyncThunk(
   }
 );
 
+/** `slots` plus what the server says about the day: duration, closing time, last start, why it is empty. */
+function splitSlotsResponse(data) {
+  const { slots, ...info } = data ?? {};
+  return { slots: Array.isArray(slots) ? slots : [], info };
+}
+
 export const fetchCustomerSlots = createAsyncThunk(
   "customerBookings/fetchSlots",
   async ({ serviceIds, date, variantSelections }, { rejectWithValue }) => {
@@ -215,7 +221,7 @@ export const fetchCustomerSlots = createAsyncThunk(
       const res = await apiFetch(toApiUrl(`/api/customer/slots?${query.toString()}`));
       const data = await res.json().catch(() => ({}));
       if (!res.ok) return rejectWithValue(data.error ?? "Could not load slots");
-      return data.slots ?? [];
+      return splitSlotsResponse(data);
     } catch {
       return rejectWithValue("Could not load slots");
     }
@@ -350,6 +356,8 @@ const customerBookingsSlice = createSlice({
     },
     membershipSegment: "FREE",
     slots: [],
+    slotsInfo: null,
+    slotsRequestId: null,
     priceSummary: computeCustomerPriceSummary({
       serviceIds: initialCart,
       comboId: "",
@@ -380,6 +388,7 @@ const customerBookingsSlice = createSlice({
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
+        state.slotsInfo = null;
         const combo = state.offers?.combos?.find(item => item.id === state.bookingForm.comboId);
         const comboKey = combo ? [...combo.serviceIds].sort().join(",") : "";
         const selectedKey = [...value].sort().join(",");
@@ -399,6 +408,7 @@ const customerBookingsSlice = createSlice({
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
+        state.slotsInfo = null;
       }
       if (field === "startsAt") {
         state.bookingForm.stylistId = "";
@@ -412,6 +422,7 @@ const customerBookingsSlice = createSlice({
       state.bookingForm.startsAt = "";
       state.bookingForm.stylistId = "";
       state.slots = [];
+      state.slotsInfo = null;
       state.priceSummary = computeCustomerPriceSummary({
         serviceIds: state.bookingForm.serviceIds,
         comboId: state.bookingForm.comboId,
@@ -446,6 +457,7 @@ const customerBookingsSlice = createSlice({
         comboId: "",
       };
       state.slots = [];
+      state.slotsInfo = null;
       state.priceSummary = {
         totalAmount: 0,
         discountAmount: 0,
@@ -462,6 +474,7 @@ const customerBookingsSlice = createSlice({
       state.bookingForm.startsAt = "";
       state.bookingForm.stylistId = "";
       state.slots = [];
+      state.slotsInfo = null;
       state.priceSummary = computeCustomerPriceSummary({
         serviceIds: combo.serviceIds,
         comboId: combo.id,
@@ -541,6 +554,7 @@ const customerBookingsSlice = createSlice({
           state.bookingForm.stylistId = "";
           state.bookingForm.comboId = "";
           state.slots = [];
+          state.slotsInfo = null;
           writeCart(kept);
         }
         state.bookingForm.variantSelections = reconcileVariantSelections(
@@ -579,14 +593,20 @@ const customerBookingsSlice = createSlice({
       .addCase(fetchRecommendedStylists.fulfilled, (state, action) => {
         state.recommendedStylists = action.payload;
       })
-      .addCase(fetchCustomerSlots.pending, (state) => {
+      .addCase(fetchCustomerSlots.pending, (state, action) => {
         state.slotsLoading = true;
+        state.slotsRequestId = action.meta.requestId;
       })
+      // Only the latest request counts: toggling services quickly fires several, and an older,
+      // slower answer (for a shorter booking) must not overwrite the current one.
       .addCase(fetchCustomerSlots.fulfilled, (state, action) => {
+        if (action.meta.requestId !== state.slotsRequestId) return;
         state.slotsLoading = false;
-        state.slots = action.payload;
+        state.slots = action.payload.slots;
+        state.slotsInfo = action.payload.info;
       })
       .addCase(fetchCustomerSlots.rejected, (state, action) => {
+        if (action.meta.requestId !== state.slotsRequestId) return;
         state.slotsLoading = false;
         state.error = action.payload ?? "Could not load slots";
       })

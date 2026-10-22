@@ -1,6 +1,6 @@
 "use client";
 
-import { Avatar, BrandDots, DateStrip, EmptyState, FloatingLabelInput, TimeSlotPicker } from "@/components/kit";
+import { Avatar, BrandDots, DateStrip, EmptyState, FloatingLabelInput, SlotDayHint, TimeSlotPicker, staleSlotReason } from "@/components/kit";
 import { spring } from "@/components/motion/presets";
 import { ServiceCatalogSelector } from "@/components/services/service-catalog-selector";
 import { formatPhone } from "@/lib/format";
@@ -174,22 +174,27 @@ export function ServicesStep({ services, servicesLoading, servicesError, offers,
   );
 }
 
-export function TimeStep({ form, todayIso, tomorrowIso, slots, slotsLoading, stylistOptions, onDate, onSlot, onStylist }) {
+export function TimeStep({ form, todayIso, tomorrowIso, slots, slotsInfo, slotsLoading, stylistOptions, onDate, onSlot, onStylist }) {
   const stylistId = useId();
   return (
     <div className="space-y-6">
       <DateStrip value={form.bookingDate || todayIso} onChange={onDate} days={2} minDate={todayIso} maxDate={tomorrowIso} expandable={false} label="Date" />
       <div>
         <SectionLabel icon={CalendarClock}>Time</SectionLabel>
+        {slots.length ? <SlotDayHint info={slotsInfo} className="mb-4" /> : null}
         <TimeSlotPicker
           slots={slots}
           value={form.startsAt}
           onChange={(startsAt) => onSlot(startsAt)}
           loading={slotsLoading}
-          empty={<EmptyState compact illustration="calendar" title="No free slots" description="Try the other day or fewer services." />}
+          empty={<EmptyState compact illustration="calendar" title="No free slots" description={slotsInfo?.message ?? "Try the other day or fewer services."} />}
         />
       </div>
-      {form.startsAt ? (
+      {form.startsAt && !slotsLoading && !slots.some((slot) => slot.startsAt === form.startsAt) ? (
+        <p role="alert" className="rounded-xl bg-warning/10 px-3 py-2 text-caption font-medium text-ink-warning">
+          {staleSlotReason(form.startsAt, slotsInfo)}
+        </p>
+      ) : form.startsAt ? (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={spring.soft}>
           <SectionLabel icon={User} id={stylistId}>Stylist</SectionLabel>
           <div role="radiogroup" aria-labelledby={stylistId} className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">

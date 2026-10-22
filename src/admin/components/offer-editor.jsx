@@ -133,8 +133,8 @@ function ServiceMultiList({ services, value, onChange }) {
       <SearchBox value={q} onChange={setQ} placeholder="Find services" />
       <div className="admin-scrollbar flex max-h-52 flex-wrap gap-1.5 overflow-y-auto rounded-2xl bg-muted/40 p-2 ring-1 ring-inset ring-border/60" data-vaul-no-drag>
         {list.map((s) => (
-          <ToggleChip key={s.id} size="sm" selected={value.includes(s.id)} onClick={() => toggle(s.id)}>
-            {s.name}
+          <ToggleChip key={s.id} size="sm" title={s.name} selected={value.includes(s.id)} onClick={() => toggle(s.id)}>
+            <span className="min-w-0 truncate">{s.name}</span>
           </ToggleChip>
         ))}
         {!list.length ? <p className="w-full py-3 text-center text-caption text-ink-neutral">No match</p> : null}
@@ -257,7 +257,7 @@ export function OfferEditor({ open, onOpenChange, services, initial, existingGlo
         ) : null
       }
     >
-      <div className="overflow-x-hidden">
+      <div className="-mx-1 overflow-x-clip px-1 pt-1">
         <AnimatePresence mode="wait" initial={false}>
           {!form ? (
             <motion.div key="pick" initial={{ opacity: 0, x: reduce ? 0 : -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: reduce ? 0 : -16 }} transition={spring.soft} className="grid grid-cols-2 gap-3">

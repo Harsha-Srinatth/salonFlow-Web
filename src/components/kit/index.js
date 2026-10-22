@@ -11,6 +11,7 @@ export { SlideToConfirm } from "./slide-to-confirm";
 export { ResponsiveModal, ConfirmSheet } from "./responsive-modal";
 export { DateStrip, MonthExpander } from "./date-strip";
 export { TimeSlotPicker } from "./time-slot-picker";
+export { SlotDayHint, staleSlotReason, durationLabel } from "./slot-day-hint";
 export { FloatingLabelInput } from "./floating-label-input";
 export { OtpInput } from "./otp-input";
 export { AnimatedStepper } from "./animated-stepper";

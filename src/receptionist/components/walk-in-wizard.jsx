@@ -53,6 +53,7 @@ export function WalkInWizard() {
     servicesLoading,
     servicesError,
     slots,
+    slotsInfo,
     bookingForm,
     priceSummary,
     customerLookup,
@@ -141,7 +142,7 @@ export function WalkInWizard() {
   const stepValid = [
     Boolean(bookingForm.customerGender) && !conflict && !customerLookupLoading,
     services.length > 0 && Boolean(bookingForm.serviceIds?.length),
-    Boolean(bookingForm.startsAt) && Boolean(bookingForm.stylistId),
+    Boolean(selectedSlot) && Boolean(bookingForm.stylistId),
     true,
   ];
   const stylistOptions = selectedSlot?.stylists?.length ? selectedSlot.stylists : stylists;
@@ -252,6 +253,7 @@ export function WalkInWizard() {
       todayIso={todayIso}
       tomorrowIso={tomorrowIso}
       slots={slots}
+      slotsInfo={slotsInfo}
       slotsLoading={slotsLoading}
       stylistOptions={stylistOptions}
       onDate={(iso) => setField("bookingDate", iso)}

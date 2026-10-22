@@ -239,9 +239,9 @@ export function ServiceEditorDrawer({ open, onOpenChange, service, categories = 
 
   return (
     <SlideOver open={open} onOpenChange={onOpenChange} title={isEdit ? service.name : "New service"} description={STEPS[step].hint} icon={isEdit ? Scissors : Plus} footer={footer} size="lg">
-      <AnimatedStepper steps={STEPS} current={step} onStepClick={goto} className="mb-5" />
+      <AnimatedStepper steps={STEPS} current={step} onStepClick={goto} className="mb-5 px-1 pt-1.5" />
 
-      <div className="relative overflow-x-hidden">
+      <div className="relative -mx-1 overflow-x-clip px-1">
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           <motion.div
             key={step}

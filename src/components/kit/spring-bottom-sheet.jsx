@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { Drawer } from "vaul";
 import { cn } from "@/lib/utils";
 
@@ -6,11 +7,13 @@ import { cn } from "@/lib/utils";
  * On wide screens it stays a bottom sheet capped at max-w-lg — use <ResponsiveModal> when desktop
  * should get a centered dialog instead.
  * @param {{ open?: boolean, onOpenChange?: (o:boolean)=>void, trigger?: React.ReactNode, title: string, description?: string,
- *   icon?: any, hideHeader?: boolean, snapPoints?: (number|string)[], footer?: React.ReactNode, dismissible?: boolean, className?: string }} props
+ *   icon?: any, hideHeader?: boolean, snapPoints?: (number|string)[], footer?: React.ReactNode, dismissible?: boolean,
+ *   handleOnly?: boolean, className?: string }} props
+ * `handleOnly`: only the handle drags (for forms, so scrolling the content never closes the sheet); adds a close button.
  */
-export function SpringBottomSheet({ open, onOpenChange, trigger, title, description, icon: Icon, hideHeader = false, snapPoints, footer, dismissible = true, className, children }) {
+export function SpringBottomSheet({ open, onOpenChange, trigger, title, description, icon: Icon, hideHeader = false, snapPoints, footer, dismissible = true, handleOnly = false, className, children }) {
   return (
-    <Drawer.Root open={open} onOpenChange={onOpenChange} snapPoints={snapPoints} dismissible={dismissible} repositionInputs>
+    <Drawer.Root open={open} onOpenChange={onOpenChange} snapPoints={snapPoints} dismissible={dismissible} handleOnly={handleOnly} repositionInputs>
       {trigger ? <Drawer.Trigger asChild>{trigger}</Drawer.Trigger> : null}
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-sheet bg-[hsl(var(--scrim))]" />
@@ -28,12 +31,18 @@ export function SpringBottomSheet({ open, onOpenChange, trigger, title, descript
                 <Icon className="size-5" aria-hidden />
               </span>
             ) : null}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <Drawer.Title className="font-display text-headline font-semibold">{title}</Drawer.Title>
               {description ? <Drawer.Description className="mt-0.5 text-caption text-ink-neutral">{description}</Drawer.Description> : <Drawer.Description className="sr-only">{title}</Drawer.Description>}
             </div>
+            {handleOnly && dismissible ? (
+              <Drawer.Close className="tap -mr-1 grid size-9 shrink-0 place-items-center rounded-xl text-ink-neutral transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
+                <X className="size-4.5" aria-hidden />
+              </Drawer.Close>
+            ) : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4">{children}</div>
+          {/* pt-1: focus rings and the stepper's glow at the top edge are not clipped by the scroller. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-1 pb-4">{children}</div>
           {footer ? <div className="shrink-0 border-t border-border/60 px-5 pt-3 pb-[calc(0.75rem+var(--safe-bottom))]">{footer}</div> : <div className="h-[var(--safe-bottom)] shrink-0" />}
         </Drawer.Content>
       </Drawer.Portal>

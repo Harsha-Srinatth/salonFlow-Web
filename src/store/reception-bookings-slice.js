@@ -207,7 +207,8 @@ export const fetchReceptionSlots = createAsyncThunk(
       });
       const data = await parseApiResponse(res);
       if (!res.ok) return rejectWithValue(data.error ?? "Could not load slots");
-      return data.slots ?? [];
+      const { slots, ...info } = data ?? {};
+      return { slots: Array.isArray(slots) ? slots : [], info };
     } catch {
       return rejectWithValue("Could not load slots");
     }
@@ -234,8 +235,9 @@ export const connectReceptionRealtime = createAsyncThunk(
           const serviceIds = state?.receptionBookings?.bookingForm?.serviceIds ?? [];
           const bookingDate = state?.receptionBookings?.bookingForm?.bookingDate;
           const customerGender = state?.receptionBookings?.bookingForm?.customerGender;
+          const variantSelections = state?.receptionBookings?.bookingForm?.variantSelections;
           if (serviceIds.length && bookingDate) {
-            void dispatch(fetchReceptionSlots({ serviceIds, date: bookingDate, customerGender }));
+            void dispatch(fetchReceptionSlots({ serviceIds, date: bookingDate, customerGender, variantSelections }));
           }
         },
         onServiceCatalogUpdated: () => {
@@ -306,6 +308,8 @@ const receptionBookingsSlice = createSlice({
     offers: null,
     offersLoading: false,
     slots: [],
+    slotsInfo: null,
+    slotsRequestId: null,
     bookingForm: initialBookingForm,
     priceSummary: {
       totalAmount: 0,
@@ -336,6 +340,7 @@ const receptionBookingsSlice = createSlice({
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
+        state.slotsInfo = null;
         const combo = state.offers?.combos?.find((item) => item.id === state.bookingForm.comboId);
         const comboKey = combo ? [...combo.serviceIds].sort().join(",") : "";
         const selectedKey = [...ids].sort().join(",");
@@ -352,6 +357,7 @@ const receptionBookingsSlice = createSlice({
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
+        state.slotsInfo = null;
         recomputeReceptionPriceSummary(state);
         return;
       }
@@ -359,6 +365,7 @@ const receptionBookingsSlice = createSlice({
         state.bookingForm.startsAt = "";
         state.bookingForm.stylistId = "";
         state.slots = [];
+        state.slotsInfo = null;
       }
       if (field === "startsAt") {
         state.bookingForm.stylistId = "";
@@ -367,6 +374,7 @@ const receptionBookingsSlice = createSlice({
     resetReceptionBookingForm(state) {
       state.bookingForm = { ...initialBookingForm };
       state.slots = [];
+      state.slotsInfo = null;
       state.priceSummary = { totalAmount: 0, discountAmount: 0, payableAmount: 0, offerLabel: null };
       state.customerLookup = {
         status: "NEW_CUSTOMER",
@@ -381,6 +389,7 @@ const receptionBookingsSlice = createSlice({
       state.bookingForm.startsAt = "";
       state.bookingForm.stylistId = "";
       state.slots = [];
+      state.slotsInfo = null;
       recomputeReceptionPriceSummary(state);
     },
     clearReceptionComboOffer(state) {
@@ -444,8 +453,13 @@ const receptionBookingsSlice = createSlice({
         state.services = action.payload;
         recomputeReceptionPriceSummary(state);
       })
+      .addCase(fetchReceptionSlots.pending, (state, action) => {
+        state.slotsRequestId = action.meta.requestId;
+      })
       .addCase(fetchReceptionSlots.fulfilled, (state, action) => {
-        state.slots = action.payload;
+        if (action.meta.requestId !== state.slotsRequestId) return;
+        state.slots = action.payload.slots;
+        state.slotsInfo = action.payload.info;
       })
       .addCase(fetchReceptionServices.rejected, (state, action) => {
         state.servicesLoading = false;

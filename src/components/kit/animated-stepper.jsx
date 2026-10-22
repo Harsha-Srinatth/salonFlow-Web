@@ -30,14 +30,14 @@ export function AnimatedStepper({ steps, current, onStepClick, className }) {
           const Icon = step.icon;
           const clickable = done && onStepClick;
           return (
-            <li key={step.id} className="relative z-[1] flex flex-1 flex-col items-center first:items-start last:items-end">
+            <li key={step.id} className="group relative z-[1] flex flex-1 flex-col items-center first-of-type:items-start last-of-type:items-end">
               <button
                 type="button"
                 disabled={!clickable}
                 onClick={() => clickable && onStepClick(i)}
                 aria-current={active ? "step" : undefined}
                 aria-label={`${step.label}${done ? ", done" : active ? ", current" : ""}`}
-                className="flex flex-col items-center gap-1.5 disabled:cursor-default"
+                className="flex flex-col items-center gap-1.5 group-first-of-type:items-start group-last-of-type:items-end disabled:cursor-default"
               >
                 <motion.span
                   initial={false}

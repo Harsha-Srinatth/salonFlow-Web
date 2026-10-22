@@ -29,7 +29,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/components/auth/auth-provider";
 import { CustomerServicePicker, iconForCategory } from "@/components/services/customer-service-picker";
 import { ServiceDetailsSheet } from "@/components/services/service-details-sheet";
-import { AnimatedStepper, Avatar, BrandDots, BrandLoader, DateStrip, EmptyState, SlideToConfirm, TimeSlotPicker } from "@/components/kit";
+import { AnimatedStepper, Avatar, BrandDots, BrandLoader, DateStrip, EmptyState, SlideToConfirm, SlotDayHint, TimeSlotPicker, staleSlotReason } from "@/components/kit";
 import { haptic, interaction, spring } from "@/components/motion/presets";
 import { UserPriceBreakdown } from "@/components/kit-extra/user-price-breakdown";
 import { salonDateIso, salonRelativeDayLabel, salonTimeLabel } from "@/lib/salon-date";
@@ -120,12 +120,19 @@ function EditRow({ icon: Icon, children, onClick, label }) {
   );
 }
 
+const EMPTY_SLOT_TITLES = {
+  TOO_LONG: "Too long for one visit",
+  PAST_LAST_START: "Too late to fit today",
+  NO_STYLIST: "No stylist for this mix",
+  FULLY_BOOKED: "Fully booked",
+};
+
 export default function UserAppointmentsPage() {
   const { appUser, loading } = useAuth();
   const dispatch = useDispatch();
   const reduce = useReducedMotion();
   const openInvite = useInvite();
-  const { stylists, services, servicesLoading, slots, slotsLoading, recommendedStylists, bookingForm, priceSummary, offers, mutating, error } = useSelector(
+  const { stylists, services, servicesLoading, slots, slotsInfo, slotsLoading, recommendedStylists, bookingForm, priceSummary, offers, mutating, error } = useSelector(
     (state) => state.customerBookings
   );
   const [step, setStep] = useState(0);
@@ -471,7 +478,7 @@ export default function UserAppointmentsPage() {
   // One place decides whether "continue" is enabled and, if not, says why.
   let blocker = null;
   if (step === 0 && !bookingForm.serviceIds.length) blocker = "Pick at least one service";
-  else if (step === 2 && !timeReady) blocker = slotGone ? "That time was just taken. Pick another" : "Choose a time";
+  else if (step === 2 && !timeReady) blocker = slotGone ? staleSlotReason(bookingForm.startsAt, slotsInfo) : "Choose a time";
   else if (step >= 3 && !timeReady) blocker = "Choose a time first";
 
   const payLabel = payPhase === "verifying" ? "Verifying payment" : payPhase === "checkout" ? "Finish paying in the window" : watching && payPhase === "idle" ? "Checking payment" : "Preparing payment";
@@ -635,6 +642,7 @@ export default function UserAppointmentsPage() {
                         ) : null
                       }
                     />
+                    {slots.length ? <SlotDayHint info={slotsInfo} className="mb-4" /> : null}
                     <TimeSlotPicker
                       slots={slotsForPicker}
                       value={bookingForm.startsAt}
@@ -643,10 +651,11 @@ export default function UserAppointmentsPage() {
                       empty={
                         <EmptyState
                           illustration="calendar"
-                          title="No free times"
+                          title={EMPTY_SLOT_TITLES[slotsInfo?.emptyReason] ?? "No free times"}
+                          description={slotsInfo?.message ?? undefined}
                           compact
                           action={
-                            effectiveBookingDate === todayIso ? (
+                            effectiveBookingDate === todayIso && !["TOO_LONG", "NO_STYLIST"].includes(slotsInfo?.emptyReason) ? (
                               <button type="button" onClick={() => dispatch(setCustomerBookingField({ field: "bookingDate", value: tomorrowIso }))} className="inline-flex h-11 items-center gap-2 rounded-control bg-portal px-5 text-sm font-semibold text-portal-foreground">
                                 <CalendarX className="size-4" aria-hidden /> Try tomorrow
                               </button>

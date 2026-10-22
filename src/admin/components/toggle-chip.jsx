@@ -20,7 +20,7 @@ export function ToggleChip({ selected, children, className, size = "default", di
         onClick?.(event);
       }}
       className={cn(
-        "tap inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-semibold ring-1 ring-inset transition-colors disabled:pointer-events-none disabled:opacity-50",
+        "tap inline-flex max-w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full font-semibold ring-1 ring-inset transition-colors disabled:pointer-events-none disabled:opacity-50",
         size === "sm" ? "h-8 px-3 text-caption" : "h-10 px-4 text-sm",
         selected ? "bg-portal text-portal-foreground ring-portal shadow-soft" : "bg-card text-foreground ring-border hover:bg-muted",
         className
