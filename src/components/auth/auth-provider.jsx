@@ -7,14 +7,11 @@ export function AuthProvider({ children }) {
     const [firebaseUser, setFirebaseUser] = useState(null);
     const [appUser, setAppUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    // Resolves with the session user (null when the server did not recognise the session).
     const refresh = useCallback(async () => {
-        if (firebaseUser) {
-            const user = await syncSessionWithBackend();
-            setAppUser(user);
-            return;
-        }
-        const user = await fetchCurrentAppUser();
+        const user = firebaseUser ? await syncSessionWithBackend() : await fetchCurrentAppUser();
         setAppUser(user);
+        return user;
     }, [firebaseUser]);
     const logout = useCallback(async () => {
         await signOutUser();

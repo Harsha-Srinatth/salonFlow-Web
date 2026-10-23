@@ -125,8 +125,8 @@ export default function CreateStaffPage() {
         <div className="min-w-0 space-y-5">
           <ErrorBanner message={servicesError} onRetry={loadServices} />
 
-          <Panel title="Who" icon={User} subtitle="They verify by SMS on first sign-in" bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
-            <FloatingLabelInput className="sm:col-span-2" label="Full name" icon={User} autoFocus autoComplete="off" value={name} onBlur={() => mark("name")} onChange={(e) => setName(e.target.value)} success={nameOk} error={touched.name && !nameOk ? "Enter their full name" : undefined} />
+          <Panel title="Who" icon={User} subtitle="They verify on WhatsApp on first sign-in" bodyClassName="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+            <FloatingLabelInput className="sm:col-span-2" label="Full name" icon={User} maxLength={120} autoFocus autoComplete="off" value={name} onBlur={() => mark("name")} onChange={(e) => setName(e.target.value)} success={nameOk} error={touched.name && !nameOk ? "Enter their full name" : undefined} />
             <FloatingLabelInput label="Work email" icon={Mail} type="email" autoComplete="off" value={email} onBlur={() => mark("email")} onChange={(e) => setEmail(e.target.value)} success={emailOk} error={touched.email && !emailOk ? "Enter a valid email" : undefined} />
             <FloatingLabelInput label="Phone (+91…)" icon={Phone} type="tel" inputMode="tel" autoComplete="off" value={phone} onBlur={() => mark("phone")} onChange={(e) => setPhone(e.target.value)} success={phoneOk} error={touched.phone && !phoneOk ? "Use +919876543210" : undefined} />
           </Panel>

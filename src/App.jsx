@@ -39,6 +39,7 @@ const StaffSetPasswordPage = lazy(() => import("@/auth/pages/staff-set-password-
 const StaffVerifyOtpPage = lazy(() => import("@/auth/pages/staff-verify-otp-page"))
 const LandingPage = lazy(() => import("@/landing/pages/LandingPage"))
 const NotFoundPage = lazy(() => import("@/landing/pages/NotFoundPage"))
+const LegalPage = lazy(() => import("@/landing/pages/LegalPage"))
 const ReceptionAppointmentsPage = lazy(() => import("@/receptionist/pages/appointments-page"))
 const ReceptionDashboardPage = lazy(() => import("@/receptionist/pages/dashboard-page"))
 const ReceptionProfilePage = lazy(() => import("@/receptionist/pages/profile-page"))
@@ -116,6 +117,9 @@ function App() {
                 for this click, and in the same browser that would bounce the reader
                 to a dashboard they have no account for yet. */}
             <Route path="/auth/verified" element={<AuthEmailVerifiedPage />} />
+            {/* Public for everyone, signed in or not (linked from the footer and signup). */}
+            <Route path="/privacy" element={<LegalPage slug="privacy" />} />
+            <Route path="/terms" element={<LegalPage slug="terms" />} />
             <Route path="/staff/verify-otp" element={<StaffVerifyOtpPage />} />
             <Route path="/staff/set-password" element={<StaffSetPasswordPage />} />
 

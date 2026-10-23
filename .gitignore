@@ -43,3 +43,6 @@ next-env.d.ts
 
 # build output
 /dist
+
+# e2e screenshots and run logs
+/e2e/.out/

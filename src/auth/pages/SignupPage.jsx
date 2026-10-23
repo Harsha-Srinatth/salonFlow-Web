@@ -560,6 +560,7 @@ export default function SignupPage() {
                   <FloatingLabelInput
                     label="Full name"
                     icon={User}
+                    maxLength={120}
                     value={fullName}
                     onChange={e => setFullName(e.target.value)}
                     autoComplete="name"
@@ -683,7 +684,7 @@ export default function SignupPage() {
 
             <AuthDivider label="or with email" />
 
-            <FloatingLabelInput label="Full name" icon={User} value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" success={isValidFullName(fullName)} />
+            <FloatingLabelInput label="Full name" icon={User} maxLength={120} value={fullName} onChange={e => setFullName(e.target.value)} autoComplete="name" success={isValidFullName(fullName)} />
             <FloatingLabelInput
               label="Email"
               icon={Mail}
@@ -724,7 +725,18 @@ export default function SignupPage() {
 
             <p className="flex items-start gap-2 text-center text-caption text-ink-neutral">
               <Sparkles className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              By signing up you agree to our Terms of Service and Privacy Policy. Next, you'll verify your phone.
+              <span>
+                By signing up you agree to our{" "}
+                {/* New tab: navigating away would lose the signup in progress. */}
+                <Link to="/terms" target="_blank" rel="noopener" className="font-semibold text-ink-primary underline underline-offset-2">
+                  Terms &amp; Conditions
+                </Link>{" "}
+                and{" "}
+                <Link to="/privacy" target="_blank" rel="noopener" className="font-semibold text-ink-primary underline underline-offset-2">
+                  Privacy Policy
+                </Link>
+                . Next, you'll verify your phone.
+              </span>
             </p>
           </motion.form>
         )}

@@ -4,3 +4,4 @@ npm-debug.log
 .git
 dist
 coverage
+e2e/.out

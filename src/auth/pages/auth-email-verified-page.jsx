@@ -19,10 +19,10 @@ export default function AuthEmailVerifiedPage() {
       title="Email confirmed"
       subtitle="That's one of the two checks done."
       sideTitle="Almost there"
-      sideDescription="Your email is confirmed. Finish the SMS code and your account is ready."
+      sideDescription="Your email is confirmed. Enter the WhatsApp code and your account is ready."
       sideCards={[
         { icon: MailCheck, text: "Email verified" },
-        { icon: Smartphone, text: "SMS code next" },
+        { icon: Smartphone, text: "WhatsApp code next" },
       ]}
     >
       <div className="space-y-4">
@@ -37,7 +37,7 @@ export default function AuthEmailVerifiedPage() {
           </span>
           <div>
             <p className="text-sm font-semibold">Back to the signup tab</p>
-            <p className="mt-0.5 text-caption text-ink-neutral">It picks this up by itself. Enter the SMS code there.</p>
+            <p className="mt-0.5 text-caption text-ink-neutral">It picks this up by itself. Enter the WhatsApp code there.</p>
           </div>
         </div>
 

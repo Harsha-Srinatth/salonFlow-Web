@@ -11,6 +11,7 @@ import { SkeletonCard, SkeletonText, spring } from "@/components/motion";
 import { dateTimeOf } from "@/admin/lib/safe-format";
 import { useUnsavedGuard } from "@/admin/lib/use-unsaved-guard";
 import { AdminInsightsPanel } from "@/admin/components/admin-insights-panel";
+import { LegalDocumentsEditor } from "@/admin/components/legal-documents-editor";
 import { Switch } from "@/admin/components/switch";
 import { apiJson } from "@/lib/api-json";
 import { cn } from "@/lib/utils";
@@ -35,8 +36,6 @@ const EMPTY_PROFILE = {
   facebook: "",
   youtube: "",
   x: "",
-  privacyUrl: "",
-  termsUrl: "",
   paymentPolicy: "",
   lateArrivalPolicy: "",
   generalPolicy: "",
@@ -59,9 +58,10 @@ const SECTIONS = [
   { id: "location", label: "Location", icon: MapPin, keys: ["addressLine1", "city", "postalCode", "mapsUrl"] },
   { id: "hours", label: "Hours", icon: Clock, keys: [], custom: "hours" },
   { id: "salons", label: "Salons", icon: Building2, keys: [], custom: "salons" },
-  { id: "online", label: "Online", icon: Globe, keys: ["website", "instagram", "privacyUrl", "termsUrl"] },
+  { id: "online", label: "Online", icon: Globe, keys: ["website", "instagram"] },
   { id: "policies", label: "Policies", icon: ScrollText, keys: ["paymentPolicy", "lateArrivalPolicy"] },
   { id: "faq", label: "FAQ", icon: HelpCircle, keys: [], custom: "faq" },
+  { id: "legal", label: "Legal pages", icon: ShieldCheck, keys: [], custom: "legal" },
 ];
 
 const filled = (value) => `${value ?? ""}`.trim().length > 0;
@@ -83,7 +83,7 @@ const isPhone = (v) => !filled(v) || `${v}`.replace(/\D/g, "").length >= 10;
 /** Inline validation: format errors per field (empty is allowed; the API decides what is required). */
 function validateProfile(p) {
   const errors = {};
-  for (const k of ["mapsUrl", "website", "instagram", "facebook", "youtube", "x", "privacyUrl", "termsUrl"]) if (!isUrl(p[k])) errors[k] = "Start with https://";
+  for (const k of ["mapsUrl", "website", "instagram", "facebook", "youtube", "x"]) if (!isUrl(p[k])) errors[k] = "Start with https://";
   if (!isEmail(p.supportEmail)) errors.supportEmail = "Check the email";
   if (!isPhone(p.phone)) errors.phone = "At least 10 digits";
   if (!isPhone(p.whatsapp)) errors.whatsapp = "At least 10 digits";
@@ -281,6 +281,8 @@ export default function AdminSettingsPage() {
     if (section.custom === "salons") return salons.length > 0;
     if (section.custom === "hours") return !errors.opensAt && !errors.closesAt && !errors.lunch;
     if (section.custom === "faq") return profile.faq.some((f) => filled(f.question) && filled(f.answer));
+    // Always has content: the built-in text applies until an edited version is saved.
+    if (section.custom === "legal") return true;
     return section.keys.every((k) => filled(profile[k]));
   };
   const completeness = useMemo(() => {
@@ -505,8 +507,6 @@ export default function AdminSettingsPage() {
                 {input("facebook", "Facebook", { type: "url", icon: Facebook })}
                 {input("youtube", "YouTube", { type: "url", icon: Youtube })}
                 {input("x", "X (Twitter)", { type: "url", icon: Link2 })}
-                {input("privacyUrl", "Privacy policy", { type: "url", icon: ShieldCheck })}
-                {input("termsUrl", "Terms", { type: "url", icon: ScrollText })}
               </div>
             </Section>
 
@@ -553,6 +553,10 @@ export default function AdminSettingsPage() {
                   Add question
                 </ButtonLoadingMorph>
               </div>
+            </Section>
+
+            <Section index={8} id="legal" icon={ShieldCheck} title="Legal pages" description="Your Privacy Policy and Terms, shown at /privacy and /terms. Saved separately." complete={sectionComplete(SECTIONS[8])}>
+              <LegalDocumentsEditor />
             </Section>
           </div>
 

@@ -245,7 +245,7 @@ export default function UserProfilePage() {
           <AnimatePresence mode="wait" initial={false}>
             {editing ? (
               <motion.div key="edit" initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring.soft} className="space-y-5 pt-2">
-                <FloatingLabelInput label="Name" icon={User} autoComplete="name" value={form.name} error={nameError} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
+                <FloatingLabelInput label="Name" icon={User} maxLength={120} autoComplete="name" value={form.name} error={nameError} onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))} />
                 <div>
                   <p className="mb-2 flex items-center gap-2 text-caption font-semibold text-ink-neutral">
                     <UserRound className="size-4 text-portal" aria-hidden /> Gender

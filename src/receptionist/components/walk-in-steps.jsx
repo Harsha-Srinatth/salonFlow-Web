@@ -61,7 +61,7 @@ export function CustomerStep({ form, setField, lookup, lookupLoading, locked, on
           error={conflict ? "Staff/admin account" : undefined}
           success={Boolean(existing)}
         />
-        <FloatingLabelInput label="Name" icon={User} autoComplete="off" value={form.customerName} disabled={locked} onChange={(e) => setField("customerName", e.target.value)} />
+        <FloatingLabelInput label="Name" icon={User} maxLength={120} autoComplete="off" value={form.customerName} disabled={locked} onChange={(e) => setField("customerName", e.target.value)} />
         <FloatingLabelInput label="Email" icon={Mail} type="email" autoComplete="off" value={form.customerEmail} disabled={locked} onChange={(e) => setField("customerEmail", e.target.value)} className="md:col-span-2" />
       </div>
 

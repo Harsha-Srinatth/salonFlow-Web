@@ -1,5 +1,6 @@
 import { io } from "socket.io-client";
 import { getFirebaseIdToken } from "@/lib/auth/auth-client";
+import { API_BASE_URL } from "@/lib/api-base";
 import { decryptPayloadEnvelope, encryptPayloadEnvelope, isPayloadEncryptionEnabled } from "@/lib/security/payload-envelope";
 
 /**
@@ -75,7 +76,7 @@ async function decodePayload(payload) {
 }
 
 function createSocket(key, initialToken, room) {
-  const socket = io(import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080", {
+  const socket = io(API_BASE_URL, {
     path: "/socket.io",
     transports: ["websocket", "polling"],
     // A function, so every (re)connection attempt authenticates with the *current* token.

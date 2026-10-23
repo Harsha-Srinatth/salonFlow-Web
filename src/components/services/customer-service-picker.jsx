@@ -2,7 +2,9 @@
 
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { Baby, Clock, Images, Layers, Search, Sparkles, User, UserRound, Users, X } from "lucide-react";
-import { memo, useDeferredValue, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useMemo, useState } from "react";
+import { ServicePhotoViewer } from "@/components/services/service-photo-viewer";
+import { serviceImages } from "@/lib/service-details";
 import { serviceImageUrl } from "@/lib/service-image";
 import { defaultVariantName, formatRupees, resolveServicePrice, serviceVariants } from "@/lib/service-pricing";
 import { iconForCategory } from "@/lib/service-icons";
@@ -84,16 +86,51 @@ function FilterChip({ active, onClick, icon: Icon, children, layoutGroup }) {
   );
 }
 
-const ServiceCard = memo(function ServiceCard({ service, selected, priced, variant, membershipSegment, hidden, onToggle, onSelectVariant, onOpenDetails, index }) {
+const ServiceCard = memo(function ServiceCard({ service, selected, priced, variant, membershipSegment, hidden, onToggle, onSelectVariant, onOpenDetails, onOpenPhotos, index }) {
   const reduce = useReducedMotion();
   const Icon = iconForCategory(service.category ?? "");
   const variants = serviceVariants(service);
   const view = servicePriceView(service, priced, variant, membershipSegment);
   const hasOffer = view.final < view.original;
   const showMemberHint = view.memberPrice != null && view.memberPrice < view.listPrice && view.price === view.listPrice;
-  const photoCount = Array.isArray(service.images) ? service.images.length : service.image ? 1 : 0;
+  const images = serviceImages(service);
+  const photoCount = images.length;
   const [broken, setBroken] = useState(false);
-  const image = service.image ?? service.images?.[0];
+  const image = images[0];
+  // A card with a working photo opens the full-screen viewer from the photo itself; the rest of
+  // the card (and a card without photos) opens the details.
+  const showPhoto = Boolean(image) && !broken;
+
+  const photo = (
+    <span className="relative block aspect-[4/3] w-full overflow-hidden bg-muted">
+      {showPhoto ? (
+        <img
+          src={serviceImageUrl(image, 480, 360)}
+          alt=""
+          loading={index < 4 ? "eager" : "lazy"}
+          decoding="async"
+          onError={() => setBroken(true)}
+          className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
+        />
+      ) : (
+        <span className="grid size-full place-items-center bg-gradient-to-br from-portal/16 via-muted to-accent/14 text-portal">
+          <Icon className="relative z-[2] size-10 opacity-80" aria-hidden />
+        </span>
+      )}
+      <span aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/45 to-transparent" />
+      {hasOffer && view.percent ? (
+        <span className="absolute top-2.5 left-2.5 rounded-full bg-card/95 px-2 py-1 text-micro font-bold text-ink-success shadow-soft">−{view.percent.toFixed(0)}%</span>
+      ) : null}
+      {photoCount > 1 && showPhoto ? (
+        <span className="absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-micro font-semibold text-white">
+          <Images className="size-3" aria-hidden /> {photoCount}
+        </span>
+      ) : null}
+      <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-micro font-semibold text-white">
+        <Clock className="size-3" aria-hidden /> {view.duration} min
+      </span>
+    </span>
+  );
 
   return (
     // Entrance + hover run in CSS (compositor only). No `layout` on the list item: measuring every
@@ -109,6 +146,16 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
           selected ? "ring-2 ring-portal shadow-glow" : "ring-border/60"
         )}
       >
+        {showPhoto ? (
+          <button
+            type="button"
+            onClick={() => onOpenPhotos(service.id)}
+            aria-label={`${service.name}: view ${photoCount === 1 ? "photo" : `${photoCount} photos`} full screen`}
+            className="block cursor-zoom-in outline-none focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50"
+          >
+            {photo}
+          </button>
+        ) : null}
         {/* Opens the details only; adding to the booking is the separate control. */}
         <button
           type="button"
@@ -116,34 +163,7 @@ const ServiceCard = memo(function ServiceCard({ service, selected, priced, varia
           aria-label={`${service.name}: view details`}
           className="flex flex-1 flex-col text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <span className="relative block aspect-[4/3] w-full overflow-hidden bg-muted">
-            {image && !broken ? (
-              <img
-                src={serviceImageUrl(image, 480, 360)}
-                alt=""
-                loading={index < 4 ? "eager" : "lazy"}
-                decoding="async"
-                onError={() => setBroken(true)}
-                className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
-              />
-            ) : (
-              <span className="grid size-full place-items-center bg-gradient-to-br from-portal/16 via-muted to-accent/14 text-portal">
-                <Icon className="relative z-[2] size-10 opacity-80" aria-hidden />
-              </span>
-            )}
-            <span aria-hidden className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/45 to-transparent" />
-            {hasOffer && view.percent ? (
-              <span className="absolute top-2.5 left-2.5 rounded-full bg-card/95 px-2 py-1 text-micro font-bold text-ink-success shadow-soft">−{view.percent.toFixed(0)}%</span>
-            ) : null}
-            {photoCount > 1 ? (
-              <span className="absolute top-2.5 right-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-micro font-semibold text-white">
-                <Images className="size-3" aria-hidden /> {photoCount}
-              </span>
-            ) : null}
-            <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-micro font-semibold text-white">
-              <Clock className="size-3" aria-hidden /> {view.duration} min
-            </span>
-          </span>
+          {showPhoto ? null : photo}
           <span className="flex flex-1 flex-col gap-1 p-3 pb-2 sm:p-4 sm:pb-2">
             <span className="line-clamp-2 text-[15px] leading-snug font-semibold">{service.name}</span>
             <span className="mt-auto flex flex-wrap items-baseline gap-x-1.5 pr-12">
@@ -188,6 +208,11 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
   const [child, setChild] = useState("ALL");
   // Options picked on cards that are not in the booking yet; the booking's own choice wins once added.
   const [localChoice, setLocalChoice] = useState({});
+  // One viewer for the whole grid. The id outlives `open` so the photos stay up during the fade-out.
+  const [photoViewer, setPhotoViewer] = useState({ serviceId: null, open: false });
+  const openPhotos = useCallback((serviceId) => setPhotoViewer({ serviceId, open: true }), []);
+  const closePhotos = useCallback(() => setPhotoViewer((current) => ({ ...current, open: false })), []);
+  const viewerService = photoViewer.serviceId ? services.find((item) => item.id === photoViewer.serviceId) : null;
   const deferredQuery = useDeferredValue(query);
 
   const pricedById = useMemo(() => new Map((pricedServices ?? []).map((item) => [item.serviceId, item])), [pricedServices]);
@@ -344,6 +369,7 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
                 onSelectVariant={handleSelectVariant}
                 onToggle={handleToggle}
                 onOpenDetails={onOpenDetails}
+                onOpenPhotos={openPhotos}
               />
             ))}
         </ul>
@@ -359,6 +385,14 @@ export function CustomerServicePicker({ services, loading, selectedIds, pricedSe
           }
         />
       )}
+
+      <ServicePhotoViewer
+        open={photoViewer.open && Boolean(viewerService)}
+        images={viewerService ? serviceImages(viewerService) : []}
+        alt={viewerService?.name ?? ""}
+        startIndex={0}
+        onClose={closePhotos}
+      />
     </div>
   );
 }

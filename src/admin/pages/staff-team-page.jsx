@@ -204,7 +204,7 @@ export default function AdminTeamPage() {
         }
       >
         <div className="space-y-4">
-          <FloatingLabelInput label="Full name" icon={UserRound} autoComplete="name" {...field("name")} />
+          <FloatingLabelInput label="Full name" icon={UserRound} maxLength={120} autoComplete="name" {...field("name")} />
           <div className="grid gap-3 sm:grid-cols-2">
             <FloatingLabelInput label="Email" icon={Mail} type="email" autoComplete="email" {...field("email")} />
             <FloatingLabelInput label="Phone (+91…)" icon={Phone} type="tel" autoComplete="tel" {...field("phone")} />

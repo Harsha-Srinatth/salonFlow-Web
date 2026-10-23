@@ -80,7 +80,10 @@ export default function LoginPage() {
         user = await signInWithAppPassword(email, password)
       }
 
-      await refresh()
+      // The password was accepted, but the session cookie must also come back on the next request.
+      // Browsers that block third-party cookies drop it when the API is on another site; telling
+      // the customer "signed in" and leaving them on this page would be a false success.
+      if (!(await refresh())) throw new Error("SESSION_NOT_SAVED")
       navigate(getDashboardPathByRole(user.role), { replace: true })
       toast.success("Welcome back", { description: "You're signed in." })
     } catch (error) {
@@ -155,7 +158,11 @@ export default function LoginPage() {
       if (result.appUser?.role) {
         // The session is an HTTP-only cookie now (no Firebase user), so the auth
         // context has to re-read /me before the dashboard guard looks at it.
-        await refresh()
+        // Not thrown: the code was right, so it must not count as a failed OTP attempt.
+        if (!(await refresh())) {
+          toast.error(getFirebaseAuthErrorMessage(new Error("SESSION_NOT_SAVED")))
+          return
+        }
         toast.success("Phone verified and signed in")
         navigate(getDashboardPathByRole(result.appUser.role), { replace: true })
       } else {

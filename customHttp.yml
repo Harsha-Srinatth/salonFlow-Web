@@ -1,0 +1,20 @@
+# Response headers for the Amplify-hosted frontend (Amplify reads customHttp.yml from the app root).
+# Conservative set that needs no per-origin allow-list:
+#  - nothing may frame the app (clickjacking: payment and account screens);
+#  - no MIME sniffing; referrers stay on this origin for cross-site requests;
+#  - camera/microphone/geolocation are never used, so no page may ask for them.
+# A Content-Security-Policy is deliberately not set yet: Firebase, Razorpay Checkout, Cloudinary
+# and Google Fonts each need entries, and a wrong policy breaks sign-in or payment silently.
+customHeaders:
+  - pattern: "**/*"
+    headers:
+      - key: Strict-Transport-Security
+        value: max-age=31536000
+      - key: X-Frame-Options
+        value: DENY
+      - key: X-Content-Type-Options
+        value: nosniff
+      - key: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - key: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()

@@ -9,6 +9,9 @@ export function getFirebaseAuthErrorMessage(error) {
     if (error.message === "SET_PASSWORD_REQUIRED") {
       return "This account doesn't have a password yet. Use \"Forgot password?\" to set one."
     }
+    if (error.message === "SESSION_NOT_SAVED") {
+      return "Your browser didn't keep the sign-in. Allow cookies for this site (or turn off cross-site tracking prevention) and try again."
+    }
     if (error.message === "TOO_MANY_ATTEMPTS") {
       return "Too many failed sign-in attempts. Please wait a few minutes and try again."
     }

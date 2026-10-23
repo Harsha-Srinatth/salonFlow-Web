@@ -39,11 +39,6 @@ function FooterHeading({ children }) {
 }
 
 const rowLink = "inline-flex min-h-11 items-center gap-3 rounded-xl text-sm transition-colors hover:text-ink-primary";
-// Used until the admin sets privacy / terms URLs in Settings.
-const LEGAL_FALLBACK = {
-  privacy: "https://pixel-perfection-studio-725.lovable.app",
-  terms: "https://www.privacypolicies.com/live/0e3f5c6b-1d8e-4f7c-9b2e-1f2e3c4d5e6f",
-};
 const legalLink = "inline-flex min-h-11 items-center rounded-lg px-3 font-medium transition-colors hover:text-ink-primary";
 const iconTile = "grid size-9 shrink-0 place-items-center rounded-xl bg-portal/10 text-ink-primary";
 
@@ -183,7 +178,7 @@ export default function Footer() {
             <ul className="mt-2">
               {NAV_LINKS.map(({ id, label }) => (
                 <li key={id}>
-                  <a href={`#${id}`} className={`${rowLink} !min-h-9`}>
+                  <a href={`/#${id}`} className={`${rowLink} !min-h-9`}>
                     {label}
                   </a>
                 </li>
@@ -217,13 +212,13 @@ export default function Footer() {
             © {year} {name}. All rights reserved.
           </p>
           <nav aria-label="Legal" className="flex items-center justify-center gap-1">
-            <a href={profile.privacyUrl || LEGAL_FALLBACK.privacy} target="_blank" rel="noopener noreferrer" className={legalLink}>
+            <Link to="/privacy" className={legalLink}>
               Privacy Policy
-            </a>
+            </Link>
             <span aria-hidden className="h-4 w-px bg-border" />
-            <a href={profile.termsUrl || LEGAL_FALLBACK.terms} target="_blank" rel="noopener noreferrer" className={legalLink}>
-              Terms of Service
-            </a>
+            <Link to="/terms" className={legalLink}>
+              Terms &amp; Conditions
+            </Link>
           </nav>
           <button type="button" onClick={() => window.scrollTo({ top: 0 })} className="inline-flex h-11 items-center gap-2 justify-self-center rounded-full px-4 font-semibold text-foreground transition-colors hover:bg-muted sm:justify-self-end">
             <ArrowUp className="size-4" aria-hidden /> Top

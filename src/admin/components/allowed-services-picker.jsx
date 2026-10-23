@@ -48,7 +48,7 @@ export function AllowedServicesPicker({ services, selected, onChange }) {
               <p className="text-micro font-semibold uppercase text-ink-neutral">
                 {category} · {ids.filter((id) => selected.includes(id)).length}/{ids.length}
               </p>
-              <button type="button" className="tap text-caption font-semibold text-portal hover:underline" onClick={() => onChange(all ? selected.filter((id) => !ids.includes(id)) : Array.from(new Set([...selected, ...ids])))}>
+              <button type="button" className="tap -my-3 -mr-2 inline-flex min-h-11 items-center px-2 text-caption font-semibold text-portal hover:underline" onClick={() => onChange(all ? selected.filter((id) => !ids.includes(id)) : Array.from(new Set([...selected, ...ids])))}>
                 {all ? "Remove all" : "Add all"}
               </button>
             </div>
