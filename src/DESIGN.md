@@ -139,14 +139,14 @@ Import from the barrels: `import { StatusChip, DateStrip } from "@/components/ki
 
 ### 4.2 Loading (contract item d)
 ```jsx
-<BrandLoader variant="scissors" size="md" label="Loading bookings…" />   // scissors | blob | dots; xs…xl; fullScreen; hideLabel
+<BrandLoader size="md" label="Loading bookings…" />   // thinking-orbs ThinkingOrb; variant "dots" = inline orb; xs/sm = 20px, md…xl = 64px; theme auto|dark|light; fullScreen; hideLabel
 <RouteLoader fullScreen />                                              // Suspense fallback; loader appears after 220ms
 const { state, run } = useAsyncAction();
 <ButtonLoadingMorph state={state} icon={Save} onClick={() => run(save)}>Save</ButtonLoadingMorph>
 // variant primary|secondary|outline|ghost|danger|gold, size sm|md|lg, fullWidth, loadingLabel, successLabel, errorLabel
 <PullToRefresh onRefresh={reload}>{list}</PullToRefresh>                // touch only; keep a visible refresh button too
 ```
-`LoadingOrb` / `InlineOrb` (`components/shared/loading-orb`) are legacy names that now render BrandLoader; new code uses BrandLoader.
+`LoadingOrb` / `InlineOrb` (`components/shared/loading-orb`) are legacy names that now render BrandLoader; new code uses BrandLoader. `BrandDots` is the 20px inline orb (tinted with currentColor) for buttons, toasts and text.
 
 ### 4.3 Feedback: `notify` (contract item c)
 ```js

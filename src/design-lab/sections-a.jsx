@@ -194,17 +194,17 @@ export function Loaders() {
   return (
     <Section id="loaders" title="Loaders" icon={Loader}>
       <Grid>
-        <Specimen title="BrandLoader · scissors (xs → xl)">
+        <Specimen title="BrandLoader · thinking orb (xs → xl)">
           <Row className="items-end">
             {["xs", "sm", "md", "lg", "xl"].map((s) => (
               <BrandLoader key={s} size={s} hideLabel label={`Loading ${s}`} />
             ))}
           </Row>
         </Specimen>
-        <Specimen title="BrandLoader · blob / dots">
+        <Specimen title="BrandLoader · dark / inline">
           <Row className="justify-around">
-            <BrandLoader variant="blob" size="lg" label="Blob" />
-            <BrandLoader variant="dots" size="md" label="Dots" />
+            <BrandLoader theme="dark" size="lg" label="Dark surface" className="rounded-card bg-foreground p-3 text-background" />
+            <BrandLoader variant="dots" size="md" label="Inline" />
           </Row>
         </Specimen>
         <Specimen title="RouteLoader (Suspense fallback)">

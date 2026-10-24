@@ -79,7 +79,7 @@ export default function AuthResetPasswordPage() {
   if (linkStatus === "checking") {
     return (
       <AuthPageShell title="Reset password" sideTitle="Checking link" sideDescription="One moment while we check your reset link." sideCards={[]}>
-        <BrandLoader variant="scissors" size="md" label="Checking your link…" className="py-6" />
+        <BrandLoader size="md" label="Checking your link…" className="py-6" />
       </AuthPageShell>
     )
   }

@@ -199,7 +199,7 @@ export function ServicePhotoViewer({ open, images, alt, startIndex = 0, onIndexC
                     ) : (
                       <>
                         {state !== "loaded" && requested.has(i) ? (
-                          <BrandLoader variant="blob" size="md" label="Loading photo" hideLabel className="absolute inset-0 text-white" />
+                          <BrandLoader theme="dark" size="md" label="Loading photo" hideLabel className="absolute inset-0 text-white" />
                         ) : null}
                         {requested.has(i) ? (
                           <img

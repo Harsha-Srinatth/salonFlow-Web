@@ -1,66 +1,50 @@
+import { useLayoutEffect, useRef, useState } from "react";
+import { ThinkingOrb } from "thinking-orbs";
 import { cn } from "@/lib/utils";
 
-const SIZES = { xs: 16, sm: 24, md: 48, lg: 72, xl: 112 };
+// thinking-orbs ships hand-tuned 20px (inline) and 64px (page) designs; 32 is interpolated.
+const SIZES = { xs: 20, sm: 20, md: 64, lg: 64, xl: 64 };
 
-function Scissors({ px }) {
-  return (
-    <svg viewBox="0 0 64 64" width={px} height={px} fill="none" aria-hidden className="kit-loader-reduced overflow-visible">
-      <g className="kit-snip-a" stroke="hsl(var(--portal-accent))" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="21" cy="51" r="7" />
-        <path d="M25.5 45.5 L32 34" />
-        <path d="M32 34 L37 6 L35 33 Z" fill="hsl(var(--portal-accent))" />
-      </g>
-      <g className="kit-snip-b" stroke="hsl(var(--accent))" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="43" cy="51" r="7" />
-        <path d="M38.5 45.5 L32 34" />
-        <path d="M32 34 L27 6 L29 33 Z" fill="hsl(var(--accent))" />
-      </g>
-      <circle cx="32" cy="34" r="2.2" fill="hsl(var(--foreground))" />
-      {[
-        [52, 12, "0s"],
-        [11, 18, "0.6s"],
-        [55, 32, "1.2s"],
-      ].map(([x, y, delay]) => (
-        <path
-          key={`${x}-${y}`}
-          className="kit-twinkle"
-          style={{ animationDelay: delay }}
-          d={`M${x} ${y - 4} L${x + 1.2} ${y - 1.2} L${x + 4} ${y} L${x + 1.2} ${y + 1.2} L${x} ${y + 4} L${x - 1.2} ${y + 1.2} L${x - 4} ${y} L${x - 1.2} ${y - 1.2} Z`}
-          fill="hsl(var(--gold))"
-        />
-      ))}
-    </svg>
-  );
+/**
+ * Reads the element's computed text colour so a canvas orb can follow currentColor. Light ink means a
+ * dark surface (orb theme "dark"), dark ink a light one; the orb shades toward the surface colour.
+ */
+function useCurrentColor(ref) {
+  const [ink, setInk] = useState({});
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const m = getComputedStyle(el).color.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    const color = m ? `rgb(${m[1]}, ${m[2]}, ${m[3]})` : undefined;
+    const theme = m ? (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3] > 150 ? "dark" : "light") : undefined;
+    setInk((prev) => (prev.color === color && prev.theme === theme ? prev : { color, theme }));
+  });
+  return ink;
 }
 
-function Blob({ px }) {
+/**
+ * Small inline orb for buttons, toasts and text. Tinted with currentColor so it sits on any surface.
+ * `size` is the legacy dot size (4–6); the orb is always the 20px inline design.
+ */
+export function BrandDots({ className, theme = "auto" }) {
+  const ref = useRef(null);
+  const ink = useCurrentColor(ref);
   return (
-    <span className="relative grid place-items-center" style={{ width: px, height: px }} aria-hidden>
-      <span className="kit-blob absolute inset-0 rounded-blob bg-[conic-gradient(from_90deg,hsl(var(--portal-accent)),hsl(var(--accent)),hsl(var(--info)),hsl(var(--portal-accent)))] opacity-90 blur-[1px]" />
-      <span className="kit-blob-inner absolute inset-[18%] rounded-blob bg-card/80" />
-      <span className="kit-loader-reduced absolute inset-[38%] rounded-full bg-portal" />
-    </span>
-  );
-}
-
-/** Three springy dots. Inherits currentColor so it sits inside buttons and toasts. */
-export function BrandDots({ className, size = 6 }) {
-  return (
-    <span aria-hidden className={cn("inline-flex items-center gap-[3px]", className)}>
-      {[0, 1, 2].map((i) => (
-        <span key={i} className="kit-dot rounded-full bg-current" style={{ width: size, height: size, animationDelay: `${i * 120}ms` }} />
-      ))}
+    <span ref={ref} aria-hidden className={cn("inline-flex shrink-0 items-center", className)}>
+      <ThinkingOrb state="searching" size={20} theme={theme === "auto" ? (ink.theme ?? "auto") : theme} color={ink.color} aria-hidden />
     </span>
   );
 }
 
 /**
- * The branded loader. Never use a plain spinner.
- * @param {{ variant?: "scissors"|"blob"|"dots", size?: "xs"|"sm"|"md"|"lg"|"xl", label?: string, hideLabel?: boolean, fullScreen?: boolean, className?: string }} props
+ * The branded loader: the thinking orb. Never use a plain spinner.
+ * `variant` is kept for old call sites: "dots" renders the inline orb, anything else the page orb.
+ * @param {{ variant?: "orb"|"dots", size?: "xs"|"sm"|"md"|"lg"|"xl", theme?: "auto"|"dark"|"light", label?: string, hideLabel?: boolean, fullScreen?: boolean, className?: string }} props
  */
-export function BrandLoader({ variant = "scissors", size = "md", label = "Loading…", hideLabel = false, fullScreen = false, className }) {
+export function BrandLoader({ variant = "orb", size = "md", theme = "auto", label = "Loading…", hideLabel = false, fullScreen = false, className }) {
   const px = SIZES[size] ?? SIZES.md;
-  const visual = variant === "blob" ? <Blob px={px} /> : variant === "dots" ? <BrandDots className="text-portal" size={Math.max(4, px / 6)} /> : <Scissors px={px} />;
+  const visual =
+    variant === "dots" ? <BrandDots className="text-portal" theme={theme} /> : <ThinkingOrb state={px === 20 ? "searching" : "solving"} size={px} theme={theme} aria-hidden />;
   return (
     <div
       role="status"
